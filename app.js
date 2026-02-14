@@ -398,7 +398,8 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
   syncing = true;
   try {
     if (changed.length > 0) {
-      const payload = changed.map(toDbRow);
+      const baseMs = Date.now();
+      const payload = changed.map((item, idx) => toDbRow(item, new Date(baseMs + idx).toISOString()));
       const { error } = await db.from("mes_orders").upsert(payload, { onConflict: "id" });
       if (error) throw error;
     }
@@ -465,7 +466,7 @@ function handleRemoteError(prefix, err) {
   }
 }
 
-function toDbRow(order) {
+function toDbRow(order, updatedAtOverride = "") {
   return {
     id: order.id,
     order_no: order.orderNo || "",
@@ -483,7 +484,7 @@ function toDbRow(order) {
     due_date: order.dueDate || "",
     is_delayed: order.isDelayed || "",
     note: order.note || "",
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAtOverride || new Date().toISOString(),
   };
 }
 
