@@ -105,8 +105,15 @@ main { padding: 16px 20px 24px; }
   border-radius: 10px;
   padding: 10px;
   display: grid;
-  grid-template-columns: repeat(8, minmax(90px, 1fr));
   gap: 8px;
+}
+
+.quick-add {
+  grid-template-columns: repeat(9, minmax(90px, 1fr));
+}
+
+.filters {
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
 }
 
 input,
@@ -184,38 +191,38 @@ th {
   text-align: center;
 }
 
-#orderTable th:nth-child(13),
-#orderTable td:nth-child(13) {
+#orderTable th:nth-child(14),
+#orderTable td:nth-child(14) {
   width: 72px;
   min-width: 72px;
 }
 
-#orderTable th:nth-child(14),
-#orderTable td:nth-child(14) {
+#orderTable th:nth-child(15),
+#orderTable td:nth-child(15) {
   width: 78px;
   min-width: 78px;
 }
 
-#orderTable th:nth-child(11),
-#orderTable td:nth-child(11) {
+#orderTable th:nth-child(12),
+#orderTable td:nth-child(12) {
   width: 120px;
   min-width: 120px;
 }
 
-#orderTable th:nth-child(8),
-#orderTable td:nth-child(8) {
+#orderTable th:nth-child(9),
+#orderTable td:nth-child(9) {
   width: 90px;
   min-width: 90px;
 }
 
-#orderTable th:nth-child(9),
-#orderTable td:nth-child(9) {
+#orderTable th:nth-child(10),
+#orderTable td:nth-child(10) {
   width: 70px;
   min-width: 70px;
 }
 
-#orderTable th:nth-child(6),
-#orderTable td:nth-child(6) {
+#orderTable th:nth-child(7),
+#orderTable td:nth-child(7) {
   width: 88px;
   min-width: 88px;
 }

@@ -6,6 +6,7 @@ const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
 const XLSX_COLUMNS = [
   { key: "orderNo", title: "订单号" },
   { key: "customer", title: "客户" },
+  { key: "name", title: "名称" },
   { key: "drawingNo", title: "图号" },
   { key: "qty", title: "数量" },
   { key: "programNo", title: "程序单" },
@@ -98,6 +99,7 @@ function createEmptyOrder() {
     orderNo: "",
     drawingNo: "",
     customer: "",
+    name: "",
     qty: "",
     programNo: "未出",
     plannedHours: "",
@@ -116,6 +118,7 @@ async function quickAdd() {
   const orderNo = valueOf("qaOrderNo");
   const drawingNo = valueOf("qaDrawingNo");
   const customer = valueOf("qaCustomer");
+  const name = valueOf("qaName");
   const qty = valueOf("qaQty");
   const plannedHours = valueOf("qaHours");
   const machine = valueOf("qaMachine");
@@ -131,6 +134,7 @@ async function quickAdd() {
     orderNo,
     drawingNo,
     customer,
+    name,
     qty: normalizeValue("qty", qty),
     plannedHours: normalizeValue("plannedHours", plannedHours),
     machine,
@@ -171,6 +175,7 @@ function render() {
     tr.appendChild(textCell(idx + 1));
     tr.appendChild(editCell(o, "orderNo"));
     tr.appendChild(editCell(o, "customer"));
+    tr.appendChild(editCell(o, "name"));
     tr.appendChild(editCell(o, "drawingNo"));
     tr.appendChild(editCell(o, "qty"));
     tr.appendChild(selectCell(o, "programNo", ["已出", "未出"]));
@@ -344,7 +349,7 @@ function getFilteredOrders() {
   return orders.filter((o) => {
     const qOk =
       !filters.q ||
-      [o.orderNo, o.drawingNo, o.customer, o.note].some((x) => (x || "").toString().toLowerCase().includes(filters.q));
+      [o.orderNo, o.drawingNo, o.customer, o.name, o.note].some((x) => (x || "").toString().toLowerCase().includes(filters.q));
     const monthOk = !filters.month || getMonthFromDateString(o.dueDate) === filters.month;
     const mOk = !filters.machine || o.machine === filters.machine;
     const sOk = !filters.status || o.status === filters.status;
@@ -456,6 +461,7 @@ function toDbRow(order) {
     order_no: order.orderNo || "",
     drawing_no: order.drawingNo || "",
     customer: order.customer || "",
+    item_name: order.name || "",
     qty: order.qty === "" ? null : Number(order.qty),
     program_no: order.programNo || "",
     planned_hours: order.plannedHours === "" ? null : Number(order.plannedHours),
@@ -477,6 +483,7 @@ function fromDbRow(row) {
   o.orderNo = row.order_no || "";
   o.drawingNo = row.drawing_no || "";
   o.customer = row.customer || "";
+  o.name = row.item_name || "";
   o.qty = row.qty ?? "";
   o.programNo = row.program_no || "未出";
   o.plannedHours = row.planned_hours ?? "";
@@ -498,6 +505,7 @@ function demoData() {
       orderNo: "ORD-2025-0003",
       drawingNo: "DW-2025-003",
       customer: "海尔",
+      name: "壳体A",
       qty: 289,
       programNo: "已出",
       plannedHours: 19.1,
@@ -514,6 +522,7 @@ function demoData() {
       orderNo: "ORD-2025-0004",
       drawingNo: "DW-2025-003",
       customer: "比亚迪",
+      name: "支架B",
       qty: 758,
       programNo: "已出",
       plannedHours: 38.5,
@@ -530,6 +539,7 @@ function demoData() {
       orderNo: "ORD-2025-0005",
       drawingNo: "DW-2025-004",
       customer: "联想",
+      name: "端盖C",
       qty: 403,
       programNo: "未出",
       plannedHours: 22.8,
@@ -549,7 +559,7 @@ function valueOf(id) {
 }
 
 function clearQuickAdd() {
-  ["qaOrderNo", "qaDrawingNo", "qaCustomer", "qaQty", "qaHours", "qaMachine", "qaDueDate"].forEach((id) => {
+  ["qaOrderNo", "qaDrawingNo", "qaCustomer", "qaName", "qaQty", "qaHours", "qaMachine", "qaDueDate"].forEach((id) => {
     document.getElementById(id).value = "";
   });
 }

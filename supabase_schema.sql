@@ -4,6 +4,7 @@ create table if not exists public.mes_orders (
   order_no text not null default '',
   drawing_no text not null default '',
   customer text not null default '',
+  item_name text not null default '',
   qty numeric,
   program_no text not null default '未出',
   planned_hours numeric,
@@ -17,6 +18,9 @@ create table if not exists public.mes_orders (
   note text not null default '',
   updated_at timestamptz not null default now()
 );
+
+alter table public.mes_orders
+add column if not exists item_name text not null default '';
 
 create index if not exists idx_mes_orders_updated_at on public.mes_orders(updated_at desc);
 
