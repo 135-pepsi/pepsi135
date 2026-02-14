@@ -43,6 +43,15 @@ h1 {
   letter-spacing: 1.1px;
 }
 .topbar p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+#systemMode {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #3c6293;
+  color: #d8ebff;
+  background: rgba(30, 90, 155, 0.35);
+}
 
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn {

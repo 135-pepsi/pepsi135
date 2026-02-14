@@ -10,7 +10,7 @@
   <header class="topbar">
     <div>
       <h1>元源紫泽 MES 生产管理系统</h1>
-      <p>类 Excel 快速录入与即时修改</p>
+      <p>类 Excel 快速录入与即时修改 · <span id="systemMode">本地模式</span></p>
     </div>
     <div class="actions">
       <button id="addRowBtn" class="btn btn-primary">+ 新增订单 (Ctrl+N)</button>
@@ -99,6 +99,8 @@
   </main>
 
   <script src="xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
