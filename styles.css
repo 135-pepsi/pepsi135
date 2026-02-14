@@ -196,6 +196,12 @@ th {
   min-width: 70px;
 }
 
+#orderTable th:nth-child(6),
+#orderTable td:nth-child(6) {
+  width: 72px;
+  min-width: 72px;
+}
+
 td.editing {
   outline: 2px solid var(--accent);
   background: #102f57;
