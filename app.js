@@ -102,6 +102,7 @@ function bindEvents() {
 function createEmptyOrder() {
   return {
     id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
     orderNo: "",
     drawingNo: "",
     customer: "",
@@ -423,7 +424,13 @@ function loadOrdersLocal() {
   if (raw) {
     try {
       const data = JSON.parse(raw);
-      if (Array.isArray(data)) return data.map((x) => ({ ...createEmptyOrder(), ...x }));
+      if (Array.isArray(data)) {
+        return data.map((x, idx) => ({
+          ...createEmptyOrder(),
+          ...x,
+          createdAt: x.createdAt || new Date(Date.now() + idx).toISOString(),
+        }));
+      }
     } catch (e) {
       console.warn("读取本地缓存失败", e);
     }
@@ -438,7 +445,7 @@ async function refreshFromRemote(showAlert = false) {
     if (error) throw error;
     orders = (data || [])
       .map(fromDbRow)
-      .sort((a, b) => String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
+      .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
 
     if (orders.length === 0) {
       orders = loadOrdersLocal();
@@ -484,6 +491,7 @@ function toDbRow(order, updatedAtOverride = "") {
     due_date: order.dueDate || "",
     is_delayed: order.isDelayed || "",
     note: order.note || "",
+    created_at: order.createdAt || updatedAtOverride || new Date().toISOString(),
     updated_at: updatedAtOverride || new Date().toISOString(),
   };
 }
@@ -491,6 +499,7 @@ function toDbRow(order, updatedAtOverride = "") {
 function fromDbRow(row) {
   const o = createEmptyOrder();
   o.id = row.id || crypto.randomUUID();
+  o.createdAt = row.created_at || row.updated_at || new Date().toISOString();
   o.orderNo = row.order_no || "";
   o.drawingNo = row.drawing_no || "";
   o.customer = row.customer || "";
@@ -624,7 +633,7 @@ async function importXlsx(event) {
       const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
       const titleToKey = Object.fromEntries(XLSX_COLUMNS.map((x) => [x.title, x.key]));
 
-      orders = rows.map((row) => {
+      orders = rows.map((row, idx) => {
         const next = createEmptyOrder();
         Object.keys(row).forEach((title) => {
           const key = titleToKey[title];
@@ -635,6 +644,7 @@ async function importXlsx(event) {
           next[key] = value;
         });
         next.id = crypto.randomUUID();
+        next.createdAt = new Date(Date.now() + idx).toISOString();
         next.isDelayed = calcDelayed(next);
         return next;
       });

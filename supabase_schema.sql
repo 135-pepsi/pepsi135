@@ -1,6 +1,7 @@
 ﻿-- Supabase: MES 订单表
 create table if not exists public.mes_orders (
   id uuid primary key,
+  created_at timestamptz not null default now(),
   order_no text not null default '',
   drawing_no text not null default '',
   customer text not null default '',
@@ -18,6 +19,9 @@ create table if not exists public.mes_orders (
   note text not null default '',
   updated_at timestamptz not null default now()
 );
+
+alter table public.mes_orders
+add column if not exists created_at timestamptz not null default now();
 
 alter table public.mes_orders
 add column if not exists item_name text not null default '';
