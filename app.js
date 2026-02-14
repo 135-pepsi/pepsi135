@@ -1,4 +1,5 @@
 ﻿const STORAGE_KEY = "mini_mes_orders_v1";
+const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
 
 const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "已发货"];
 const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
@@ -25,10 +26,11 @@ const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS ||
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
 let orders = [];
-let filters = { q: "", machine: "", status: "" };
+let filters = { q: "", month: "", machine: "", status: "" };
 let syncing = false;
 let remoteOnline = REMOTE_ENABLED;
 let remoteErrorNotified = false;
+let columnWidths = loadColumnWidths();
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -37,6 +39,7 @@ init();
 
 async function init() {
   bindEvents();
+  setupColumnResizers();
   if (REMOTE_ENABLED) {
     setModeText("云端共享模式");
     await refreshFromRemote();
@@ -62,6 +65,10 @@ function bindEvents() {
 
   document.getElementById("searchInput").addEventListener("input", (e) => {
     filters.q = e.target.value.trim().toLowerCase();
+    render();
+  });
+  document.getElementById("filterMonth").addEventListener("change", (e) => {
+    filters.month = e.target.value;
     render();
   });
   document.getElementById("filterMachine").addEventListener("change", (e) => {
@@ -165,15 +172,15 @@ function render() {
     tr.appendChild(editCell(o, "orderNo"));
     tr.appendChild(editCell(o, "customer"));
     tr.appendChild(editCell(o, "drawingNo"));
-    tr.appendChild(editCell(o, "qty", "number"));
+    tr.appendChild(editCell(o, "qty"));
     tr.appendChild(selectCell(o, "programNo", ["已出", "未出"]));
-    tr.appendChild(editCell(o, "plannedHours", "number"));
+    tr.appendChild(editCell(o, "plannedHours"));
     tr.appendChild(selectCell(o, "machine", MACHINES));
     tr.appendChild(selectCell(o, "lathe", ["是", "否"]));
     tr.appendChild(editCell(o, "surface"));
     tr.appendChild(selectCell(o, "status", STATUS));
     tr.appendChild(editCell(o, "startTime"));
-    tr.appendChild(editCell(o, "dueDate", "date"));
+    tr.appendChild(editCell(o, "dueDate"));
     tr.appendChild(textCell(o.isDelayed || ""));
     tr.appendChild(editCell(o, "note"));
 
@@ -190,6 +197,7 @@ function render() {
     tableBody.appendChild(tr);
   });
 
+  applyColumnWidths();
   renderKpis(orders);
 }
 
@@ -220,19 +228,15 @@ function beginEdit(td, type = "text") {
   const input = document.createElement("input");
   input.type = type;
   input.value = oldValue;
+  input.style.display = "block";
   input.style.width = "100%";
+  input.style.boxSizing = "border-box";
+  input.style.margin = "0";
   input.style.background = "#0b2748";
   input.style.border = "1px solid #42a5f5";
   input.style.color = "#e6f0ff";
   input.style.padding = "4px";
-  if (key === "startTime" || key === "dueDate") {
-    input.style.width = "70px";
-    input.style.minWidth = "70px";
-  }
-  if (key === "customer") {
-    input.style.width = "4.5em";
-    input.style.minWidth = "4.5em";
-  }
+  input.style.textAlign = "center";
   td.appendChild(input);
   input.focus();
   input.select();
@@ -341,10 +345,19 @@ function getFilteredOrders() {
     const qOk =
       !filters.q ||
       [o.orderNo, o.drawingNo, o.customer, o.note].some((x) => (x || "").toString().toLowerCase().includes(filters.q));
+    const monthOk = !filters.month || getMonthFromDateString(o.dueDate) === filters.month;
     const mOk = !filters.machine || o.machine === filters.machine;
     const sOk = !filters.status || o.status === filters.status;
-    return qOk && mOk && sOk;
+    return qOk && monthOk && mOk && sOk;
   });
+}
+
+function getMonthFromDateString(v) {
+  if (!v) return "";
+  const s = String(v).trim();
+  const m = s.match(/^\d{4}-(\d{2})-\d{2}/);
+  if (m) return m[1];
+  return "";
 }
 
 function renderKpis(data) {
@@ -626,3 +639,73 @@ function normalizeImportedDate(v) {
   }
   return s;
 }
+
+
+function setupColumnResizers() {
+  const headers = document.querySelectorAll("#orderTable thead th");
+  headers.forEach((th, index) => {
+    if (th.querySelector(".col-resizer")) return;
+    const handle = document.createElement("span");
+    handle.className = "col-resizer";
+    handle.addEventListener("mousedown", (e) => startResize(e, index + 1));
+    th.appendChild(handle);
+  });
+  applyColumnWidths();
+}
+
+function startResize(event, colIndex) {
+  event.preventDefault();
+  const header = document.querySelector(`#orderTable thead th:nth-child(${colIndex})`);
+  if (!header) return;
+  const startX = event.clientX;
+  const startWidth = header.getBoundingClientRect().width;
+
+  const onMove = (e) => {
+    const next = Math.max(48, Math.round(startWidth + (e.clientX - startX)));
+    columnWidths[String(colIndex)] = next;
+    setColumnWidth(colIndex, next);
+  };
+
+  const onUp = () => {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    saveColumnWidths();
+  };
+
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+
+function setColumnWidth(colIndex, px) {
+  const cells = document.querySelectorAll(`#orderTable tr > *:nth-child(${colIndex})`);
+  cells.forEach((cell) => {
+    cell.style.width = `${px}px`;
+    cell.style.minWidth = `${px}px`;
+    cell.style.maxWidth = `${px}px`;
+  });
+}
+
+function applyColumnWidths() {
+  Object.keys(columnWidths).forEach((k) => {
+    const col = Number(k);
+    const px = Number(columnWidths[k]);
+    if (Number.isFinite(col) && Number.isFinite(px)) {
+      setColumnWidth(col, px);
+    }
+  });
+}
+
+function saveColumnWidths() {
+  localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(columnWidths));
+}
+
+function loadColumnWidths() {
+  try {
+    const raw = localStorage.getItem(COL_WIDTH_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
