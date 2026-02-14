@@ -462,9 +462,9 @@ function toDbRow(order) {
     drawing_no: order.drawingNo || "",
     customer: order.customer || "",
     item_name: order.name || "",
-    qty: order.qty === "" ? null : Number(order.qty),
+    qty: toFiniteOrNull(order.qty),
     program_no: order.programNo || "",
-    planned_hours: order.plannedHours === "" ? null : Number(order.plannedHours),
+    planned_hours: toFiniteOrNull(order.plannedHours),
     machine: order.machine || "",
     lathe: order.lathe || "",
     surface: order.surface || "",
@@ -607,7 +607,7 @@ async function importXlsx(event) {
           if (!key) return;
           let value = row[title];
           if (key === "startTime" || key === "dueDate") value = normalizeImportedDate(value);
-          if (key === "qty" || key === "plannedHours") value = value === "" ? "" : Number(value);
+          if (key === "qty" || key === "plannedHours") value = normalizeImportedNumber(value);
           next[key] = value;
         });
         next.id = crypto.randomUUID();
@@ -617,7 +617,10 @@ async function importXlsx(event) {
 
       if (REMOTE_ENABLED && remoteOnline) {
         const { error } = await db.from("mes_orders").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-        if (error) throw error;
+        if (error) {
+          // 某些环境/RLS下可能不允许全量删除，不中断导入流程
+          console.warn("云端清空旧数据失败，改为直接覆盖写入", error);
+        }
       }
 
       await persistOrders({ changed: orders });
@@ -625,7 +628,12 @@ async function importXlsx(event) {
       alert("导入成功");
     } catch (e) {
       console.error(e);
-      alert("导入失败：请使用系统导出的 Excel 或包含标准列名的 Excel");
+      const msg = (e && e.message) ? e.message : "";
+      if (msg.includes("item_name")) {
+        alert("导入失败：云端表缺少 item_name 字段，请在 Supabase 执行最新 supabase_schema.sql 后重试。");
+      } else {
+        alert("导入失败：请使用系统导出的 Excel 或包含标准列名的 Excel");
+      }
     }
   };
 
@@ -648,6 +656,18 @@ function normalizeImportedDate(v) {
     return `${m[1]}-${mm}-${dd}`;
   }
   return s;
+}
+
+function normalizeImportedNumber(v) {
+  if (v == null || v === "") return "";
+  const n = Number(v);
+  return Number.isFinite(n) ? n : "";
+}
+
+function toFiniteOrNull(v) {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 
