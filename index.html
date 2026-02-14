@@ -1,0 +1,106 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>元源紫泽 MES 生产管理系统</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>元源紫泽 MES 生产管理系统</h1>
+      <p>类 Excel 快速录入与即时修改 · <span id="systemMode">本地模式</span></p>
+    </div>
+    <div class="actions">
+      <button id="addRowBtn" class="btn btn-primary">+ 新增订单 (Ctrl+N)</button>
+      <button id="saveBtn" class="btn">导出Excel</button>
+      <label class="btn upload-btn">
+        导入Excel
+        <input id="importInput" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden />
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <section class="kpi-grid" id="kpiGrid">
+      <article class="kpi-card kpi-a">
+        <span>今日总排产工时</span>
+        <strong id="kpiPlannedHours">0</strong>
+      </article>
+      <article class="kpi-card kpi-b">
+        <span>加工中工时</span>
+        <strong id="kpiWorkingHours">0</strong>
+      </article>
+      <article class="kpi-card kpi-c">
+        <span>延期订单数</span>
+        <strong id="kpiDelayedCount">0</strong>
+      </article>
+      <article class="kpi-card kpi-d">
+        <span>完工率</span>
+        <strong id="kpiCompletion">0%</strong>
+      </article>
+    </section>
+
+    <section class="toolbar">
+      <div class="quick-add">
+        <input id="qaOrderNo" placeholder="订单号" />
+        <input id="qaCustomer" placeholder="客户" />
+        <input id="qaDrawingNo" placeholder="图号" />
+        <input id="qaQty" type="number" min="1" placeholder="数量" />
+        <input id="qaHours" type="number" min="0" step="0.1" placeholder="预计工时" />
+        <select id="qaMachine">
+          <option value="">机台</option>
+          <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
+        </select>
+        <input id="qaDueDate" type="date" />
+        <button id="quickAddBtn" class="btn btn-primary">快速添加</button>
+      </div>
+      <div class="filters">
+        <input id="searchInput" placeholder="搜索订单号/图号/客户" />
+        <select id="filterMachine">
+          <option value="">全部机台</option>
+          <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
+        </select>
+        <select id="filterStatus">
+          <option value="">全部状态</option>
+          <option>待排产</option><option>已排产</option><option>加工中</option><option>完成待检</option><option>返工</option><option>已发货</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <table id="orderTable">
+        <thead>
+          <tr>
+            <th>序号</th>
+            <th>订单号</th>
+            <th>客户</th>
+            <th>图号</th>
+            <th>数量</th>
+            <th>程序单</th>
+            <th>预计工时</th>
+            <th>机台</th>
+            <th>车床</th>
+            <th>表面处理</th>
+            <th>状态</th>
+            <th>开始时间</th>
+            <th>交期</th>
+            <th>是否延期</th>
+            <th>备注</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </section>
+
+    <p class="hint">提示：双击单元格可编辑；Enter 保存并跳转下一行同列；</p>
+  </main>
+
+  <script src="xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
