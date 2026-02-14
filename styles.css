@@ -198,8 +198,8 @@ th {
 
 #orderTable th:nth-child(6),
 #orderTable td:nth-child(6) {
-  width: 72px;
-  min-width: 72px;
+  width: 88px !important;
+  min-width: 88px !important;
 }
 
 td.editing {
