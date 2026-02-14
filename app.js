@@ -19,39 +19,16 @@ const XLSX_COLUMNS = [
   { key: "note", title: "备注" },
 ];
 
-const MES_CONFIG = window.MES_CONFIG || {};
-const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
-const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
-
-const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
-
-let orders = [];
+let orders = loadOrdersLocal();
 let filters = { q: "", machine: "", status: "" };
-let syncing = false;
 
 const tableBody = document.getElementById("tableBody");
-const systemMode = document.getElementById("systemMode");
 
 init();
 
-async function init() {
+function init() {
   bindEvents();
-  if (REMOTE_ENABLED) {
-    setModeText("云端共享模式");
-    await refreshFromRemote();
-    setInterval(async () => {
-      if (!syncing) await refreshFromRemote(false);
-    }, AUTO_REFRESH_MS);
-  } else {
-    setModeText("本地模式");
-    orders = loadOrdersLocal();
-    render();
-  }
-}
-
-function setModeText(text) {
-  if (!systemMode) return;
-  systemMode.textContent = text;
+  render();
 }
 
 function bindEvents() {
@@ -105,7 +82,7 @@ function createEmptyOrder() {
   };
 }
 
-async function quickAdd() {
+function quickAdd() {
   const orderNo = valueOf("qaOrderNo");
   const drawingNo = valueOf("qaDrawingNo");
   const customer = valueOf("qaCustomer");
@@ -135,15 +112,14 @@ async function quickAdd() {
   order.isDelayed = calcDelayed(order);
 
   orders.unshift(order);
-  await persistOrders({ changed: [order] });
+  saveOrdersLocal();
   clearQuickAdd();
   render();
 }
 
-async function addBlankRow() {
-  const order = createEmptyOrder();
-  orders.unshift(order);
-  await persistOrders({ changed: [order] });
+function addBlankRow() {
+  orders.unshift(createEmptyOrder());
+  saveOrdersLocal();
   render();
   const firstEditable = tableBody.querySelector("td[data-key='orderNo']");
   if (firstEditable) beginEdit(firstEditable);
@@ -237,19 +213,17 @@ function beginEdit(td, type = "text") {
   input.focus();
   input.select();
 
-  const save = async () => {
+  const save = () => {
     td.classList.remove("editing");
-    await updateOrder(td.dataset.id, key, input.value);
+    updateOrder(td.dataset.id, key, input.value);
   };
 
-  input.addEventListener("blur", () => {
-    void save();
-  });
-
+  input.addEventListener("blur", save);
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      void save().then(() => jumpToNextRowSameColumn(td));
+      save();
+      jumpToNextRowSameColumn(td);
     }
     if (e.key === "Escape") {
       td.classList.remove("editing");
@@ -285,22 +259,19 @@ function selectCell(order, key, options) {
     sel.appendChild(o);
   });
 
-  sel.addEventListener("change", () => {
-    void updateOrder(order.id, key, sel.value);
-  });
-
+  sel.addEventListener("change", () => updateOrder(order.id, key, sel.value));
   td.appendChild(sel);
   return td;
 }
 
-async function updateOrder(id, key, value) {
+function updateOrder(id, key, value) {
   const target = orders.find((o) => o.id === id);
   if (!target) return;
 
   target[key] = normalizeValue(key, value);
   target.isDelayed = calcDelayed(target);
 
-  await persistOrders({ changed: [target] });
+  saveOrdersLocal();
   render();
 }
 
@@ -335,9 +306,9 @@ function calcDelayed(order) {
   return Date.now() > due.getTime() ? "延期" : "正常";
 }
 
-async function removeOrder(id) {
+function removeOrder(id) {
   orders = orders.filter((o) => o.id !== id);
-  await persistOrders({ deletedId: id });
+  saveOrdersLocal();
   render();
 }
 
@@ -370,29 +341,6 @@ function sum(arr, key) {
   return arr.reduce((s, item) => s + (Number(item[key]) || 0), 0);
 }
 
-async function persistOrders({ changed = [], deletedId = null } = {}) {
-  saveOrdersLocal();
-
-  if (!REMOTE_ENABLED) return;
-  syncing = true;
-  try {
-    if (changed.length > 0) {
-      const payload = changed.map(toDbRow);
-      const { error } = await db.from("mes_orders").upsert(payload, { onConflict: "id" });
-      if (error) throw error;
-    }
-    if (deletedId) {
-      const { error } = await db.from("mes_orders").delete().eq("id", deletedId);
-      if (error) throw error;
-    }
-  } catch (e) {
-    console.error("云端同步失败", e);
-    alert("云端同步失败，请检查网络或 Supabase 配置。已保留本地数据。");
-  } finally {
-    syncing = false;
-  }
-}
-
 function saveOrdersLocal() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
 }
@@ -408,67 +356,6 @@ function loadOrdersLocal() {
     }
   }
   return demoData();
-}
-
-async function refreshFromRemote(showAlert = false) {
-  try {
-    const { data, error } = await db.from("mes_orders").select("*").order("updated_at", { ascending: false });
-    if (error) throw error;
-    orders = (data || []).map(fromDbRow);
-    if (orders.length === 0) {
-      orders = loadOrdersLocal();
-      await persistOrders({ changed: orders });
-    }
-    saveOrdersLocal();
-    render();
-    if (showAlert) alert("已从云端刷新最新数据");
-  } catch (e) {
-    console.error("云端读取失败", e);
-    orders = loadOrdersLocal();
-    render();
-    if (showAlert) alert("云端读取失败，已切换本地数据");
-  }
-}
-
-function toDbRow(order) {
-  return {
-    id: order.id,
-    order_no: order.orderNo || "",
-    drawing_no: order.drawingNo || "",
-    customer: order.customer || "",
-    qty: order.qty === "" ? null : Number(order.qty),
-    program_no: order.programNo || "",
-    planned_hours: order.plannedHours === "" ? null : Number(order.plannedHours),
-    machine: order.machine || "",
-    lathe: order.lathe || "",
-    surface: order.surface || "",
-    status: order.status || "待排产",
-    start_time: order.startTime || "",
-    due_date: order.dueDate || "",
-    is_delayed: order.isDelayed || "",
-    note: order.note || "",
-    updated_at: new Date().toISOString(),
-  };
-}
-
-function fromDbRow(row) {
-  const o = createEmptyOrder();
-  o.id = row.id || crypto.randomUUID();
-  o.orderNo = row.order_no || "";
-  o.drawingNo = row.drawing_no || "";
-  o.customer = row.customer || "";
-  o.qty = row.qty ?? "";
-  o.programNo = row.program_no || "未出";
-  o.plannedHours = row.planned_hours ?? "";
-  o.machine = row.machine || "";
-  o.lathe = row.lathe || "";
-  o.surface = row.surface || "";
-  o.status = row.status || "待排产";
-  o.startTime = row.start_time || "";
-  o.dueDate = row.due_date || "";
-  o.note = row.note || "";
-  o.isDelayed = calcDelayed(o);
-  return o;
 }
 
 function demoData() {
@@ -552,7 +439,7 @@ function exportXlsx() {
   XLSX.writeFile(wb, `mes_orders_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.xlsx`);
 }
 
-async function importXlsx(event) {
+function importXlsx(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (!window.XLSX) {
@@ -562,7 +449,7 @@ async function importXlsx(event) {
   }
 
   const reader = new FileReader();
-  reader.onload = async () => {
+  reader.onload = () => {
     try {
       const data = new Uint8Array(reader.result);
       const wb = XLSX.read(data, { type: "array", cellDates: true });
@@ -585,12 +472,7 @@ async function importXlsx(event) {
         return next;
       });
 
-      if (REMOTE_ENABLED) {
-        const { error } = await db.from("mes_orders").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-        if (error) throw error;
-      }
-
-      await persistOrders({ changed: orders });
+      saveOrdersLocal();
       render();
       alert("导入成功");
     } catch (e) {
