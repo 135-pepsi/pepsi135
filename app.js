@@ -35,6 +35,8 @@ let columnWidths = loadColumnWidths();
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
+const tableWrap = document.getElementById("tableWrap");
+const backTopBtn = document.getElementById("backTopBtn");
 
 init();
 
@@ -63,6 +65,7 @@ function bindEvents() {
   document.getElementById("addRowBtn").addEventListener("click", addBlankRow);
   document.getElementById("saveBtn").addEventListener("click", exportXlsx);
   document.getElementById("importInput").addEventListener("change", importXlsx);
+  backTopBtn.addEventListener("click", scrollToTopRow);
 
   document.getElementById("searchInput").addEventListener("input", (e) => {
     filters.q = e.target.value.trim().toLowerCase();
@@ -80,6 +83,8 @@ function bindEvents() {
     filters.status = e.target.value;
     render();
   });
+  window.addEventListener("scroll", updateBackTopBtn);
+  tableWrap.addEventListener("scroll", updateBackTopBtn);
 
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
@@ -91,6 +96,7 @@ function bindEvents() {
       exportXlsx();
     }
   });
+  updateBackTopBtn();
 }
 
 function createEmptyOrder() {
@@ -145,7 +151,7 @@ async function quickAdd() {
   };
   order.isDelayed = calcDelayed(order);
 
-  orders.unshift(order);
+  orders.push(order);
   await persistOrders({ changed: [order] });
   clearQuickAdd();
   render();
@@ -153,10 +159,12 @@ async function quickAdd() {
 
 async function addBlankRow() {
   const order = createEmptyOrder();
-  orders.unshift(order);
+  orders.push(order);
   await persistOrders({ changed: [order] });
   render();
-  const firstEditable = tableBody.querySelector("td[data-key='orderNo']");
+  const rows = tableBody.querySelectorAll("tr");
+  const lastRow = rows[rows.length - 1];
+  const firstEditable = lastRow ? lastRow.querySelector("td[data-key='orderNo']") : null;
   if (firstEditable) beginEdit(firstEditable);
 }
 
@@ -425,9 +433,11 @@ function loadOrdersLocal() {
 async function refreshFromRemote(showAlert = false) {
   if (!remoteOnline) return;
   try {
-    const { data, error } = await db.from("mes_orders").select("*").order("updated_at", { ascending: false });
+    const { data, error } = await db.from("mes_orders").select("*").order("updated_at", { ascending: true });
     if (error) throw error;
-    orders = (data || []).map(fromDbRow);
+    orders = (data || [])
+      .map(fromDbRow)
+      .sort((a, b) => String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
 
     if (orders.length === 0) {
       orders = loadOrdersLocal();
@@ -494,6 +504,7 @@ function fromDbRow(row) {
   o.startTime = row.start_time || "";
   o.dueDate = row.due_date || "";
   o.note = row.note || "";
+  o.updatedAt = row.updated_at || "";
   o.isDelayed = calcDelayed(o);
   return o;
 }
@@ -562,6 +573,18 @@ function clearQuickAdd() {
   ["qaOrderNo", "qaDrawingNo", "qaCustomer", "qaName", "qaQty", "qaHours", "qaMachine", "qaDueDate"].forEach((id) => {
     document.getElementById(id).value = "";
   });
+}
+
+function scrollToTopRow() {
+  if (tableWrap) tableWrap.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function updateBackTopBtn() {
+  const pageY = window.scrollY || 0;
+  const tableY = tableWrap ? tableWrap.scrollTop : 0;
+  const show = pageY > 120 || tableY > 120;
+  backTopBtn.style.display = show ? "inline-flex" : "none";
 }
 
 function exportXlsx() {
