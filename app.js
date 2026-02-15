@@ -487,8 +487,8 @@ function toDbRow(order, updatedAtOverride = "") {
     lathe: order.lathe || "",
     surface: order.surface || "",
     status: order.status || "待排产",
-    start_time: order.startTime || "",
-    due_date: order.dueDate || "",
+    start_time: toDbStartTime(order.startTime),
+    due_date: toDbDueDate(order.dueDate),
     is_delayed: order.isDelayed || "",
     note: order.note || "",
     created_at: order.createdAt || updatedAtOverride || new Date().toISOString(),
@@ -511,8 +511,8 @@ function fromDbRow(row) {
   o.lathe = row.lathe || "";
   o.surface = row.surface || "";
   o.status = row.status || "待排产";
-  o.startTime = row.start_time || "";
-  o.dueDate = row.due_date || "";
+  o.startTime = formatStartTimeFromDb(row.start_time);
+  o.dueDate = formatDueDateFromDb(row.due_date);
   o.note = row.note || "";
   o.updatedAt = row.updated_at || "";
   o.isDelayed = calcDelayed(o);
@@ -702,6 +702,34 @@ function toFiniteOrNull(v) {
   if (v == null || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function toDbStartTime(v) {
+  const s = (v || "").trim().replaceAll("/", "-");
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00Z`;
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(s)) return `${s.replace(" ", "T")}:00Z`;
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(s)) return `${s.replace(" ", "T")}Z`;
+  return s;
+}
+
+function toDbDueDate(v) {
+  const s = normalizeImportedDate(v);
+  return s || null;
+}
+
+function formatStartTimeFromDb(v) {
+  if (!v) return "";
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+  if (m) return `${m[1]} ${m[2]}`;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 16).replace("T", " ");
+  return s;
+}
+
+function formatDueDateFromDb(v) {
+  return normalizeImportedDate(v);
 }
 
 
