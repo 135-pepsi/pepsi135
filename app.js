@@ -122,7 +122,8 @@ function createEmptyOrder() {
 }
 
 async function quickAdd() {
-  const orderNo = valueOf("qaOrderNo");
+  const orderNoInput = valueOf("qaOrderNo");
+  const orderNo = normalizeOrderNoInput(orderNoInput);
   const drawingNo = valueOf("qaDrawingNo");
   const customer = valueOf("qaCustomer");
   const name = valueOf("qaName");
@@ -131,8 +132,12 @@ async function quickAdd() {
   const machine = valueOf("qaMachine");
   const dueDate = valueOf("qaDueDate");
 
-  if (!orderNo || !drawingNo) {
-    alert("请至少填写订单号和图号");
+  if (!orderNoInput || !drawingNo) {
+    alert("请至少填写编号和图号");
+    return;
+  }
+  if (!orderNo) {
+    alert("编号格式无效，请输入1-3位数字（如 30 或 030）");
     return;
   }
 
@@ -334,7 +339,24 @@ function normalizeValue(key, value) {
   }
   if (key === "dueDate") return normalizeDateOnlyInput(value);
   if (key === "startTime") return normalizeStartTimeInput(value);
+  if (key === "orderNo") return normalizeOrderNoInput(value);
   return (value || "").trim();
+}
+
+function normalizeOrderNoInput(value) {
+  const raw = (value || "").trim().toUpperCase();
+  if (!raw) return "";
+
+  // Allow full order number input like ZZ2602030.
+  if (/^ZZ\d{7}$/.test(raw)) return raw;
+
+  // Serial-only input: 1-3 digits, padded to 3 digits.
+  if (!/^\d{1,3}$/.test(raw)) return "";
+  const serial = raw.padStart(3, "0");
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  return `ZZ${yy}${mm}${serial}`;
 }
 
 function formatDisplayValue(key, value) {
