@@ -312,7 +312,14 @@ async function updateOrder(id, key, value) {
   const target = orders.find((o) => o.id === id);
   if (!target) return;
 
-  target[key] = normalizeValue(key, value);
+  const normalized = normalizeValue(key, value);
+  if ((key === "dueDate" || key === "startTime") && (value || "").trim() !== "" && normalized === "") {
+    alert(key === "dueDate" ? "交期格式无效，请输入 YYYY-MM-DD 或 M-D（如 2-20）" : "开始时间格式无效，请输入 YYYY-MM-DD HH:mm 或 M-D H:mm");
+    render();
+    return;
+  }
+
+  target[key] = normalized;
   target.isDelayed = calcDelayed(target);
 
   await persistOrders({ changed: [target] });
@@ -325,7 +332,8 @@ function normalizeValue(key, value) {
     const num = Number(value);
     return Number.isFinite(num) ? num : "";
   }
-  if (key === "dueDate") return value;
+  if (key === "dueDate") return normalizeDateOnlyInput(value);
+  if (key === "startTime") return normalizeStartTimeInput(value);
   return (value || "").trim();
 }
 
@@ -676,20 +684,7 @@ async function importXlsx(event) {
 }
 
 function normalizeImportedDate(v) {
-  if (v == null || v === "") return "";
-  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString().slice(0, 10);
-  if (typeof v === "number") {
-    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  }
-  const s = String(v).trim().replaceAll("/", "-");
-  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) {
-    const mm = m[2].padStart(2, "0");
-    const dd = m[3].padStart(2, "0");
-    return `${m[1]}-${mm}-${dd}`;
-  }
-  return s;
+  return normalizeDateOnlyInput(v);
 }
 
 function normalizeImportedNumber(v) {
@@ -705,12 +700,10 @@ function toFiniteOrNull(v) {
 }
 
 function toDbStartTime(v) {
-  const s = (v || "").trim().replaceAll("/", "-");
+  const s = normalizeStartTimeInput(v);
   if (!s) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00Z`;
   if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(s)) return `${s.replace(" ", "T")}:00Z`;
-  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(s)) return `${s.replace(" ", "T")}Z`;
-  return s;
+  return null;
 }
 
 function toDbDueDate(v) {
@@ -730,6 +723,52 @@ function formatStartTimeFromDb(v) {
 
 function formatDueDateFromDb(v) {
   return normalizeImportedDate(v);
+}
+
+function normalizeDateOnlyInput(v) {
+  if (v == null || v === "") return "";
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+  if (typeof v === "number") {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim().replaceAll("/", "-");
+  const m = s.match(/^(?:(\d{4})-)?(\d{1,2})-(\d{1,2})(?:[ T].*)?$/);
+  if (!m) return "";
+  const year = Number(m[1] || new Date().getFullYear());
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return "";
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  if (dt.getUTCFullYear() !== year || dt.getUTCMonth() !== month - 1 || dt.getUTCDate() !== day) return "";
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function normalizeStartTimeInput(v) {
+  if (v == null || v === "") return "";
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString().slice(0, 16).replace("T", " ");
+  const s = String(v).trim().replaceAll("/", "-").replace("T", " ");
+  if (!s) return "";
+  const m = s.match(/^(?:(\d{4})-)?(\d{1,2})-(\d{1,2})(?:\s(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+  if (!m) return "";
+  const year = Number(m[1] || new Date().getFullYear());
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const hour = Number(m[4] || 0);
+  const minute = Number(m[5] || 0);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return "";
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  const dt = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  if (
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() !== month - 1 ||
+    dt.getUTCDate() !== day ||
+    dt.getUTCHours() !== hour ||
+    dt.getUTCMinutes() !== minute
+  ) {
+    return "";
+  }
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")} ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 
