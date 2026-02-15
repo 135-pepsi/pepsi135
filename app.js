@@ -385,21 +385,32 @@ async function removeOrder(id) {
 }
 
 function getFilteredOrders() {
-  return orders.filter((o) => {
+  return orders.filter((o, idx, arr) => {
     const qOk =
       !filters.q ||
       [o.orderNo, o.drawingNo, o.customer, o.name, o.note].some((x) => (x || "").toString().toLowerCase().includes(filters.q));
-    const monthOk = !filters.month || getMonthFromDateString(o.dueDate) === filters.month;
+    const effectiveOrderNo = getEffectiveOrderNoForMonthFilter(arr, idx);
+    const monthOk = !filters.month || getMonthFromOrderNo(effectiveOrderNo) === filters.month;
     const mOk = !filters.machine || o.machine === filters.machine;
     const sOk = !filters.status || o.status === filters.status;
     return qOk && monthOk && mOk && sOk;
   });
 }
 
-function getMonthFromDateString(v) {
+function getEffectiveOrderNoForMonthFilter(rows, index) {
+  const current = String(rows[index]?.orderNo || "").trim();
+  if (current) return current;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const prev = String(rows[i]?.orderNo || "").trim();
+    if (prev) return prev;
+  }
+  return "";
+}
+
+function getMonthFromOrderNo(v) {
   if (!v) return "";
-  const s = String(v).trim();
-  const m = s.match(/^\d{4}-(\d{2})-\d{2}/);
+  const s = String(v).trim().toUpperCase();
+  const m = s.match(/^ZZ\d{2}(\d{2})\d{3}$/);
   if (m) return m[1];
   return "";
 }
