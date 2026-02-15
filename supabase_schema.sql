@@ -1,4 +1,6 @@
 ﻿-- Supabase: MES 订单表
+create extension if not exists pg_trgm;
+
 create table if not exists public.mes_orders (
   id uuid primary key,
   created_at timestamptz not null default now(),
@@ -27,6 +29,14 @@ alter table public.mes_orders
 add column if not exists item_name text not null default '';
 
 create index if not exists idx_mes_orders_updated_at on public.mes_orders(updated_at desc);
+create index if not exists idx_mes_orders_order_no on public.mes_orders(order_no);
+create index if not exists idx_mes_orders_drawing_no on public.mes_orders(drawing_no);
+create index if not exists idx_mes_orders_status on public.mes_orders(status);
+create index if not exists idx_mes_orders_customer on public.mes_orders(customer);
+create index if not exists idx_mes_orders_machine on public.mes_orders(machine);
+create index if not exists idx_mes_orders_status_updated_at on public.mes_orders(status, updated_at desc);
+create index if not exists idx_mes_orders_item_name_trgm on public.mes_orders using gin (item_name gin_trgm_ops);
+create index if not exists idx_mes_orders_note_trgm on public.mes_orders using gin (note gin_trgm_ops);
 
 alter table public.mes_orders enable row level security;
 
