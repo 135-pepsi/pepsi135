@@ -147,6 +147,16 @@ select option {
   border-collapse: collapse;
   min-width: 1680px;
 }
+
+.material-page #orderTable {
+  min-width: 960px;
+}
+
+.material-page #orderTable th:nth-child(5),
+.material-page #orderTable td:nth-child(5) {
+  width: 90px;
+  min-width: 90px;
+}
 th,
 td {
   border: 1px solid #254670;

@@ -3,7 +3,8 @@
 ## 1. Supabase 初始化
 1. 创建 Supabase 项目。
 2. 打开 SQL Editor，执行 `supabase_schema.sql`。
-3. 在项目设置复制：
+3. 如需使用物料页面，再执行 `supabase_materials_schema.sql`。
+4. 在项目设置复制：
 - `Project URL`
 - `anon public key`
 
@@ -32,6 +33,7 @@ window.MES_CONFIG = {
 - `config.js`
 - `xlsx.full.min.js`
 - `supabase_schema.sql`
+- `supabase_materials_schema.sql`
 
 2. 仓库 Settings -> Pages
 - Source: `Deploy from a branch`
@@ -45,3 +47,4 @@ window.MES_CONFIG = {
 - Excel 导入/导出
 - 开启 Supabase 后：多电脑共享同一份数据
 - 云端异常时自动降级本地模式（避免反复弹窗）
+- `material.html` 为物料页面，字段：订单号、客户、物料、规格、数量、金额、是否齐备
