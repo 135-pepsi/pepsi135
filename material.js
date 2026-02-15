@@ -51,7 +51,6 @@ function setModeText(text) {
 function bindEvents() {
   const quickAddBtn = document.getElementById("quickAddBtn");
   if (quickAddBtn) quickAddBtn.addEventListener("click", quickAdd);
-  document.getElementById("addRowBtn").addEventListener("click", addBlankRow);
   const addRowInlineBtn = document.getElementById("addRowInlineBtn");
   if (addRowInlineBtn) addRowInlineBtn.addEventListener("click", addBlankRow);
   document.getElementById("qaOrderNo").addEventListener("input", syncQuickCustomer);
