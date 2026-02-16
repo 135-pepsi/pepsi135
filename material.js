@@ -135,7 +135,7 @@ async function beginEmailLogin() {
     const { error } = await db.auth.signInWithOtp({
       email,
       options: {
-        shouldCreateUser: true,
+        shouldCreateUser: false,
         emailRedirectTo: window.location.href.split("#")[0],
       },
     });
