@@ -249,9 +249,6 @@ async function quickAdd() {
     customer,
   };
 
-  const confirmed = confirm(`确认添加物料行？\n订单号：${orderNo}\n客户：${customer || "未匹配"}`);
-  if (!confirmed) return;
-
   materials.push(next);
   await persist({ changed: [next] });
   clearQuickAdd();
@@ -259,9 +256,6 @@ async function quickAdd() {
 }
 
 async function addBlankRow() {
-  const confirmed = confirm("确认新增空白物料行吗？");
-  if (!confirmed) return;
-
   const next = createEmptyMaterial();
   materials.push(next);
   await persist({ changed: [next] });
