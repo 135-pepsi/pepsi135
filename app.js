@@ -36,8 +36,6 @@ let reconnectDelayMs = 5000;
 let authSession = null;
 let authWriteHintNotified = false;
 let abnormalOnly = false;
-let selectedIds = new Set();
-let undoStack = [];
 let lastSyncAt = "";
 let columnWidths = loadColumnWidths();
 
@@ -52,16 +50,7 @@ const authUser = document.getElementById("authUser");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const lastSyncTime = document.getElementById("lastSyncTime");
-const undoBtn = document.getElementById("undoBtn");
 const abnormalFilterBtn = document.getElementById("abnormalFilterBtn");
-const qaContinuous = document.getElementById("qaContinuous");
-const selectAllRows = document.getElementById("selectAllRows");
-const batchStatus = document.getElementById("batchStatus");
-const batchMachine = document.getElementById("batchMachine");
-const batchDueDate = document.getElementById("batchDueDate");
-const batchApplyBtn = document.getElementById("batchApplyBtn");
-const batchClearBtn = document.getElementById("batchClearBtn");
-const batchCount = document.getElementById("batchCount");
 
 init();
 
@@ -120,40 +109,10 @@ function bindEvents() {
       void logoutAuth();
     });
   }
-  if (undoBtn) {
-    undoBtn.addEventListener("click", () => {
-      void undoLastAction();
-    });
-  }
   if (abnormalFilterBtn) {
     abnormalFilterBtn.addEventListener("click", () => {
       abnormalOnly = !abnormalOnly;
       abnormalFilterBtn.textContent = abnormalOnly ? "显示全部" : "只看异常";
-      render();
-    });
-  }
-  if (selectAllRows) {
-    selectAllRows.addEventListener("change", () => {
-      const rows = getFilteredOrders();
-      if (selectAllRows.checked) {
-        rows.forEach((x) => selectedIds.add(x.id));
-      } else {
-        rows.forEach((x) => selectedIds.delete(x.id));
-      }
-      renderSelectionSummary();
-      render();
-    });
-  }
-  if (batchApplyBtn) {
-    batchApplyBtn.addEventListener("click", () => {
-      void applyBatchChanges();
-    });
-  }
-  if (batchClearBtn) {
-    batchClearBtn.addEventListener("click", () => {
-      selectedIds.clear();
-      if (selectAllRows) selectAllRows.checked = false;
-      renderSelectionSummary();
       render();
     });
   }
@@ -174,17 +133,6 @@ function bindEvents() {
     filters.status = e.target.value;
     render();
   });
-  const quickInputs = ["qaOrderNo", "qaCustomer", "qaName", "qaDrawingNo", "qaQty", "qaHours", "qaMachine", "qaDueDate"];
-  quickInputs.forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        void quickAdd();
-      }
-    });
-  });
   window.addEventListener("scroll", updateBackTopBtn);
   tableWrap.addEventListener("scroll", updateBackTopBtn);
 
@@ -201,7 +149,6 @@ function bindEvents() {
   updateBackTopBtn();
   updateAuthUi();
   syncReconnectButton();
-  renderSelectionSummary();
 }
 
 async function initAuth() {
@@ -280,32 +227,6 @@ function canWriteRemote(notify = true) {
   return false;
 }
 
-function renderSelectionSummary() {
-  if (batchCount) batchCount.textContent = `已选 ${selectedIds.size} 项`;
-}
-
-function pushUndoSnapshot(type = "修改") {
-  undoStack.push({
-    type,
-    orders: orders.map((x) => ({ ...x })),
-    selected: Array.from(selectedIds),
-  });
-  if (undoStack.length > 20) undoStack.shift();
-}
-
-async function undoLastAction() {
-  const snapshot = undoStack.pop();
-  if (!snapshot) {
-    alert("没有可撤销的操作");
-    return;
-  }
-  orders = snapshot.orders.map((x) => ({ ...createEmptyOrder(), ...x }));
-  selectedIds = new Set(snapshot.selected || []);
-  await persistOrders({ changed: orders });
-  render();
-  renderSelectionSummary();
-}
-
 function createEmptyOrder() {
   return {
     id: crypto.randomUUID(),
@@ -364,15 +285,13 @@ async function quickAdd() {
   };
   order.isDelayed = calcDelayed(order);
 
-  pushUndoSnapshot("快速添加");
   orders.push(order);
   await persistOrders({ changed: [order] });
-  if (!qaContinuous || !qaContinuous.checked) clearQuickAdd();
+  clearQuickAdd();
   render();
 }
 
 async function addBlankRow() {
-  pushUndoSnapshot("新增空行");
   const order = createEmptyOrder();
   orders.push(order);
   await persistOrders({ changed: [order] });
@@ -396,7 +315,6 @@ function render() {
     if (stateClass) tr.classList.add(stateClass);
 
     tr.appendChild(textCell(idx + 1));
-    tr.appendChild(selectRowCell(o.id));
     tr.appendChild(editCell(o, "orderNo"));
     tr.appendChild(editCell(o, "customer"));
     tr.appendChild(editCell(o, "name"));
@@ -407,7 +325,7 @@ function render() {
     tr.appendChild(selectCell(o, "machine", MACHINES));
     tr.appendChild(selectCell(o, "lathe", ["是", "否"]));
     tr.appendChild(editCell(o, "surface"));
-    tr.appendChild(selectCell(o, "status", STATUS, true));
+    tr.appendChild(selectCell(o, "status", STATUS));
     tr.appendChild(editCell(o, "startTime"));
     tr.appendChild(editCell(o, "dueDate"));
     tr.appendChild(textCell(o.isDelayed || ""));
@@ -427,37 +345,8 @@ function render() {
   });
 
   applyColumnWidths();
-  updateSelectAllState(rows);
   renderKanban(rows);
   renderKpis(orders);
-  renderSelectionSummary();
-}
-
-function selectRowCell(id) {
-  const td = document.createElement("td");
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.checked = selectedIds.has(id);
-  cb.addEventListener("change", () => {
-    if (cb.checked) selectedIds.add(id);
-    else selectedIds.delete(id);
-    renderSelectionSummary();
-    updateSelectAllState(getFilteredOrders());
-  });
-  td.appendChild(cb);
-  return td;
-}
-
-function updateSelectAllState(rows) {
-  if (!selectAllRows) return;
-  if (!rows.length) {
-    selectAllRows.checked = false;
-    selectAllRows.indeterminate = false;
-    return;
-  }
-  const selected = rows.filter((x) => selectedIds.has(x.id)).length;
-  selectAllRows.checked = selected === rows.length;
-  selectAllRows.indeterminate = selected > 0 && selected < rows.length;
 }
 
 function renderKanban(rows) {
@@ -475,24 +364,21 @@ function renderKanban(rows) {
 
   STATUS.forEach((status) => {
     const list = rows.filter((o) => o.status === status);
-    const hours = list.reduce((s, x) => s + (Number(x.plannedHours) || 0), 0);
-    const overload = status !== "已发货" && hours > 80;
 
     const statusPill = document.createElement("span");
     statusPill.className = "board-pill";
-    statusPill.textContent = `${status} ${list.length}单/${hours.toFixed(1)}h`;
+    statusPill.textContent = `${status} ${list.length}`;
     boardSummary.appendChild(statusPill);
 
     const col = document.createElement("article");
     col.className = "kanban-col";
-    if (overload) col.classList.add("kanban-col-overload");
 
     const head = document.createElement("div");
     head.className = "kanban-col-head";
     const title = document.createElement("strong");
     title.textContent = status;
     const count = document.createElement("span");
-    count.textContent = `${list.length} 单 · ${hours.toFixed(1)}h`;
+    count.textContent = `${list.length} 单`;
     head.appendChild(title);
     head.appendChild(count);
 
@@ -539,9 +425,7 @@ function createKanbanCard(order, displayOrderNo = "") {
   if (order.machine) meta.appendChild(createKanbanTag(order.machine));
   if (order.dueDate) meta.appendChild(createKanbanTag(`交期 ${toMonthDay(order.dueDate)}`));
   if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`工时 ${order.plannedHours}`));
-  if (isDueToday(order.dueDate)) meta.appendChild(createKanbanTag("今日交期", false, "kanban-today"));
-  if (isNearDue(order.dueDate, 3)) meta.appendChild(createKanbanTag("临近交期", false, "kanban-priority"));
-  if (order.isDelayed === "延期") meta.appendChild(createKanbanTag("延期", true, "kanban-overdue"));
+  if (order.isDelayed === "延期") meta.appendChild(createKanbanTag("延期", true));
 
   card.appendChild(top);
   card.appendChild(name);
@@ -560,11 +444,9 @@ function buildEffectiveOrderNoMap(rows) {
   return map;
 }
 
-function createKanbanTag(text, delayed = false, extraClass = "") {
+function createKanbanTag(text, delayed = false) {
   const tag = document.createElement("span");
-  const classes = [delayed ? "kanban-tag kanban-delay" : "kanban-tag"];
-  if (extraClass) classes.push(extraClass);
-  tag.className = classes.join(" ");
+  tag.className = delayed ? "kanban-tag kanban-delay" : "kanban-tag";
   tag.textContent = text;
   return tag;
 }
@@ -649,7 +531,7 @@ function jumpToNextRowSameColumn(currentTd) {
   if (nextTd && nextTd.dataset.key) beginEdit(nextTd);
 }
 
-function selectCell(order, key, options, withFlowButton = false) {
+function selectCell(order, key, options) {
   const td = document.createElement("td");
   const sel = document.createElement("select");
   sel.className = "cell-select";
@@ -670,25 +552,7 @@ function selectCell(order, key, options, withFlowButton = false) {
     void updateOrder(order.id, key, sel.value);
   });
   td.appendChild(sel);
-  if (withFlowButton && key === "status") {
-    const flowBtn = document.createElement("button");
-    flowBtn.type = "button";
-    flowBtn.className = "status-flow-btn";
-    flowBtn.textContent = "推进下一状态";
-    flowBtn.addEventListener("click", () => {
-      void advanceStatus(order.id);
-    });
-    td.appendChild(flowBtn);
-  }
   return td;
-}
-
-async function advanceStatus(id) {
-  const target = orders.find((x) => x.id === id);
-  if (!target) return;
-  const idx = STATUS.indexOf(target.status);
-  if (idx < 0 || idx >= STATUS.length - 1) return;
-  await updateOrder(id, "status", STATUS[idx + 1]);
 }
 
 async function updateOrder(id, key, value) {
@@ -703,7 +567,6 @@ async function updateOrder(id, key, value) {
   }
 
   if ((target[key] ?? "") === normalized) return;
-  pushUndoSnapshot("编辑单元格");
   target[key] = normalized;
   target.isDelayed = calcDelayed(target);
 
@@ -760,42 +623,8 @@ function calcDelayed(order) {
 
 async function removeOrder(id) {
   if (!confirm("确认删除该订单吗？")) return;
-  pushUndoSnapshot("删除订单");
-  selectedIds.delete(id);
   orders = orders.filter((o) => o.id !== id);
   await persistOrders({ deletedId: id });
-  renderSelectionSummary();
-  render();
-}
-
-async function applyBatchChanges() {
-  const ids = Array.from(selectedIds);
-  if (!ids.length) {
-    alert("请先勾选需要批量处理的订单");
-    return;
-  }
-  const nextStatus = String(batchStatus?.value || "").trim();
-  const nextMachine = String(batchMachine?.value || "").trim();
-  const nextDueDate = String(batchDueDate?.value || "").trim();
-  if (!nextStatus && !nextMachine && !nextDueDate) {
-    alert("请至少设置一个批量字段");
-    return;
-  }
-  pushUndoSnapshot("批量修改");
-  const changed = [];
-  ids.forEach((id) => {
-    const row = orders.find((x) => x.id === id);
-    if (!row) return;
-    if (nextStatus) row.status = nextStatus;
-    if (nextMachine) row.machine = nextMachine;
-    if (nextDueDate) row.dueDate = normalizeDateOnlyInput(nextDueDate);
-    row.isDelayed = calcDelayed(row);
-    changed.push(row);
-  });
-  await persistOrders({ changed });
-  if (batchStatus) batchStatus.value = "";
-  if (batchMachine) batchMachine.value = "";
-  if (batchDueDate) batchDueDate.value = "";
   render();
 }
 
@@ -1222,9 +1051,7 @@ async function importXlsx(event) {
         `导入预览：\n新增 ${insertCount} 条\n覆盖 ${updateCount} 条\n保留历史 ${untouched} 条\n\n确认继续导入吗？`
       );
       if (!confirmed) return;
-      pushUndoSnapshot("Excel导入");
       orders = imported;
-      selectedIds.clear();
       await persistOrders({ changed: orders });
       render();
       alert("导入成功：已覆盖同键订单并新增新订单，未删除未包含在Excel中的历史订单。");
