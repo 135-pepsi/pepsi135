@@ -10,10 +10,11 @@
   <header class="topbar">
     <div>
       <h1>元源紫泽 生产管理系统</h1>
-      <p>订单进度看板与明细协同 · <span id="systemMode">本地模式</span></p>
+      <p>订单进度看板与明细协同 · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
     </div>
     <div class="actions">
       <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
+      <button id="undoBtn" class="btn" type="button">撤销上一步</button>
       <button id="loginBtn" class="btn" type="button">邮箱登录</button>
       <button id="logoutBtn" class="btn" type="button" style="display:none;">退出登录</button>
       <button id="reconnectBtn" class="btn" type="button">重连云端</button>
@@ -46,8 +47,9 @@
       </article>
     </section>
 
-    <section class="filters">
+    <section class="filters order-filters">
       <input id="searchInput" placeholder="搜索订单号/图号/客户" />
+      <button id="abnormalFilterBtn" class="btn" type="button">只看异常</button>
       <select id="filterMonth" title="按订单号月份筛选">
         <option value="">全部月份</option>
         <option value="01">01月</option>
@@ -94,18 +96,34 @@
           <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
         </select>
         <input id="qaDueDate" type="date" />
+        <label class="inline-check"><input id="qaContinuous" type="checkbox" checked />连续录入</label>
         <button id="quickAddBtn" class="btn btn-primary">快速添加</button>
         <button id="addRowBtn" class="btn">新增订单 (Ctrl+N)</button>
       </div>
     </section>
 
     <h2 class="detail-title">订单明细表</h2>
+    <section class="batch-bar">
+      <span id="batchCount">已选 0 项</span>
+      <select id="batchStatus">
+        <option value="">批量改状态</option>
+        <option>待排产</option><option>已排产</option><option>加工中</option><option>完成待检</option><option>返工</option><option>已发货</option>
+      </select>
+      <select id="batchMachine">
+        <option value="">批量改机台</option>
+        <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
+      </select>
+      <input id="batchDueDate" type="date" />
+      <button id="batchApplyBtn" class="btn btn-primary" type="button">批量应用</button>
+      <button id="batchClearBtn" class="btn" type="button">清空选择</button>
+    </section>
 
     <section class="table-wrap" id="tableWrap">
       <table id="orderTable">
         <thead>
           <tr>
             <th>序号</th>
+            <th><input id="selectAllRows" type="checkbox" title="全选当前筛选结果" /></th>
             <th>订单号</th>
             <th>客户</th>
             <th>名称</th>
