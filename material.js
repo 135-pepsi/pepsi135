@@ -16,6 +16,7 @@ let reconnectTimer = null;
 let reconnectDelayMs = 5000;
 let authSession = null;
 let authWriteHintNotified = false;
+let stickyOffsetRaf = 0;
 let orderCustomerMap = new Map();
 let serialOrderNoMap = new Map();
 let columnWidths = loadColumnWidths();
@@ -28,6 +29,7 @@ const reconnectBtn = document.getElementById("reconnectBtn");
 const authUser = document.getElementById("authUser");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const lastSyncTime = document.getElementById("lastSyncTime");
 
 init();
 
@@ -50,12 +52,22 @@ async function init() {
     materials = loadLocal();
     render();
     syncQuickCustomer();
+    setLastSyncTime();
   }
 }
 
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
+  if (lastSyncTime && text.includes("失败")) lastSyncTime.classList.add("sync-warning");
+  if (lastSyncTime && !text.includes("失败")) lastSyncTime.classList.remove("sync-warning");
   syncReconnectButton();
+}
+
+function setLastSyncTime() {
+  if (!lastSyncTime) return;
+  const now = new Date();
+  const t = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+  lastSyncTime.textContent = `最近同步 ${t}`;
 }
 
 function bindEvents() {
@@ -90,6 +102,7 @@ function bindEvents() {
   });
   window.addEventListener("scroll", updateBackTopBtn);
   tableWrap.addEventListener("scroll", updateBackTopBtn);
+  window.addEventListener("resize", queueStickyColumnOffsets);
   updateBackTopBtn();
   updateAuthUi();
   syncReconnectButton();
@@ -236,6 +249,9 @@ async function quickAdd() {
     customer,
   };
 
+  const confirmed = confirm(`确认添加物料行？\n订单号：${orderNo}\n客户：${customer || "未匹配"}`);
+  if (!confirmed) return;
+
   materials.push(next);
   await persist({ changed: [next] });
   clearQuickAdd();
@@ -243,6 +259,9 @@ async function quickAdd() {
 }
 
 async function addBlankRow() {
+  const confirmed = confirm("确认新增空白物料行吗？");
+  if (!confirmed) return;
+
   const next = createEmptyMaterial();
   materials.push(next);
   await persist({ changed: [next] });
@@ -263,6 +282,7 @@ function getFilteredRows() {
 }
 
 function render() {
+  ensureTableColGroup();
   const rows = getFilteredRows();
   tableBody.innerHTML = "";
 
@@ -290,6 +310,7 @@ function render() {
   });
 
   applyColumnWidths();
+  queueStickyColumnOffsets();
 }
 
 function textCell(value) {
@@ -483,6 +504,9 @@ function syncQuickCustomer() {
 }
 
 async function removeItem(id) {
+  const confirmed = confirm("确认删除该物料行吗？");
+  if (!confirmed) return;
+
   materials = materials.filter((x) => x.id !== id);
   await persist({ deletedId: id });
   render();
@@ -512,6 +536,7 @@ function loadLocal() {
 
 async function persist({ changed = [], deletedId = null } = {}) {
   saveLocal();
+  setLastSyncTime();
   if (!REMOTE_ENABLED || !remoteOnline) return;
   if (!canWriteRemote(true)) return;
   syncing = true;
@@ -559,6 +584,7 @@ async function refreshFromRemote(showAlert = false) {
     saveLocal();
     render();
     syncQuickCustomer();
+    setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
     if (showAlert) alert("已从云端刷新最新物料数据");
@@ -693,6 +719,7 @@ function toFiniteOrNull(v) {
 }
 
 function setupColumnResizers() {
+  ensureTableColGroup();
   const headers = document.querySelectorAll("#orderTable thead th");
   headers.forEach((th, index) => {
     if (th.querySelector(".col-resizer")) return;
@@ -702,6 +729,28 @@ function setupColumnResizers() {
     th.appendChild(handle);
   });
   applyColumnWidths();
+  queueStickyColumnOffsets();
+}
+
+function ensureTableColGroup() {
+  const table = document.getElementById("orderTable");
+  if (!table) return;
+  const headers = table.querySelectorAll("thead th");
+  if (headers.length === 0) return;
+
+  let colgroup = table.querySelector("colgroup");
+  if (!colgroup) {
+    colgroup = document.createElement("colgroup");
+    table.insertBefore(colgroup, table.firstChild);
+  }
+
+  const existing = colgroup.querySelectorAll("col").length;
+  if (existing !== headers.length) {
+    colgroup.innerHTML = "";
+    headers.forEach(() => {
+      colgroup.appendChild(document.createElement("col"));
+    });
+  }
 }
 
 function startResize(event, colIndex) {
@@ -715,6 +764,7 @@ function startResize(event, colIndex) {
     const next = Math.max(48, Math.round(startWidth + (e.clientX - startX)));
     columnWidths[String(colIndex)] = next;
     setColumnWidth(colIndex, next);
+    queueStickyColumnOffsets();
   };
 
   const onUp = () => {
@@ -728,6 +778,9 @@ function startResize(event, colIndex) {
 }
 
 function setColumnWidth(colIndex, px) {
+  const col = document.querySelector(`#orderTable colgroup col:nth-child(${colIndex})`);
+  if (col) col.style.width = `${px}px`;
+
   const cells = document.querySelectorAll(`#orderTable tr > *:nth-child(${colIndex})`);
   cells.forEach((cell) => {
     cell.style.width = `${px}px`;
@@ -742,6 +795,33 @@ function applyColumnWidths() {
     const px = Number(columnWidths[k]);
     if (Number.isFinite(col) && Number.isFinite(px)) setColumnWidth(col, px);
   });
+  queueStickyColumnOffsets();
+}
+
+function updateStickyColumnOffsets() {
+  const table = document.getElementById("orderTable");
+  if (!table) return;
+  const w1 = getColumnWidth(1);
+  const w2 = getColumnWidth(2);
+  const w3 = getColumnWidth(3);
+  table.style.setProperty("--sticky-left-1", "0px");
+  table.style.setProperty("--sticky-left-2", `${w1}px`);
+  table.style.setProperty("--sticky-left-3", `${w1 + w2}px`);
+  table.style.setProperty("--sticky-left-4", `${w1 + w2 + w3}px`);
+}
+
+function queueStickyColumnOffsets() {
+  if (stickyOffsetRaf) return;
+  stickyOffsetRaf = window.requestAnimationFrame(() => {
+    stickyOffsetRaf = 0;
+    updateStickyColumnOffsets();
+  });
+}
+
+function getColumnWidth(colIndex) {
+  const header = document.querySelector(`#orderTable thead th:nth-child(${colIndex})`);
+  if (!header) return 0;
+  return Math.round(header.getBoundingClientRect().width);
 }
 
 function saveColumnWidths() {
