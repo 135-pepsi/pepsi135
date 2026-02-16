@@ -30,6 +30,8 @@ const authUser = document.getElementById("authUser");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const lastSyncTime = document.getElementById("lastSyncTime");
+const materialFilters = document.getElementById("materialFilters");
+const materialFilterToggleBtn = document.getElementById("materialFilterToggleBtn");
 
 init();
 
@@ -95,6 +97,13 @@ function bindEvents() {
     filterText = String(e.target.value || "").trim().toLowerCase();
     render();
   });
+  if (materialFilterToggleBtn && materialFilters) {
+    materialFilterToggleBtn.addEventListener("click", () => {
+      const collapsed = materialFilters.classList.toggle("collapsed");
+      materialFilterToggleBtn.textContent = collapsed ? "展开搜索" : "收起搜索";
+      materialFilterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    });
+  }
 
   backTopBtn.addEventListener("click", () => {
     if (tableWrap) tableWrap.scrollTo({ top: 0, behavior: "smooth" });
@@ -102,10 +111,14 @@ function bindEvents() {
   });
   window.addEventListener("scroll", updateBackTopBtn);
   tableWrap.addEventListener("scroll", updateBackTopBtn);
-  window.addEventListener("resize", queueStickyColumnOffsets);
+  window.addEventListener("resize", () => {
+    queueStickyColumnOffsets();
+    syncFilterPanelForViewport();
+  });
   updateBackTopBtn();
   updateAuthUi();
   syncReconnectButton();
+  syncFilterPanelForViewport();
 
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
@@ -113,6 +126,15 @@ function bindEvents() {
       void addBlankRow();
     }
   });
+}
+
+function syncFilterPanelForViewport() {
+  if (!materialFilters || !materialFilterToggleBtn) return;
+  if (window.innerWidth > 780) {
+    materialFilters.classList.remove("collapsed");
+    materialFilterToggleBtn.textContent = "收起搜索";
+    materialFilterToggleBtn.setAttribute("aria-expanded", "true");
+  }
 }
 
 async function initAuth() {

@@ -13,16 +13,20 @@
       <p>订单进度看板与明细协同 · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
     </div>
     <div class="actions">
-      <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
-      <button id="loginBtn" class="btn" type="button">邮箱登录</button>
-      <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">退出登录</button>
-      <button id="reconnectBtn" class="btn btn-secondary" type="button">重连云端</button>
-      <a class="btn btn-secondary" href="material.html">物料页面</a>
-      <button id="saveBtn" class="btn btn-secondary">导出Excel</button>
-      <label class="btn upload-btn">
-        导入Excel
-        <input id="importInput" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden />
-      </label>
+      <div class="actions-row actions-auth-row">
+        <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
+        <button id="loginBtn" class="btn" type="button">邮箱登录</button>
+        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">退出登录</button>
+      </div>
+      <div class="actions-row actions-main-row">
+        <button id="reconnectBtn" class="btn btn-secondary" type="button">重连云端</button>
+        <a class="btn btn-secondary" href="material.html">物料页面</a>
+        <button id="saveBtn" class="btn btn-secondary">导出Excel</button>
+        <label class="btn upload-btn">
+          导入Excel
+          <input id="importInput" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden />
+        </label>
+      </div>
     </div>
   </header>
 
@@ -46,32 +50,35 @@
       </article>
     </section>
 
-    <section class="filters order-filters">
-      <input id="searchInput" placeholder="搜索订单号/图号/客户" />
-      <button id="abnormalFilterBtn" class="btn" type="button">只看异常</button>
-      <select id="filterMonth" title="按订单号月份筛选">
-        <option value="">全部月份</option>
-        <option value="01">01月</option>
-        <option value="02">02月</option>
-        <option value="03">03月</option>
-        <option value="04">04月</option>
-        <option value="05">05月</option>
-        <option value="06">06月</option>
-        <option value="07">07月</option>
-        <option value="08">08月</option>
-        <option value="09">09月</option>
-        <option value="10">10月</option>
-        <option value="11">11月</option>
-        <option value="12">12月</option>
-      </select>
-      <select id="filterMachine">
-        <option value="">全部机台</option>
-        <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
-      </select>
-      <select id="filterStatus">
-        <option value="">全部状态</option>
-        <option>待排产</option><option>已排产</option><option>加工中</option><option>完成待检</option><option>返工</option><option>已发货</option>
-      </select>
+    <section class="filters order-filters" id="orderFilters">
+      <button id="filterToggleBtn" class="btn btn-secondary filter-toggle" type="button" aria-expanded="true">收起筛选</button>
+      <div class="filter-fields" id="orderFilterFields">
+        <input id="searchInput" placeholder="搜索订单号/图号/客户" />
+        <button id="abnormalFilterBtn" class="btn" type="button">只看异常</button>
+        <select id="filterMonth" title="按订单号月份筛选">
+          <option value="">全部月份</option>
+          <option value="01">01月</option>
+          <option value="02">02月</option>
+          <option value="03">03月</option>
+          <option value="04">04月</option>
+          <option value="05">05月</option>
+          <option value="06">06月</option>
+          <option value="07">07月</option>
+          <option value="08">08月</option>
+          <option value="09">09月</option>
+          <option value="10">10月</option>
+          <option value="11">11月</option>
+          <option value="12">12月</option>
+        </select>
+        <select id="filterMachine">
+          <option value="">全部机台</option>
+          <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
+        </select>
+        <select id="filterStatus">
+          <option value="">全部状态</option>
+          <option>待排产</option><option>已排产</option><option>加工中</option><option>完成待检</option><option>返工</option><option>已发货</option>
+        </select>
+      </div>
     </section>
 
     <section class="board-wrap">

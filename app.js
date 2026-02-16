@@ -44,6 +44,7 @@ const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
 const tableWrap = document.getElementById("tableWrap");
 const backTopBtn = document.getElementById("backTopBtn");
+const kpiGrid = document.getElementById("kpiGrid");
 const kanbanBoard = document.getElementById("kanbanBoard");
 const boardSummary = document.getElementById("boardSummary");
 const reconnectBtn = document.getElementById("reconnectBtn");
@@ -52,6 +53,8 @@ const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const lastSyncTime = document.getElementById("lastSyncTime");
 const abnormalFilterBtn = document.getElementById("abnormalFilterBtn");
+const orderFilters = document.getElementById("orderFilters");
+const filterToggleBtn = document.getElementById("filterToggleBtn");
 
 init();
 
@@ -59,6 +62,7 @@ async function init() {
   bindEvents();
   setupColumnResizers();
   startKpiClock();
+  updatePinnedOffsets();
   if (REMOTE_ENABLED) {
     await initAuth();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
@@ -79,6 +83,7 @@ function setModeText(text) {
   syncReconnectButton();
   if (lastSyncTime && text.includes("失败")) lastSyncTime.classList.add("sync-warning");
   if (lastSyncTime && !text.includes("失败")) lastSyncTime.classList.remove("sync-warning");
+  updatePinnedOffsets();
 }
 
 function setLastSyncTime() {
@@ -134,9 +139,21 @@ function bindEvents() {
     filters.status = e.target.value;
     render();
   });
+  if (filterToggleBtn && orderFilters) {
+    filterToggleBtn.addEventListener("click", () => {
+      const collapsed = orderFilters.classList.toggle("collapsed");
+      filterToggleBtn.textContent = collapsed ? "展开筛选" : "收起筛选";
+      filterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      updatePinnedOffsets();
+    });
+  }
   window.addEventListener("scroll", updateBackTopBtn);
   tableWrap.addEventListener("scroll", updateBackTopBtn);
   window.addEventListener("resize", updateStickyColumnOffsets);
+  window.addEventListener("resize", () => {
+    updatePinnedOffsets();
+    syncFilterPanelForViewport();
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
@@ -151,6 +168,27 @@ function bindEvents() {
   updateBackTopBtn();
   updateAuthUi();
   syncReconnectButton();
+  syncFilterPanelForViewport();
+  updatePinnedOffsets();
+}
+
+function updatePinnedOffsets() {
+  const topbar = document.querySelector(".topbar");
+  const root = document.documentElement;
+  if (!root) return;
+  const topbarH = topbar ? Math.round(topbar.getBoundingClientRect().height) : 72;
+  const kpiH = kpiGrid ? Math.round(kpiGrid.getBoundingClientRect().height) : 110;
+  root.style.setProperty("--topbar-h", `${topbarH}px`);
+  root.style.setProperty("--kpi-h", `${kpiH}px`);
+}
+
+function syncFilterPanelForViewport() {
+  if (!orderFilters || !filterToggleBtn) return;
+  if (window.innerWidth > 780) {
+    orderFilters.classList.remove("collapsed");
+    filterToggleBtn.textContent = "收起筛选";
+    filterToggleBtn.setAttribute("aria-expanded", "true");
+  }
 }
 
 async function initAuth() {
@@ -217,6 +255,7 @@ function updateAuthUi() {
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
+  updatePinnedOffsets();
 }
 
 function canWriteRemote(notify = true) {
