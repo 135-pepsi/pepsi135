@@ -446,7 +446,7 @@ th {
 }
 
 #orderTable td:nth-child(-n+4) {
-  background: var(--row-bg, transparent);
+  background: transparent;
 }
 
 .col-resizer {
@@ -530,25 +530,9 @@ td.editing {
   background: #102f57;
   padding: 6px 8px;
 }
-tr.row-delayed { background: rgba(147, 34, 34, 0.35); }
-tr.row-working { background: rgba(98, 78, 10, 0.35); }
-tr.row-shipped { background: rgba(18, 103, 57, 0.35); }
-
-#orderTable tbody tr {
-  --row-bg: transparent;
-}
-
-#orderTable tbody tr.row-delayed {
-  --row-bg: rgba(147, 34, 34, 0.35);
-}
-
-#orderTable tbody tr.row-working {
-  --row-bg: rgba(98, 78, 10, 0.35);
-}
-
-#orderTable tbody tr.row-shipped {
-  --row-bg: rgba(18, 103, 57, 0.35);
-}
+#orderTable tbody tr.row-delayed > td { background: rgba(147, 34, 34, 0.35); }
+#orderTable tbody tr.row-working > td { background: rgba(98, 78, 10, 0.35); }
+#orderTable tbody tr.row-shipped > td { background: rgba(18, 103, 57, 0.35); }
 
 .cell-select {
   width: 100%;

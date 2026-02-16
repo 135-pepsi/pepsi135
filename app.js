@@ -304,6 +304,7 @@ async function addBlankRow() {
 }
 
 function render() {
+  ensureTableColGroup();
   const rows = getFilteredOrders();
   tableBody.innerHTML = "";
 
@@ -1170,6 +1171,7 @@ function normalizeStartTimeInput(v) {
 
 
 function setupColumnResizers() {
+  ensureTableColGroup();
   const headers = document.querySelectorAll("#orderTable thead th");
   headers.forEach((th, index) => {
     if (th.querySelector(".col-resizer")) return;
@@ -1180,6 +1182,27 @@ function setupColumnResizers() {
   });
   applyColumnWidths();
   updateStickyColumnOffsets();
+}
+
+function ensureTableColGroup() {
+  const table = document.getElementById("orderTable");
+  if (!table) return;
+  const headers = table.querySelectorAll("thead th");
+  if (headers.length === 0) return;
+
+  let colgroup = table.querySelector("colgroup");
+  if (!colgroup) {
+    colgroup = document.createElement("colgroup");
+    table.insertBefore(colgroup, table.firstChild);
+  }
+
+  const existing = colgroup.querySelectorAll("col").length;
+  if (existing !== headers.length) {
+    colgroup.innerHTML = "";
+    headers.forEach(() => {
+      colgroup.appendChild(document.createElement("col"));
+    });
+  }
 }
 
 function startResize(event, colIndex) {
@@ -1207,6 +1230,10 @@ function startResize(event, colIndex) {
 }
 
 function setColumnWidth(colIndex, px) {
+  const col = document.querySelector(`#orderTable colgroup col:nth-child(${colIndex})`);
+  if (col) col.style.width = `${px}px`;
+
+  // Keep sticky/fixed columns and headers stable in all browsers.
   const cells = document.querySelectorAll(`#orderTable tr > *:nth-child(${colIndex})`);
   cells.forEach((cell) => {
     cell.style.width = `${px}px`;
