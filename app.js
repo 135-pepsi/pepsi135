@@ -37,6 +37,7 @@ let authSession = null;
 let authWriteHintNotified = false;
 let abnormalOnly = false;
 let lastSyncAt = "";
+let stickyOffsetRaf = 0;
 let columnWidths = loadColumnWidths();
 
 const tableBody = document.getElementById("tableBody");
@@ -347,7 +348,7 @@ function render() {
   });
 
   applyColumnWidths();
-  updateStickyColumnOffsets();
+  queueStickyColumnOffsets();
   renderKanban(rows);
   renderKpis(orders);
 }
@@ -1042,20 +1043,31 @@ async function importXlsx(event) {
         return next;
       });
       const incomingKeys = new Set(imported.map((x) => getOrderImportMatchKey(x)).filter(Boolean));
-      const existingKeys = new Set(orders.map((x) => getOrderImportMatchKey(x)).filter(Boolean));
+      const previousCount = orders.length;
       let updateCount = 0;
       let insertCount = 0;
-      imported.forEach((x) => {
-        if (existingKeys.has(getOrderImportMatchKey(x))) updateCount += 1;
-        else insertCount += 1;
+      const merged = orders.map((x) => ({ ...x }));
+      const indexById = new Map();
+      merged.forEach((x, idx) => {
+        indexById.set(x.id, idx);
       });
-      const untouched = Array.from(existingKeys).filter((k) => !incomingKeys.has(k)).length;
+      imported.forEach((row) => {
+        const idx = indexById.get(row.id);
+        if (typeof idx === "number") {
+          merged[idx] = row;
+          updateCount += 1;
+        } else {
+          merged.push(row);
+          insertCount += 1;
+        }
+      });
+      const untouched = Math.max(0, previousCount - updateCount);
       const confirmed = confirm(
         `导入预览：\n新增 ${insertCount} 条\n覆盖 ${updateCount} 条\n保留历史 ${untouched} 条\n\n确认继续导入吗？`
       );
       if (!confirmed) return;
-      orders = imported;
-      await persistOrders({ changed: orders });
+      orders = merged;
+      await persistOrders({ changed: imported });
       render();
       alert("导入成功：已覆盖同键订单并新增新订单，未删除未包含在Excel中的历史订单。");
     } catch (e) {
@@ -1181,7 +1193,7 @@ function setupColumnResizers() {
     th.appendChild(handle);
   });
   applyColumnWidths();
-  updateStickyColumnOffsets();
+  queueStickyColumnOffsets();
 }
 
 function ensureTableColGroup() {
@@ -1216,7 +1228,7 @@ function startResize(event, colIndex) {
     const next = Math.max(48, Math.round(startWidth + (e.clientX - startX)));
     columnWidths[String(colIndex)] = next;
     setColumnWidth(colIndex, next);
-    updateStickyColumnOffsets();
+    queueStickyColumnOffsets();
   };
 
   const onUp = () => {
@@ -1250,7 +1262,7 @@ function applyColumnWidths() {
       setColumnWidth(col, px);
     }
   });
-  updateStickyColumnOffsets();
+  queueStickyColumnOffsets();
 }
 
 function updateStickyColumnOffsets() {
@@ -1263,6 +1275,14 @@ function updateStickyColumnOffsets() {
   table.style.setProperty("--sticky-left-2", `${w1}px`);
   table.style.setProperty("--sticky-left-3", `${w1 + w2}px`);
   table.style.setProperty("--sticky-left-4", `${w1 + w2 + w3}px`);
+}
+
+function queueStickyColumnOffsets() {
+  if (stickyOffsetRaf) return;
+  stickyOffsetRaf = window.requestAnimationFrame(() => {
+    stickyOffsetRaf = 0;
+    updateStickyColumnOffsets();
+  });
 }
 
 function getColumnWidth(colIndex) {
