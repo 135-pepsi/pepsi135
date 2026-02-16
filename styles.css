@@ -418,7 +418,6 @@ th {
   position: sticky;
   left: var(--sticky-left-1, 0px);
   z-index: 2;
-  background: rgba(24, 53, 87, 0.98);
   width: 56px;
   min-width: 56px;
 }
@@ -427,21 +426,27 @@ th {
   position: sticky;
   left: var(--sticky-left-2, 56px);
   z-index: 2;
-  background: rgba(24, 53, 87, 0.98);
 }
 #orderTable th:nth-child(3),
 #orderTable td:nth-child(3) {
   position: sticky;
   left: var(--sticky-left-3, 196px);
   z-index: 2;
-  background: rgba(24, 53, 87, 0.98);
 }
 #orderTable th:nth-child(4),
 #orderTable td:nth-child(4) {
   position: sticky;
   left: var(--sticky-left-4, 316px);
   z-index: 2;
-  background: rgba(24, 53, 87, 0.98);
+}
+
+#orderTable th:nth-child(-n+4) {
+  z-index: 3;
+  background: linear-gradient(180deg, #1d4b7f, #173a67);
+}
+
+#orderTable td:nth-child(-n+4) {
+  background: inherit;
 }
 
 .col-resizer {
