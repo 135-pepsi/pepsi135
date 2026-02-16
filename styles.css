@@ -10,7 +10,7 @@
   --warn: #ff9800;
   --danger: #ff5252;
   --font-display: 'STKaiti', '华文楷体', 'Kaiti SC', 'KaiTi', 'Source Han Serif SC', 'PingFang SC', 'Microsoft YaHei UI', serif;
-  --font-body: 'STKaiti', '华文楷体', 'Kaiti SC', 'KaiTi', 'Source Han Serif SC', 'PingFang SC', 'Microsoft YaHei UI', serif;
+  --font-body: 'MiSans', 'HarmonyOS Sans SC', 'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -195,7 +195,7 @@ main { padding: 16px 20px 24px; }
   border: 1px solid #3e6494;
   border-radius: 999px;
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: 13px;
   color: #e3efff;
   background: rgba(23, 58, 103, 0.72);
 }
@@ -396,7 +396,7 @@ th,
 td {
   border: 1px solid #254670;
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
   font-family: var(--font-body);
   text-align: center;
@@ -547,14 +547,14 @@ td.editing {
   background: #5b2935;
   color: #ffd8df;
   border-radius: 6px;
-  padding: 3px 6px;
+  padding: 4px 7px;
   cursor: pointer;
 }
 .sync-warning {
   color: #ffb07a;
 }
 
-.hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
 
 .back-top-btn {
   position: fixed;
