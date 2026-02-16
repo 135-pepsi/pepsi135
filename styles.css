@@ -9,8 +9,8 @@
   --ok: #00c853;
   --warn: #ff9800;
   --danger: #ff5252;
-  --font-display: 'STKaiti', '华文楷体', 'Kaiti SC', 'KaiTi', 'Source Han Serif SC', 'PingFang SC', 'Microsoft YaHei UI', serif;
-  --font-body: 'MiSans', 'HarmonyOS Sans SC', 'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+  --font-display: 'STXihei', '华文细黑', 'Heiti SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+  --font-body: 'STXihei', '华文细黑', 'MiSans', 'HarmonyOS Sans SC', 'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
 }
 
 * { box-sizing: border-box; }
