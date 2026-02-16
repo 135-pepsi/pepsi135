@@ -416,7 +416,7 @@ th {
 #orderTable th:nth-child(1),
 #orderTable td:nth-child(1) {
   position: sticky;
-  left: 0;
+  left: var(--sticky-left-1, 0px);
   z-index: 2;
   background: rgba(24, 53, 87, 0.98);
   width: 56px;
@@ -425,21 +425,21 @@ th {
 #orderTable th:nth-child(2),
 #orderTable td:nth-child(2) {
   position: sticky;
-  left: 56px;
+  left: var(--sticky-left-2, 56px);
   z-index: 2;
   background: rgba(24, 53, 87, 0.98);
 }
 #orderTable th:nth-child(3),
 #orderTable td:nth-child(3) {
   position: sticky;
-  left: 196px;
+  left: var(--sticky-left-3, 196px);
   z-index: 2;
   background: rgba(24, 53, 87, 0.98);
 }
 #orderTable th:nth-child(4),
 #orderTable td:nth-child(4) {
   position: sticky;
-  left: 316px;
+  left: var(--sticky-left-4, 316px);
   z-index: 2;
   background: rgba(24, 53, 87, 0.98);
 }

@@ -135,6 +135,7 @@ function bindEvents() {
   });
   window.addEventListener("scroll", updateBackTopBtn);
   tableWrap.addEventListener("scroll", updateBackTopBtn);
+  window.addEventListener("resize", updateStickyColumnOffsets);
 
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
@@ -345,6 +346,7 @@ function render() {
   });
 
   applyColumnWidths();
+  updateStickyColumnOffsets();
   renderKanban(rows);
   renderKpis(orders);
 }
@@ -1177,6 +1179,7 @@ function setupColumnResizers() {
     th.appendChild(handle);
   });
   applyColumnWidths();
+  updateStickyColumnOffsets();
 }
 
 function startResize(event, colIndex) {
@@ -1190,6 +1193,7 @@ function startResize(event, colIndex) {
     const next = Math.max(48, Math.round(startWidth + (e.clientX - startX)));
     columnWidths[String(colIndex)] = next;
     setColumnWidth(colIndex, next);
+    updateStickyColumnOffsets();
   };
 
   const onUp = () => {
@@ -1219,6 +1223,25 @@ function applyColumnWidths() {
       setColumnWidth(col, px);
     }
   });
+  updateStickyColumnOffsets();
+}
+
+function updateStickyColumnOffsets() {
+  const table = document.getElementById("orderTable");
+  if (!table) return;
+  const w1 = getColumnWidth(1);
+  const w2 = getColumnWidth(2);
+  const w3 = getColumnWidth(3);
+  table.style.setProperty("--sticky-left-1", "0px");
+  table.style.setProperty("--sticky-left-2", `${w1}px`);
+  table.style.setProperty("--sticky-left-3", `${w1 + w2}px`);
+  table.style.setProperty("--sticky-left-4", `${w1 + w2 + w3}px`);
+}
+
+function getColumnWidth(colIndex) {
+  const header = document.querySelector(`#orderTable thead th:nth-child(${colIndex})`);
+  if (!header) return 0;
+  return Math.round(header.getBoundingClientRect().width);
 }
 
 function saveColumnWidths() {
