@@ -588,6 +588,10 @@ td.editing {
 }
 
 .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+.scroll-tail {
+  height: 34vh;
+  min-height: 180px;
+}
 
 .back-top-btn {
   position: fixed;
@@ -619,6 +623,7 @@ td.editing {
 @media (max-width: 780px) {
   .kanban-board { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
   .board-head { align-items: flex-start; flex-direction: column; }
+  .scroll-tail { height: 22vh; min-height: 120px; }
 }
 
 
