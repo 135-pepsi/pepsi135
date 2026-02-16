@@ -12,6 +12,10 @@ let filterText = "";
 let syncing = false;
 let remoteOnline = REMOTE_ENABLED;
 let remoteErrorNotified = false;
+let reconnectTimer = null;
+let reconnectDelayMs = 5000;
+let authSession = null;
+let authWriteHintNotified = false;
 let orderCustomerMap = new Map();
 let serialOrderNoMap = new Map();
 let columnWidths = loadColumnWidths();
@@ -20,6 +24,10 @@ const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
 const tableWrap = document.getElementById("tableWrap");
 const backTopBtn = document.getElementById("backTopBtn");
+const reconnectBtn = document.getElementById("reconnectBtn");
+const authUser = document.getElementById("authUser");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
 
 init();
 
@@ -27,7 +35,8 @@ async function init() {
   bindEvents();
   setupColumnResizers();
   if (REMOTE_ENABLED) {
-    setModeText("云端共享模式");
+    await initAuth();
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshOrderCustomerMap();
     await refreshFromRemote();
     setInterval(async () => {
@@ -46,6 +55,7 @@ async function init() {
 
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
+  syncReconnectButton();
 }
 
 function bindEvents() {
@@ -53,6 +63,21 @@ function bindEvents() {
   if (quickAddBtn) quickAddBtn.addEventListener("click", quickAdd);
   const addRowInlineBtn = document.getElementById("addRowInlineBtn");
   if (addRowInlineBtn) addRowInlineBtn.addEventListener("click", addBlankRow);
+  if (reconnectBtn) {
+    reconnectBtn.addEventListener("click", () => {
+      void tryReconnectRemote(true);
+    });
+  }
+  if (loginBtn) {
+    loginBtn.addEventListener("click", () => {
+      void beginEmailLogin();
+    });
+  }
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      void logoutAuth();
+    });
+  }
   document.getElementById("qaOrderNo").addEventListener("input", syncQuickCustomer);
   document.getElementById("searchInput").addEventListener("input", (e) => {
     filterText = String(e.target.value || "").trim().toLowerCase();
@@ -66,6 +91,8 @@ function bindEvents() {
   window.addEventListener("scroll", updateBackTopBtn);
   tableWrap.addEventListener("scroll", updateBackTopBtn);
   updateBackTopBtn();
+  updateAuthUi();
+  syncReconnectButton();
 
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
@@ -75,11 +102,97 @@ function bindEvents() {
   });
 }
 
+async function initAuth() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  try {
+    const { data, error } = await db.auth.getSession();
+    if (error) throw error;
+    authSession = data?.session || null;
+  } catch (e) {
+    console.warn("读取登录态失败", e);
+    authSession = null;
+  }
+  updateAuthUi();
+  db.auth.onAuthStateChange((_event, session) => {
+    authSession = session || null;
+    authWriteHintNotified = false;
+    updateAuthUi();
+    if (remoteOnline) {
+      setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
+    }
+    if (authSession && remoteOnline) {
+      void refreshOrderCustomerMap();
+      void refreshFromRemote(false);
+    }
+  });
+}
+
+async function beginEmailLogin() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  const email = (prompt("请输入登录邮箱（将发送登录链接）") || "").trim();
+  if (!email) return;
+  try {
+    const { error } = await db.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: window.location.href.split("#")[0],
+      },
+    });
+    if (error) throw error;
+    alert("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
+  } catch (e) {
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`发送登录邮件失败：${detail}`);
+  }
+}
+
+async function logoutAuth() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  try {
+    const { error } = await db.auth.signOut();
+    if (error) throw error;
+    authSession = null;
+    updateAuthUi();
+    setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
+  } catch (e) {
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`退出失败：${detail}`);
+  }
+}
+
+function updateAuthUi() {
+  if (authUser) {
+    authUser.textContent = authSession?.user?.email || "未登录";
+  }
+  if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
+  if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
+}
+
+function canWriteRemote(notify = true) {
+  if (!REMOTE_ENABLED) return false;
+  if (authSession) return true;
+  if (notify && !authWriteHintNotified) {
+    authWriteHintNotified = true;
+    alert("当前为只读模式，请先点击“邮箱登录”后再写入云端数据。");
+  }
+  return false;
+}
+
 function updateBackTopBtn() {
   const pageY = window.scrollY || 0;
   const tableY = tableWrap ? tableWrap.scrollTop : 0;
   const show = pageY > 120 || tableY > 120;
   backTopBtn.style.display = show ? "inline-flex" : "none";
+}
+
+function syncReconnectButton() {
+  if (!reconnectBtn) return;
+  if (!REMOTE_ENABLED) {
+    reconnectBtn.style.display = "none";
+    return;
+  }
+  reconnectBtn.style.display = remoteOnline ? "none" : "inline-flex";
 }
 
 function createEmptyMaterial() {
@@ -107,7 +220,15 @@ function clearQuickAdd() {
 
 async function quickAdd() {
   const orderNoInput = valueOf("qaOrderNo");
+  if (!orderNoInput) {
+    alert("请先输入编号");
+    return;
+  }
   const orderNo = normalizeOrderNoInput(orderNoInput);
+  if (!orderNo) {
+    alert("订单号格式无效，请输入 1-3 位数字或完整单号（ZZYYMMNNN）");
+    return;
+  }
   const customer = resolveCustomerByOrderNo(orderNo, "");
   const next = {
     ...createEmptyMaterial(),
@@ -392,6 +513,7 @@ function loadLocal() {
 async function persist({ changed = [], deletedId = null } = {}) {
   saveLocal();
   if (!REMOTE_ENABLED || !remoteOnline) return;
+  if (!canWriteRemote(true)) return;
   syncing = true;
   try {
     if (changed.length > 0) {
@@ -405,6 +527,14 @@ async function persist({ changed = [], deletedId = null } = {}) {
       if (error) throw error;
     }
   } catch (e) {
+    if (isAuthError(e)) {
+      authSession = null;
+      authWriteHintNotified = false;
+      updateAuthUi();
+      setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
+      alert("写入失败：登录态已失效，请重新登录。");
+      return;
+    }
     handleRemoteError("物料云端同步失败", e);
   } finally {
     syncing = false;
@@ -429,6 +559,8 @@ async function refreshFromRemote(showAlert = false) {
     saveLocal();
     render();
     syncQuickCustomer();
+    reconnectDelayMs = 5000;
+    remoteErrorNotified = false;
     if (showAlert) alert("已从云端刷新最新物料数据");
   } catch (e) {
     handleRemoteError("物料云端读取失败", e);
@@ -449,7 +581,7 @@ async function refreshOrderCustomerMap() {
     if (error) throw error;
 
     const map = new Map();
-    const serialMap = new Map();
+    const serialCandidates = new Map();
     (data || []).forEach((row) => {
       const orderNo = String(row.order_no || "").trim().toUpperCase();
       const customer = String(row.customer || "").trim();
@@ -457,7 +589,16 @@ async function refreshOrderCustomerMap() {
       if (!customer) return;
       map.set(orderNo, customer);
       const serial = orderNo.slice(-3);
-      if (/^\d{3}$/.test(serial)) serialMap.set(serial, orderNo);
+      if (/^\d{3}$/.test(serial)) {
+        const set = serialCandidates.get(serial) || new Set();
+        set.add(orderNo);
+        serialCandidates.set(serial, set);
+      }
+    });
+    const serialMap = new Map();
+    serialCandidates.forEach((set, serial) => {
+      if (set.size !== 1) return;
+      serialMap.set(serial, Array.from(set)[0]);
     });
     orderCustomerMap = map;
     serialOrderNoMap = serialMap;
@@ -471,10 +612,48 @@ function handleRemoteError(prefix, err) {
   console.error(prefix, err);
   remoteOnline = false;
   setModeText("本地模式（云连接失败）");
+  scheduleReconnect();
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
     const detail = err?.message || err?.error_description || "未知错误";
     alert(`${prefix}：${detail}\n已自动切换本地模式。`);
+  }
+}
+
+function isAuthError(err) {
+  const code = String(err?.status || err?.code || "").toUpperCase();
+  const msg = String(err?.message || err?.error_description || "").toUpperCase();
+  return code === "401" || code === "403" || code === "PGRST301" || msg.includes("JWT") || msg.includes("AUTH");
+}
+
+function scheduleReconnect() {
+  if (!REMOTE_ENABLED || remoteOnline || reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void tryReconnectRemote(false);
+  }, reconnectDelayMs);
+  reconnectDelayMs = Math.min(reconnectDelayMs * 2, 60000);
+}
+
+async function tryReconnectRemote(manual = false) {
+  if (!REMOTE_ENABLED) return;
+  try {
+    const { error } = await db.from("mes_materials").select("id").limit(1);
+    if (error) throw error;
+    remoteOnline = true;
+    reconnectDelayMs = 5000;
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
+    await refreshOrderCustomerMap();
+    await refreshFromRemote(false);
+    if (manual) alert("云端连接已恢复");
+  } catch (e) {
+    remoteOnline = false;
+    setModeText("本地模式（云连接失败）");
+    scheduleReconnect();
+    if (manual) {
+      const detail = e?.message || e?.error_description || "未知错误";
+      alert(`重连失败：${detail}`);
+    }
   }
 }
 

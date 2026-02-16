@@ -31,20 +31,32 @@ let filters = { q: "", month: "", machine: "", status: "" };
 let syncing = false;
 let remoteOnline = REMOTE_ENABLED;
 let remoteErrorNotified = false;
+let reconnectTimer = null;
+let reconnectDelayMs = 5000;
+let authSession = null;
+let authWriteHintNotified = false;
 let columnWidths = loadColumnWidths();
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
 const tableWrap = document.getElementById("tableWrap");
 const backTopBtn = document.getElementById("backTopBtn");
+const kanbanBoard = document.getElementById("kanbanBoard");
+const boardSummary = document.getElementById("boardSummary");
+const reconnectBtn = document.getElementById("reconnectBtn");
+const authUser = document.getElementById("authUser");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
 
 init();
 
 async function init() {
   bindEvents();
   setupColumnResizers();
+  startKpiClock();
   if (REMOTE_ENABLED) {
-    setModeText("云端共享模式");
+    await initAuth();
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) await refreshFromRemote(false);
@@ -58,6 +70,7 @@ async function init() {
 
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
+  syncReconnectButton();
 }
 
 function bindEvents() {
@@ -66,6 +79,21 @@ function bindEvents() {
   document.getElementById("saveBtn").addEventListener("click", exportXlsx);
   document.getElementById("importInput").addEventListener("change", importXlsx);
   backTopBtn.addEventListener("click", scrollToTopRow);
+  if (reconnectBtn) {
+    reconnectBtn.addEventListener("click", () => {
+      void tryReconnectRemote(true);
+    });
+  }
+  if (loginBtn) {
+    loginBtn.addEventListener("click", () => {
+      void beginEmailLogin();
+    });
+  }
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      void logoutAuth();
+    });
+  }
 
   document.getElementById("searchInput").addEventListener("input", (e) => {
     filters.q = e.target.value.trim().toLowerCase();
@@ -97,6 +125,84 @@ function bindEvents() {
     }
   });
   updateBackTopBtn();
+  updateAuthUi();
+  syncReconnectButton();
+}
+
+async function initAuth() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  try {
+    const { data, error } = await db.auth.getSession();
+    if (error) throw error;
+    authSession = data?.session || null;
+  } catch (e) {
+    console.warn("读取登录态失败", e);
+    authSession = null;
+  }
+  updateAuthUi();
+  db.auth.onAuthStateChange((_event, session) => {
+    authSession = session || null;
+    authWriteHintNotified = false;
+    updateAuthUi();
+    if (remoteOnline) {
+      setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
+    }
+    if (authSession && remoteOnline) {
+      void refreshFromRemote(false);
+    }
+  });
+}
+
+async function beginEmailLogin() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  const email = (prompt("请输入登录邮箱（将发送登录链接）") || "").trim();
+  if (!email) return;
+  try {
+    const { error } = await db.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: window.location.href.split("#")[0],
+      },
+    });
+    if (error) throw error;
+    alert("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
+  } catch (e) {
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`发送登录邮件失败：${detail}`);
+  }
+}
+
+async function logoutAuth() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  try {
+    const { error } = await db.auth.signOut();
+    if (error) throw error;
+    authSession = null;
+    updateAuthUi();
+    setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
+  } catch (e) {
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`退出失败：${detail}`);
+  }
+}
+
+function updateAuthUi() {
+  if (authUser) {
+    authUser.textContent = authSession?.user?.email || "未登录";
+  }
+  if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
+  if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
+}
+
+function canWriteRemote(notify = true) {
+  if (!REMOTE_ENABLED) return false;
+  if (authSession) return true;
+  if (notify && !authWriteHintNotified) {
+    authWriteHintNotified = true;
+    alert("当前为只读模式，请先点击“邮箱登录”后再写入云端数据。");
+  }
+  return false;
 }
 
 function createEmptyOrder() {
@@ -217,7 +323,121 @@ function render() {
   });
 
   applyColumnWidths();
+  renderKanban(rows);
   renderKpis(orders);
+}
+
+function renderKanban(rows) {
+  if (!kanbanBoard || !boardSummary) return;
+
+  kanbanBoard.innerHTML = "";
+  boardSummary.innerHTML = "";
+  const effectiveOrderNoMap = buildEffectiveOrderNoMap(rows);
+
+  const total = rows.length;
+  const totalPill = document.createElement("span");
+  totalPill.className = "board-pill";
+  totalPill.textContent = `当前订单 ${total}`;
+  boardSummary.appendChild(totalPill);
+
+  STATUS.forEach((status) => {
+    const list = rows.filter((o) => o.status === status);
+
+    const statusPill = document.createElement("span");
+    statusPill.className = "board-pill";
+    statusPill.textContent = `${status} ${list.length}`;
+    boardSummary.appendChild(statusPill);
+
+    const col = document.createElement("article");
+    col.className = "kanban-col";
+
+    const head = document.createElement("div");
+    head.className = "kanban-col-head";
+    const title = document.createElement("strong");
+    title.textContent = status;
+    const count = document.createElement("span");
+    count.textContent = `${list.length} 单`;
+    head.appendChild(title);
+    head.appendChild(count);
+
+    const body = document.createElement("div");
+    body.className = "kanban-col-body";
+
+    if (list.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "kanban-empty";
+      empty.textContent = "暂无订单";
+      body.appendChild(empty);
+    } else {
+      list.forEach((order) => {
+        body.appendChild(createKanbanCard(order, effectiveOrderNoMap.get(order.id) || ""));
+      });
+    }
+
+    col.appendChild(head);
+    col.appendChild(body);
+    kanbanBoard.appendChild(col);
+  });
+}
+
+function createKanbanCard(order, displayOrderNo = "") {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "kanban-card";
+  card.addEventListener("click", () => focusOrderRow(order.id));
+
+  const top = document.createElement("div");
+  top.className = "kanban-card-top";
+  const orderNo = document.createElement("span");
+  orderNo.className = "kanban-order";
+  orderNo.textContent = displayOrderNo || "未填订单号";
+  top.appendChild(orderNo);
+
+  const name = document.createElement("div");
+  name.className = "kanban-name";
+  name.textContent = order.name || order.drawingNo || "未命名零件";
+
+  const meta = document.createElement("div");
+  meta.className = "kanban-meta";
+  meta.appendChild(createKanbanTag(order.customer || "未填客户"));
+  if (order.machine) meta.appendChild(createKanbanTag(order.machine));
+  if (order.dueDate) meta.appendChild(createKanbanTag(`交期 ${toMonthDay(order.dueDate)}`));
+  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`工时 ${order.plannedHours}`));
+  if (order.isDelayed === "延期") meta.appendChild(createKanbanTag("延期", true));
+
+  card.appendChild(top);
+  card.appendChild(name);
+  card.appendChild(meta);
+  return card;
+}
+
+function buildEffectiveOrderNoMap(rows) {
+  const map = new Map();
+  let current = "";
+  rows.forEach((row) => {
+    const raw = String(row.orderNo || "").trim();
+    if (raw) current = raw;
+    map.set(row.id, raw || current);
+  });
+  return map;
+}
+
+function createKanbanTag(text, delayed = false) {
+  const tag = document.createElement("span");
+  tag.className = delayed ? "kanban-tag kanban-delay" : "kanban-tag";
+  tag.textContent = text;
+  return tag;
+}
+
+function focusOrderRow(id) {
+  const row = tableBody.querySelector(`tr[data-id="${id}"]`);
+  if (!row) return;
+  row.classList.remove("row-focus");
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  requestAnimationFrame(() => {
+    row.classList.add("row-focus");
+    setTimeout(() => row.classList.remove("row-focus"), 1200);
+  });
 }
 
 function textCell(value) {
@@ -416,26 +636,58 @@ function getMonthFromOrderNo(v) {
 }
 
 function renderKpis(data) {
-  const planned = sum(data.filter((x) => x.status === "已排产"), "plannedHours");
-  const working = sum(data.filter((x) => x.status === "加工中"), "plannedHours");
-  const delayed = data.filter((x) => x.isDelayed === "延期").length;
-  const total = data.length;
-  const done = data.filter((x) => x.status === "已发货").length;
-  const completion = total ? (done / total) * 100 : 0;
+  const nearDue = data.filter((x) => x.status !== "已发货" && isNearDue(x.dueDate, 3)).length;
+  const inProduction = data.filter((x) => x.status !== "已发货").length;
+  const dueToday = data.filter((x) => isDueToday(x.dueDate)).length;
 
-  document.getElementById("kpiPlannedHours").textContent = planned.toFixed(1);
-  document.getElementById("kpiWorkingHours").textContent = working.toFixed(1);
-  document.getElementById("kpiDelayedCount").textContent = String(delayed);
-  document.getElementById("kpiCompletion").textContent = `${completion.toFixed(1)}%`;
+  document.getElementById("kpiPlannedHours").textContent = String(nearDue);
+  document.getElementById("kpiWorkingHours").textContent = String(inProduction);
+  document.getElementById("kpiDelayedCount").textContent = String(dueToday);
+  setKpiClock();
 }
 
-function sum(arr, key) {
-  return arr.reduce((s, item) => s + (Number(item[key]) || 0), 0);
+function startKpiClock() {
+  setKpiClock();
+  setInterval(setKpiClock, 1000);
+}
+
+function setKpiClock() {
+  const target = document.getElementById("kpiCompletion");
+  if (!target) return;
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mon = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  target.textContent = `${yyyy}-${mon}-${day} ${hh}:${mm}:${ss}`;
+}
+
+function isDueToday(dueDate) {
+  const normalized = normalizeDateOnlyInput(dueDate);
+  if (!normalized) return false;
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return normalized === today;
+}
+
+function isNearDue(dueDate, withinDays = 3) {
+  const normalized = normalizeDateOnlyInput(dueDate);
+  if (!normalized) return false;
+  const due = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return false;
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const end = new Date(start);
+  end.setDate(end.getDate() + Math.max(0, withinDays));
+  return due >= start && due <= end;
 }
 
 async function persistOrders({ changed = [], deletedId = null } = {}) {
   saveOrdersLocal();
   if (!REMOTE_ENABLED || !remoteOnline) return;
+  if (!canWriteRemote(true)) return;
 
   syncing = true;
   try {
@@ -450,6 +702,14 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
       if (error) throw error;
     }
   } catch (e) {
+    if (isAuthError(e)) {
+      authSession = null;
+      authWriteHintNotified = false;
+      updateAuthUi();
+      setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
+      alert("写入失败：登录态已失效，请重新登录。");
+      return;
+    }
     handleRemoteError("云端同步失败", e);
   } finally {
     syncing = false;
@@ -495,6 +755,8 @@ async function refreshFromRemote(showAlert = false) {
 
     saveOrdersLocal();
     render();
+    reconnectDelayMs = 5000;
+    remoteErrorNotified = false;
     if (showAlert) alert("已从云端刷新最新数据");
   } catch (e) {
     handleRemoteError("云端读取失败", e);
@@ -507,10 +769,47 @@ function handleRemoteError(prefix, err) {
   console.error(prefix, err);
   remoteOnline = false;
   setModeText("本地模式（云连接失败）");
+  scheduleReconnect();
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
     const detail = err?.message || err?.error_description || "未知错误";
     alert(`${prefix}：${detail}\n已自动切换本地模式。`);
+  }
+}
+
+function isAuthError(err) {
+  const code = String(err?.status || err?.code || "").toUpperCase();
+  const msg = String(err?.message || err?.error_description || "").toUpperCase();
+  return code === "401" || code === "403" || code === "PGRST301" || msg.includes("JWT") || msg.includes("AUTH");
+}
+
+function scheduleReconnect() {
+  if (!REMOTE_ENABLED || remoteOnline || reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void tryReconnectRemote(false);
+  }, reconnectDelayMs);
+  reconnectDelayMs = Math.min(reconnectDelayMs * 2, 60000);
+}
+
+async function tryReconnectRemote(manual = false) {
+  if (!REMOTE_ENABLED) return;
+  try {
+    const { error } = await db.from("mes_orders").select("id").limit(1);
+    if (error) throw error;
+    remoteOnline = true;
+    reconnectDelayMs = 5000;
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
+    await refreshFromRemote(false);
+    if (manual) alert("云端连接已恢复");
+  } catch (e) {
+    remoteOnline = false;
+    setModeText("本地模式（云连接失败）");
+    scheduleReconnect();
+    if (manual) {
+      const detail = e?.message || e?.error_description || "未知错误";
+      alert(`重连失败：${detail}`);
+    }
   }
 }
 
@@ -638,6 +937,15 @@ function updateBackTopBtn() {
   backTopBtn.style.display = show ? "inline-flex" : "none";
 }
 
+function syncReconnectButton() {
+  if (!reconnectBtn) return;
+  if (!REMOTE_ENABLED) {
+    reconnectBtn.style.display = "none";
+    return;
+  }
+  reconnectBtn.style.display = remoteOnline ? "none" : "inline-flex";
+}
+
 function exportXlsx() {
   if (!window.XLSX) {
     alert("Excel组件加载失败，请刷新页面后重试");
@@ -673,6 +981,13 @@ async function importXlsx(event) {
       const firstSheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
       const titleToKey = Object.fromEntries(XLSX_COLUMNS.map((x) => [x.title, x.key]));
+      const existingIdByKey = new Map();
+      const usedIds = new Set();
+      orders.forEach((item) => {
+        const key = getOrderImportMatchKey(item);
+        if (!key || existingIdByKey.has(key)) return;
+        existingIdByKey.set(key, item.id);
+      });
 
       orders = rows.map((row, idx) => {
         const next = createEmptyOrder();
@@ -684,23 +999,22 @@ async function importXlsx(event) {
           if (key === "qty" || key === "plannedHours") value = normalizeImportedNumber(value);
           next[key] = value;
         });
-        next.id = crypto.randomUUID();
+        const key = getOrderImportMatchKey(next);
+        const matchedId = key ? existingIdByKey.get(key) : "";
+        if (matchedId && !usedIds.has(matchedId)) {
+          next.id = matchedId;
+          usedIds.add(matchedId);
+        } else {
+          next.id = crypto.randomUUID();
+        }
         next.createdAt = new Date(Date.now() + idx).toISOString();
         next.isDelayed = calcDelayed(next);
         return next;
       });
 
-      if (REMOTE_ENABLED && remoteOnline) {
-        const { error } = await db.from("mes_orders").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-        if (error) {
-          // 某些环境/RLS下可能不允许全量删除，不中断导入流程
-          console.warn("云端清空旧数据失败，改为直接覆盖写入", error);
-        }
-      }
-
       await persistOrders({ changed: orders });
       render();
-      alert("导入成功");
+      alert("导入成功：已覆盖同键订单并新增新订单，未删除未包含在Excel中的历史订单。");
     } catch (e) {
       console.error(e);
       const msg = (e && e.message) ? e.message : "";
@@ -714,6 +1028,14 @@ async function importXlsx(event) {
 
   reader.readAsArrayBuffer(file);
   event.target.value = "";
+}
+
+function getOrderImportMatchKey(order) {
+  const orderNo = String(order?.orderNo || "").trim().toUpperCase();
+  const drawingNo = String(order?.drawingNo || "").trim().toUpperCase();
+  const name = String(order?.name || "").trim().toUpperCase();
+  if (!orderNo && !drawingNo && !name) return "";
+  return `${orderNo}|${drawingNo}|${name}`;
 }
 
 function normalizeImportedDate(v) {

@@ -56,6 +56,22 @@ h1 {
 }
 
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.auth-user {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid #3c6293;
+  border-radius: 10px;
+  color: #d9ecff;
+  background: rgba(17, 52, 86, 0.72);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .btn {
   border: 1px solid var(--line);
   background: linear-gradient(180deg, #1a3d66, #143458);
@@ -138,6 +154,176 @@ main { padding: 16px 20px 24px; }
   display: grid;
   gap: 10px;
 }
+
+.board-wrap {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 25, 46, 0.92);
+  padding: 12px;
+}
+
+.board-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.board-head h2,
+.detail-title {
+  margin: 0;
+  font-size: 18px;
+  font-family: var(--font-display);
+  letter-spacing: 0.4px;
+}
+
+.detail-title {
+  margin-top: 14px;
+  color: #dbeafc;
+}
+
+.board-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.board-pill {
+  border: 1px solid #3e6494;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #e3efff;
+  background: rgba(23, 58, 103, 0.72);
+}
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(220px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.kanban-col {
+  min-height: 340px;
+  border: 1px solid #325984;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(23, 53, 88, 0.86), rgba(12, 35, 61, 0.86));
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.kanban-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid #2c517c;
+}
+
+.kanban-col-head strong {
+  font-size: 14px;
+  color: #e8f3ff;
+}
+
+.kanban-col-head span {
+  font-size: 12px;
+  color: #9fd1ff;
+}
+
+.kanban-col-body {
+  padding: 9px;
+  overflow: auto;
+  max-height: 58vh;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.kanban-empty {
+  border: 1px dashed #3f6796;
+  border-radius: 8px;
+  color: #89aacd;
+  text-align: center;
+  padding: 16px 10px;
+  font-size: 12px;
+}
+
+.kanban-card {
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  appearance: none;
+  border: 1px solid #3a628f;
+  border-radius: 9px;
+  padding: 8px;
+  background: linear-gradient(145deg, rgba(29, 69, 113, 0.9), rgba(16, 40, 72, 0.9));
+  cursor: pointer;
+  transition: transform 100ms ease, border-color 100ms ease, filter 100ms ease;
+}
+
+.kanban-card:hover {
+  transform: translateY(-1px);
+  border-color: #79c5ff;
+  filter: brightness(1.06);
+}
+
+.kanban-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.kanban-order {
+  font-size: 12px;
+  color: #8fc0f4;
+  font-weight: 700;
+}
+
+.kanban-name {
+  margin-top: 4px;
+  font-size: 14px;
+  color: #eaf4ff;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.kanban-meta {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.kanban-tag {
+  font-size: 11px;
+  border: 1px solid #406690;
+  border-radius: 999px;
+  padding: 1px 7px;
+  color: #d4e8ff;
+  background: rgba(13, 38, 67, 0.7);
+}
+
+.kanban-delay {
+  border-color: #b45454;
+  color: #ffd0d0;
+  background: rgba(112, 30, 30, 0.55);
+}
+
+.row-focus {
+  animation: rowPulse 1.1s ease;
+}
+
+@keyframes rowPulse {
+  0% { box-shadow: inset 0 0 0 999px rgba(58, 158, 241, 0.3); }
+  100% { box-shadow: inset 0 0 0 999px rgba(58, 158, 241, 0); }
+}
 .quick-add,
 .filters {
   background: rgba(16, 40, 74, 0.9);
@@ -149,10 +335,11 @@ main { padding: 16px 20px 24px; }
 }
 
 .quick-add {
-  grid-template-columns: repeat(9, minmax(90px, 1fr));
+  grid-template-columns: repeat(10, minmax(90px, 1fr));
 }
 
 .filters {
+  margin-top: 10px;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
 }
 
@@ -330,8 +517,13 @@ tr.row-shipped { background: rgba(18, 103, 57, 0.35); }
   .kpi-grid { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
   .quick-add,
   .filters { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .kanban-board { grid-template-columns: repeat(3, minmax(220px, 1fr)); }
 }
 
+@media (max-width: 780px) {
+  .kanban-board { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+  .board-head { align-items: flex-start; flex-direction: column; }
+}
 
 
 

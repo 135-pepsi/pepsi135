@@ -26,13 +26,20 @@ create policy "mes_materials_public_read" on public.mes_materials
 for select using (true);
 
 drop policy if exists "mes_materials_public_insert" on public.mes_materials;
-create policy "mes_materials_public_insert" on public.mes_materials
-for insert with check (true);
+drop policy if exists "mes_materials_auth_write_insert" on public.mes_materials;
+create policy "mes_materials_auth_write_insert" on public.mes_materials
+for insert to authenticated
+with check (auth.uid() is not null);
 
 drop policy if exists "mes_materials_public_update" on public.mes_materials;
-create policy "mes_materials_public_update" on public.mes_materials
-for update using (true) with check (true);
+drop policy if exists "mes_materials_auth_write_update" on public.mes_materials;
+create policy "mes_materials_auth_write_update" on public.mes_materials
+for update to authenticated
+using (auth.uid() is not null)
+with check (auth.uid() is not null);
 
 drop policy if exists "mes_materials_public_delete" on public.mes_materials;
-create policy "mes_materials_public_delete" on public.mes_materials
-for delete using (true);
+drop policy if exists "mes_materials_auth_write_delete" on public.mes_materials;
+create policy "mes_materials_auth_write_delete" on public.mes_materials
+for delete to authenticated
+using (auth.uid() is not null);

@@ -45,13 +45,20 @@ create policy "mes_orders_public_read" on public.mes_orders
 for select using (true);
 
 drop policy if exists "mes_orders_public_insert" on public.mes_orders;
-create policy "mes_orders_public_insert" on public.mes_orders
-for insert with check (true);
+drop policy if exists "mes_orders_auth_write_insert" on public.mes_orders;
+create policy "mes_orders_auth_write_insert" on public.mes_orders
+for insert to authenticated
+with check (auth.uid() is not null);
 
 drop policy if exists "mes_orders_public_update" on public.mes_orders;
-create policy "mes_orders_public_update" on public.mes_orders
-for update using (true) with check (true);
+drop policy if exists "mes_orders_auth_write_update" on public.mes_orders;
+create policy "mes_orders_auth_write_update" on public.mes_orders
+for update to authenticated
+using (auth.uid() is not null)
+with check (auth.uid() is not null);
 
 drop policy if exists "mes_orders_public_delete" on public.mes_orders;
-create policy "mes_orders_public_delete" on public.mes_orders
-for delete using (true);
+drop policy if exists "mes_orders_auth_write_delete" on public.mes_orders;
+create policy "mes_orders_auth_write_delete" on public.mes_orders
+for delete to authenticated
+using (auth.uid() is not null);

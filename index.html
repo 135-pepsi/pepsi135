@@ -10,10 +10,13 @@
   <header class="topbar">
     <div>
       <h1>元源紫泽 生产管理系统</h1>
-      <p>类 Excel 快速录入与即时修改 · <span id="systemMode">本地模式</span></p>
+      <p>订单进度看板与明细协同 · <span id="systemMode">本地模式</span></p>
     </div>
     <div class="actions">
-      <button id="addRowBtn" class="btn btn-primary">+ 新增订单 (Ctrl+N)</button>
+      <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
+      <button id="loginBtn" class="btn" type="button">邮箱登录</button>
+      <button id="logoutBtn" class="btn" type="button" style="display:none;">退出登录</button>
+      <button id="reconnectBtn" class="btn" type="button">重连云端</button>
       <a class="btn" href="material.html">物料页面</a>
       <button id="saveBtn" class="btn">导出Excel</button>
       <label class="btn upload-btn">
@@ -25,22 +28,57 @@
 
   <main>
     <section class="kpi-grid" id="kpiGrid">
-      <article class="kpi-card kpi-a">
-        <span>今日总排产工时</span>
-        <strong id="kpiPlannedHours">0</strong>
-      </article>
       <article class="kpi-card kpi-b">
-        <span>加工中工时</span>
+        <span>在制订单</span>
         <strong id="kpiWorkingHours">0</strong>
       </article>
+      <article class="kpi-card kpi-a">
+        <span>临近交期</span>
+        <strong id="kpiPlannedHours">0</strong>
+      </article>
       <article class="kpi-card kpi-c">
-        <span>延期订单数</span>
+        <span>今日交期订单</span>
         <strong id="kpiDelayedCount">0</strong>
       </article>
       <article class="kpi-card kpi-d">
-        <span>完工率</span>
-        <strong id="kpiCompletion">0%</strong>
+        <span>当前时间</span>
+        <strong id="kpiCompletion">0</strong>
       </article>
+    </section>
+
+    <section class="filters">
+      <input id="searchInput" placeholder="搜索订单号/图号/客户" />
+      <select id="filterMonth" title="按订单号月份筛选">
+        <option value="">全部月份</option>
+        <option value="01">01月</option>
+        <option value="02">02月</option>
+        <option value="03">03月</option>
+        <option value="04">04月</option>
+        <option value="05">05月</option>
+        <option value="06">06月</option>
+        <option value="07">07月</option>
+        <option value="08">08月</option>
+        <option value="09">09月</option>
+        <option value="10">10月</option>
+        <option value="11">11月</option>
+        <option value="12">12月</option>
+      </select>
+      <select id="filterMachine">
+        <option value="">全部机台</option>
+        <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
+      </select>
+      <select id="filterStatus">
+        <option value="">全部状态</option>
+        <option>待排产</option><option>已排产</option><option>加工中</option><option>完成待检</option><option>返工</option><option>已发货</option>
+      </select>
+    </section>
+
+    <section class="board-wrap">
+      <div class="board-head">
+        <h2>订单进度看板</h2>
+        <div id="boardSummary" class="board-summary"></div>
+      </div>
+      <div id="kanbanBoard" class="kanban-board"></div>
     </section>
 
     <section class="toolbar">
@@ -57,34 +95,11 @@
         </select>
         <input id="qaDueDate" type="date" />
         <button id="quickAddBtn" class="btn btn-primary">快速添加</button>
-      </div>
-      <div class="filters">
-        <input id="searchInput" placeholder="搜索订单号/图号/客户" />
-        <select id="filterMonth" title="按订单号月份筛选">
-          <option value="">全部月份</option>
-          <option value="01">01月</option>
-          <option value="02">02月</option>
-          <option value="03">03月</option>
-          <option value="04">04月</option>
-          <option value="05">05月</option>
-          <option value="06">06月</option>
-          <option value="07">07月</option>
-          <option value="08">08月</option>
-          <option value="09">09月</option>
-          <option value="10">10月</option>
-          <option value="11">11月</option>
-          <option value="12">12月</option>
-        </select>
-        <select id="filterMachine">
-          <option value="">全部机台</option>
-          <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
-        </select>
-        <select id="filterStatus">
-          <option value="">全部状态</option>
-          <option>待排产</option><option>已排产</option><option>加工中</option><option>完成待检</option><option>返工</option><option>已发货</option>
-        </select>
+        <button id="addRowBtn" class="btn">新增订单 (Ctrl+N)</button>
       </div>
     </section>
+
+    <h2 class="detail-title">订单明细表</h2>
 
     <section class="table-wrap" id="tableWrap">
       <table id="orderTable">
