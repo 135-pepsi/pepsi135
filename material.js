@@ -77,6 +77,12 @@ function bindEvents() {
   if (quickAddBtn) quickAddBtn.addEventListener("click", quickAdd);
   const addRowInlineBtn = document.getElementById("addRowInlineBtn");
   if (addRowInlineBtn) addRowInlineBtn.addEventListener("click", addBlankRow);
+  const dedupeOrderBtn = document.getElementById("dedupeOrderBtn");
+  if (dedupeOrderBtn) {
+    dedupeOrderBtn.addEventListener("click", () => {
+      void removeDuplicateOrderRows(true);
+    });
+  }
   if (reconnectBtn) {
     reconnectBtn.addEventListener("click", () => {
       void tryReconnectRemote(true);
@@ -744,6 +750,52 @@ function isPlaceholderRow(item) {
   const quantity = item.quantity == null ? "" : String(item.quantity).trim();
   const amount = item.amount == null ? "" : String(item.amount).trim();
   return material === "" && spec === "" && isReady === "" && quantity === "" && amount === "";
+}
+
+function materialRowSignature(item) {
+  const orderNo = String(item?.orderNo || "").trim().toUpperCase();
+  const customer = String(item?.customer || "").trim();
+  const material = String(item?.material || "").trim();
+  const spec = String(item?.spec || "").trim();
+  const quantity = item?.quantity == null ? "" : String(item.quantity).trim();
+  const amount = item?.amount == null ? "" : String(item.amount).trim();
+  const isReady = String(item?.isReady || "").trim();
+  return `${orderNo}|${customer}|${material}|${spec}|${quantity}|${amount}|${isReady}`;
+}
+
+async function removeDuplicateOrderRows(notify = false) {
+  if (!Array.isArray(materials) || materials.length === 0) {
+    if (notify) alert("当前没有可清理的数据。");
+    return;
+  }
+
+  const sorted = materials
+    .slice()
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  const seen = new Set();
+  const deletedIds = [];
+
+  sorted.forEach((item) => {
+    const sig = materialRowSignature(item);
+    if (!sig || sig === "||||||") return;
+    if (!seen.has(sig)) {
+      seen.add(sig);
+      return;
+    }
+    deletedIds.push(item.id);
+  });
+
+  if (deletedIds.length === 0) {
+    if (notify) alert("没有发现重复订单行。");
+    return;
+  }
+
+  const deletedIdSet = new Set(deletedIds);
+  materials = materials.filter((item) => !deletedIdSet.has(item.id));
+  await persist({ deletedIds });
+  render();
+  syncQuickCustomer();
+  if (notify) alert(`已删除 ${deletedIds.length} 行重复订单记录。`);
 }
 
 function handleRemoteError(prefix, err) {

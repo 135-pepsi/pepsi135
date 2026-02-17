@@ -425,6 +425,15 @@ main { padding: 16px 20px 24px; }
   grid-template-columns: 1fr;
 }
 
+.material-page .toolbar {
+  position: sticky;
+  top: calc(var(--topbar-h, 78px) + 8px);
+  z-index: 4;
+  padding-top: 4px;
+  background: linear-gradient(180deg, rgba(8, 26, 50, 0.96), rgba(8, 26, 50, 0.72));
+  backdrop-filter: blur(3px);
+}
+
 .filter-fields {
   display: grid;
   gap: 8px;
@@ -435,7 +444,7 @@ main { padding: 16px 20px 24px; }
 }
 
 .material-filters .filter-fields {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
 }
 
 .filter-toggle {
