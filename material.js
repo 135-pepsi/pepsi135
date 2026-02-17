@@ -449,7 +449,7 @@ async function updateItem(id, key, value) {
       return;
     }
     target.orderNo = normalized;
-    target.customer = resolveCustomerByOrderNo(target.orderNo, target.customer);
+    target.customer = resolveCustomerByOrderNo(target.orderNo, "");
   } else {
     target[key] = normalized;
   }
@@ -592,6 +592,8 @@ async function refreshFromRemote(showAlert = false) {
       .map((x) => ({ ...x, customer: resolveCustomerByOrderNo(x.orderNo, x.customer) }))
       .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
 
+    await syncInheritedOrderRows();
+
     if (materials.length === 0) {
       materials = loadLocal();
       if (materials.length > 0) await persist({ changed: materials });
@@ -644,9 +646,45 @@ async function refreshOrderCustomerMap() {
     });
     orderCustomerMap = map;
     serialOrderNoMap = serialMap;
+    await syncInheritedOrderRows();
     syncQuickCustomer();
   } catch (e) {
     console.warn("读取订单-客户映射失败，继续使用本地客户值", e);
+  }
+}
+
+async function syncInheritedOrderRows() {
+  if (!Array.isArray(materials)) return;
+
+  const changed = [];
+  const existingOrderNos = new Set();
+
+  materials.forEach((item) => {
+    const key = String(item.orderNo || "").trim().toUpperCase();
+    if (!key) return;
+    existingOrderNos.add(key);
+    const inheritedCustomer = orderCustomerMap.get(key);
+    if (!inheritedCustomer) return;
+    if (String(item.customer || "").trim() === inheritedCustomer) return;
+    item.customer = inheritedCustomer;
+    changed.push(item);
+  });
+
+  orderCustomerMap.forEach((customer, orderNo) => {
+    const key = String(orderNo || "").trim().toUpperCase();
+    if (!key || existingOrderNos.has(key)) return;
+    const next = {
+      ...createEmptyMaterial(),
+      orderNo: key,
+      customer: customer || "",
+    };
+    materials.push(next);
+    existingOrderNos.add(key);
+    changed.push(next);
+  });
+
+  if (changed.length > 0) {
+    await persist({ changed });
   }
 }
 
