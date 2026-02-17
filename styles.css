@@ -450,12 +450,14 @@ main { padding: 16px 20px 24px; }
 }
 
 .material-filters .filter-fields {
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(220px, 280px) auto auto;
+  justify-content: start;
+  align-items: center;
 }
 
 .material-page #searchInput {
-  width: 100%;
-  max-width: 120px;
+  width: 240px;
+  max-width: 240px;
 }
 
 .filter-toggle {
