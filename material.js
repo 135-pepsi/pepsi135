@@ -17,6 +17,7 @@ let reconnectDelayMs = 5000;
 let authSession = null;
 let authWriteHintNotified = false;
 let stickyOffsetRaf = 0;
+let pageUnloading = false;
 let orderCustomerMap = new Map();
 let serialOrderNoMap = new Map();
 let columnWidths = loadColumnWidths();
@@ -120,6 +121,9 @@ function bindEvents() {
   window.addEventListener("resize", () => {
     queueStickyColumnOffsets();
     syncFilterPanelForViewport();
+  });
+  window.addEventListener("beforeunload", () => {
+    pageUnloading = true;
   });
   updateBackTopBtn();
   updateAuthUi();
@@ -619,6 +623,7 @@ async function refreshFromRemote(showAlert = false) {
     remoteErrorNotified = false;
     if (showAlert) alert("已从云端刷新最新物料数据");
   } catch (e) {
+    if (pageUnloading || isAbortLikeError(e)) return;
     handleRemoteError("物料云端读取失败", e);
     materials = loadLocal();
     render();
@@ -799,6 +804,7 @@ async function removeDuplicateOrderRows(notify = false) {
 }
 
 function handleRemoteError(prefix, err) {
+  if (pageUnloading || isAbortLikeError(err)) return;
   console.error(prefix, err);
   remoteOnline = false;
   setModeText("本地模式（云连接失败）");
@@ -808,6 +814,12 @@ function handleRemoteError(prefix, err) {
     const detail = err?.message || err?.error_description || "未知错误";
     alert(`${prefix}：${detail}\n已自动切换本地模式。`);
   }
+}
+
+function isAbortLikeError(err) {
+  const code = String(err?.name || err?.code || "").toUpperCase();
+  const msg = String(err?.message || err?.error_description || "").toUpperCase();
+  return code.includes("ABORT") || code.includes("CANCEL") || msg.includes("ABORT") || msg.includes("CANCEL");
 }
 
 function isAuthError(err) {
