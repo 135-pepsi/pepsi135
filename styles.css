@@ -453,6 +453,11 @@ main { padding: 16px 20px 24px; }
   grid-template-columns: 1fr auto auto;
 }
 
+.material-page #searchInput {
+  width: 100%;
+  max-width: 120px;
+}
+
 .filter-toggle {
   display: none;
   justify-self: start;
