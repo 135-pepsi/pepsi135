@@ -1,6 +1,7 @@
 ﻿const STORAGE_KEY = "mini_mes_materials_v1";
 const COL_WIDTH_KEY = "mini_mes_materials_col_widths_v1";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
+const ORDER_SYNC_ENABLED = false;
 
 const READY_OPTIONS = ["是", "否"];
 const MES_CONFIG = window.MES_CONFIG || {};
@@ -45,20 +46,15 @@ async function init() {
   if (REMOTE_ENABLED) {
     await initAuth();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
-    loadOrderCustomerMapFromLocal();
-    await refreshOrderCustomerMap();
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) {
-        await refreshOrderCustomerMap();
         await refreshFromRemote(false);
       }
     }, AUTO_REFRESH_MS);
   } else {
     setModeText("本地模式");
-    loadOrderCustomerMapFromLocal();
     materials = loadLocal();
-    await syncInheritedOrderRows();
     render();
     syncQuickCustomer();
     setLastSyncTime();
@@ -131,6 +127,7 @@ function bindEvents() {
     updateLayoutMetrics();
   });
   window.addEventListener("storage", (e) => {
+    if (!ORDER_SYNC_ENABLED) return;
     if (e.key !== ORDER_STORAGE_KEY) return;
     loadOrderCustomerMapFromLocal();
     void syncInheritedOrderRows().then(() => {
@@ -192,7 +189,6 @@ async function initAuth() {
       setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     }
     if (authSession && remoteOnline) {
-      void refreshOrderCustomerMap();
       void refreshFromRemote(false);
     }
   });
@@ -668,6 +664,7 @@ async function refreshFromRemote(showAlert = false) {
 }
 
 async function refreshOrderCustomerMap() {
+  if (!ORDER_SYNC_ENABLED) return;
   if (!REMOTE_ENABLED || !remoteOnline) {
     loadOrderCustomerMapFromLocal();
     await syncInheritedOrderRows();
@@ -749,6 +746,7 @@ function loadOrderCustomerMapFromLocal() {
 }
 
 async function syncInheritedOrderRows() {
+  if (!ORDER_SYNC_ENABLED) return;
   if (!Array.isArray(materials)) return;
 
   const changedById = new Map();
@@ -923,7 +921,6 @@ async function tryReconnectRemote(manual = false) {
     remoteOnline = true;
     reconnectDelayMs = 5000;
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
-    await refreshOrderCustomerMap();
     await refreshFromRemote(false);
     if (manual) alert("云端连接已恢复");
   } catch (e) {
