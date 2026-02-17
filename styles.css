@@ -204,8 +204,8 @@ main { padding: 16px 20px 24px; }
 .kpi-c strong { color: #ffb347; }
 .kpi-d strong { color: #bb95ff; }
 .kpi-d strong {
-  font-size: 22px;
-  letter-spacing: 0.2px;
+  font-size: 26px;
+  letter-spacing: 0.1px;
 }
 
 .toolbar {
