@@ -550,7 +550,7 @@ function loadLocal() {
   }
 }
 
-async function persist({ changed = [], deletedId = null } = {}) {
+async function persist({ changed = [], deletedId = null, deletedIds = [] } = {}) {
   saveLocal();
   setLastSyncTime();
   if (!REMOTE_ENABLED || !remoteOnline) return;
@@ -563,9 +563,15 @@ async function persist({ changed = [], deletedId = null } = {}) {
       const { error } = await db.from("mes_materials").upsert(payload, { onConflict: "id" });
       if (error) throw error;
     }
-    if (deletedId) {
-      const { error } = await db.from("mes_materials").delete().eq("id", deletedId);
-      if (error) throw error;
+    const idsToDelete = [];
+    if (deletedId) idsToDelete.push(deletedId);
+    if (Array.isArray(deletedIds) && deletedIds.length > 0) idsToDelete.push(...deletedIds);
+    const uniqDeleteIds = Array.from(new Set(idsToDelete.filter(Boolean)));
+    if (uniqDeleteIds.length > 0) {
+      for (const id of uniqDeleteIds) {
+        const { error } = await db.from("mes_materials").delete().eq("id", id);
+        if (error) throw error;
+      }
     }
   } catch (e) {
     if (isAuthError(e)) {
@@ -656,19 +662,59 @@ async function refreshOrderCustomerMap() {
 async function syncInheritedOrderRows() {
   if (!Array.isArray(materials)) return;
 
-  const changed = [];
-  const existingOrderNos = new Set();
+  const changedById = new Map();
+  const byOrderNo = new Map();
+  const deletedIdSet = new Set();
+
+  const markChanged = (item) => {
+    if (!item?.id) return;
+    changedById.set(item.id, item);
+  };
 
   materials.forEach((item) => {
     const key = String(item.orderNo || "").trim().toUpperCase();
+    if (item.orderNo !== key) {
+      item.orderNo = key;
+      markChanged(item);
+    }
     if (!key) return;
-    existingOrderNos.add(key);
+    const list = byOrderNo.get(key) || [];
+    list.push(item);
+    byOrderNo.set(key, list);
+
     const inheritedCustomer = orderCustomerMap.get(key);
     if (!inheritedCustomer) return;
     if (String(item.customer || "").trim() === inheritedCustomer) return;
     item.customer = inheritedCustomer;
-    changed.push(item);
+    markChanged(item);
   });
+
+  byOrderNo.forEach((rows) => {
+    const placeholders = rows.filter(isPlaceholderRow);
+    const realRows = rows.filter((row) => !isPlaceholderRow(row));
+
+    if (realRows.length > 0 && placeholders.length > 0) {
+      placeholders.forEach((row) => deletedIdSet.add(row.id));
+      return;
+    }
+
+    if (placeholders.length > 1) {
+      const sorted = placeholders
+        .slice()
+        .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+      sorted.slice(1).forEach((row) => deletedIdSet.add(row.id));
+    }
+  });
+
+  if (deletedIdSet.size > 0) {
+    materials = materials.filter((item) => !deletedIdSet.has(item.id));
+  }
+
+  const existingOrderNos = new Set(
+    materials
+      .map((item) => String(item.orderNo || "").trim().toUpperCase())
+      .filter(Boolean)
+  );
 
   orderCustomerMap.forEach((customer, orderNo) => {
     const key = String(orderNo || "").trim().toUpperCase();
@@ -680,12 +726,24 @@ async function syncInheritedOrderRows() {
     };
     materials.push(next);
     existingOrderNos.add(key);
-    changed.push(next);
+    markChanged(next);
   });
 
-  if (changed.length > 0) {
-    await persist({ changed });
+  const changed = Array.from(changedById.values()).filter((item) => !deletedIdSet.has(item.id));
+  const deletedIds = Array.from(deletedIdSet).filter(Boolean);
+  if (changed.length > 0 || deletedIds.length > 0) {
+    await persist({ changed, deletedIds });
   }
+}
+
+function isPlaceholderRow(item) {
+  if (!item) return false;
+  const material = String(item.material || "").trim();
+  const spec = String(item.spec || "").trim();
+  const isReady = String(item.isReady || "").trim();
+  const quantity = item.quantity == null ? "" : String(item.quantity).trim();
+  const amount = item.amount == null ? "" : String(item.amount).trim();
+  return material === "" && spec === "" && isReady === "" && quantity === "" && amount === "";
 }
 
 function handleRemoteError(prefix, err) {
