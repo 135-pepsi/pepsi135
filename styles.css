@@ -434,6 +434,12 @@ main { padding: 16px 20px 24px; }
   backdrop-filter: blur(3px);
 }
 
+.material-page .quick-add,
+.material-page .filters {
+  padding: 12px;
+  gap: 10px;
+}
+
 .filter-fields {
   display: grid;
   gap: 8px;
@@ -487,6 +493,11 @@ select option {
   box-shadow: var(--panel-shadow);
 }
 
+.material-page .table-wrap {
+  max-height: none;
+  overflow: visible;
+}
+
 #orderTable {
   width: 100%;
   border-collapse: collapse;
@@ -521,6 +532,17 @@ th {
   font-weight: 700;
   letter-spacing: 0.4px;
   user-select: none;
+}
+
+.material-page #orderTable th {
+  top: calc(var(--topbar-h, 78px) + var(--material-toolbar-h, 92px) + 12px);
+  z-index: 3;
+}
+
+.material-page #orderTable th,
+.material-page #orderTable td {
+  padding: 10px 10px;
+  line-height: 1.45;
 }
 body:not(.material-page) #orderTable th:nth-child(2) { background: linear-gradient(180deg, #205488, #19436f); }
 body:not(.material-page) #orderTable th:nth-child(3) { background: linear-gradient(180deg, #2a5f8d, #1f4d76); }
