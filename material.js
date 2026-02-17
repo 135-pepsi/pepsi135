@@ -1,5 +1,6 @@
 ﻿const STORAGE_KEY = "mini_mes_materials_v1";
 const COL_WIDTH_KEY = "mini_mes_materials_col_widths_v1";
+const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
 
 const READY_OPTIONS = ["是", "否"];
 const MES_CONFIG = window.MES_CONFIG || {};
@@ -42,6 +43,7 @@ async function init() {
   if (REMOTE_ENABLED) {
     await initAuth();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
+    loadOrderCustomerMapFromLocal();
     await refreshOrderCustomerMap();
     await refreshFromRemote();
     setInterval(async () => {
@@ -52,7 +54,9 @@ async function init() {
     }, AUTO_REFRESH_MS);
   } else {
     setModeText("本地模式");
+    loadOrderCustomerMapFromLocal();
     materials = loadLocal();
+    await syncInheritedOrderRows();
     render();
     syncQuickCustomer();
     setLastSyncTime();
@@ -121,6 +125,14 @@ function bindEvents() {
   window.addEventListener("resize", () => {
     queueStickyColumnOffsets();
     syncFilterPanelForViewport();
+  });
+  window.addEventListener("storage", (e) => {
+    if (e.key !== ORDER_STORAGE_KEY) return;
+    loadOrderCustomerMapFromLocal();
+    void syncInheritedOrderRows().then(() => {
+      render();
+      syncQuickCustomer();
+    });
   });
   window.addEventListener("beforeunload", () => {
     pageUnloading = true;
@@ -560,11 +572,11 @@ function loadLocal() {
   }
 }
 
-async function persist({ changed = [], deletedId = null, deletedIds = [] } = {}) {
+async function persist({ changed = [], deletedId = null, deletedIds = [], notifyAuth = true } = {}) {
   saveLocal();
   setLastSyncTime();
   if (!REMOTE_ENABLED || !remoteOnline) return;
-  if (!canWriteRemote(true)) return;
+  if (!canWriteRemote(notifyAuth)) return;
   syncing = true;
   try {
     if (changed.length > 0) {
@@ -642,7 +654,12 @@ async function refreshFromRemote(showAlert = false) {
 }
 
 async function refreshOrderCustomerMap() {
-  if (!REMOTE_ENABLED || !remoteOnline) return;
+  if (!REMOTE_ENABLED || !remoteOnline) {
+    loadOrderCustomerMapFromLocal();
+    await syncInheritedOrderRows();
+    syncQuickCustomer();
+    return;
+  }
   try {
     const { data, error } = await db
       .from("mes_orders")
@@ -657,7 +674,6 @@ async function refreshOrderCustomerMap() {
       const orderNo = String(row.order_no || "").trim().toUpperCase();
       const customer = String(row.customer || "").trim();
       if (!orderNo) return;
-      if (!customer) return;
       map.set(orderNo, customer);
       const serial = orderNo.slice(-3);
       if (/^\d{3}$/.test(serial)) {
@@ -676,7 +692,45 @@ async function refreshOrderCustomerMap() {
     await syncInheritedOrderRows();
     syncQuickCustomer();
   } catch (e) {
-    console.warn("读取订单-客户映射失败，继续使用本地客户值", e);
+    console.warn("读取订单-客户映射失败，改用本地订单缓存", e);
+    loadOrderCustomerMapFromLocal();
+    await syncInheritedOrderRows();
+    syncQuickCustomer();
+  }
+}
+
+function loadOrderCustomerMapFromLocal() {
+  const raw = localStorage.getItem(ORDER_STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const rows = JSON.parse(raw);
+    if (!Array.isArray(rows)) return;
+
+    const map = new Map();
+    const serialCandidates = new Map();
+    rows.forEach((row) => {
+      const orderNo = String(row?.orderNo || row?.order_no || "").trim().toUpperCase();
+      const customer = String(row?.customer || "").trim();
+      if (!orderNo) return;
+      map.set(orderNo, customer);
+      const serial = orderNo.slice(-3);
+      if (/^\d{3}$/.test(serial)) {
+        const set = serialCandidates.get(serial) || new Set();
+        set.add(orderNo);
+        serialCandidates.set(serial, set);
+      }
+    });
+
+    const serialMap = new Map();
+    serialCandidates.forEach((set, serial) => {
+      if (set.size !== 1) return;
+      serialMap.set(serial, Array.from(set)[0]);
+    });
+
+    orderCustomerMap = map;
+    serialOrderNoMap = serialMap;
+  } catch (e) {
+    console.warn("读取本地订单缓存失败", e);
   }
 }
 
@@ -753,7 +807,7 @@ async function syncInheritedOrderRows() {
   const changed = Array.from(changedById.values()).filter((item) => !deletedIdSet.has(item.id));
   const deletedIds = Array.from(deletedIdSet).filter(Boolean);
   if (changed.length > 0 || deletedIds.length > 0) {
-    await persist({ changed, deletedIds });
+    await persist({ changed, deletedIds, notifyAuth: false });
   }
 }
 
