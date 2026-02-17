@@ -722,7 +722,7 @@ function startKpiClock() {
 function setKpiClock() {
   const target = document.getElementById("kpiCompletion");
   if (!target) return;
-  const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  const WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
   const now = new Date();
   const yyyy = now.getFullYear();
   const mon = String(now.getMonth() + 1).padStart(2, "0");
@@ -731,7 +731,7 @@ function setKpiClock() {
   const mm = String(now.getMinutes()).padStart(2, "0");
   const ss = String(now.getSeconds()).padStart(2, "0");
   const weekday = WEEKDAYS[now.getDay()];
-  target.textContent = `${yyyy}-${mon}-${day} ${weekday} ${hh}:${mm}:${ss}`;
+  target.innerHTML = `${yyyy}-${mon}-${day} ${hh}:${mm}:${ss} <span class="kpi-weekday">${weekday}</span>`;
 }
 
 function isDueToday(dueDate) {

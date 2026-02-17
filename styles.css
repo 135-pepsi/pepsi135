@@ -202,10 +202,15 @@ main { padding: 16px 20px 24px; }
 .kpi-a strong { color: #3ed1ff; }
 .kpi-b strong { color: #6bf59d; }
 .kpi-c strong { color: #ffb347; }
-.kpi-d strong { color: #bb95ff; }
+.kpi-d strong { color: #53e0ff; }
 .kpi-d strong {
-  font-size: 26px;
+  font-size: 30px;
   letter-spacing: 0.1px;
+}
+.kpi-d .kpi-weekday {
+  font-size: 36px;
+  color: #ffd166;
+  margin-left: 6px;
 }
 
 .toolbar {
