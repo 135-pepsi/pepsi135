@@ -831,6 +831,15 @@ async function refreshFromRemote(showAlert = false) {
     remoteErrorNotified = false;
     if (showAlert) alert("已从云端刷新最新数据");
   } catch (e) {
+    if (isAuthError(e) && !authSession) {
+      remoteOnline = true;
+      remoteErrorNotified = false;
+      setModeText("云端只读（未登录）");
+      orders = loadOrdersLocal();
+      render();
+      setLastSyncTime();
+      return;
+    }
     handleRemoteError("云端读取失败", e);
     orders = loadOrdersLocal();
     render();

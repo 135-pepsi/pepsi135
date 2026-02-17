@@ -624,6 +624,16 @@ async function refreshFromRemote(showAlert = false) {
     if (showAlert) alert("已从云端刷新最新物料数据");
   } catch (e) {
     if (pageUnloading || isAbortLikeError(e)) return;
+    if (isAuthError(e) && !authSession) {
+      remoteOnline = true;
+      remoteErrorNotified = false;
+      setModeText("云端只读（未登录）");
+      materials = loadLocal();
+      render();
+      syncQuickCustomer();
+      setLastSyncTime();
+      return;
+    }
     handleRemoteError("物料云端读取失败", e);
     materials = loadLocal();
     render();
