@@ -96,7 +96,7 @@
         <input id="qaName" placeholder="名称" />
         <input id="qaDrawingNo" placeholder="图号" />
         <input id="qaQty" type="number" min="1" placeholder="数量" />
-        <input id="qaHours" type="number" min="0" step="0.1" placeholder="预计工时" />
+        <input id="qaHours" type="number" min="0" step="1" placeholder="预计工时(分钟)" />
         <select id="qaMachine">
           <option value="">机台</option>
           <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
@@ -119,15 +119,11 @@
             <th>名称</th>
             <th>图号</th>
             <th>数量</th>
-            <th>程序单</th>
-            <th>预计工时</th>
-            <th>机台</th>
-            <th>车床</th>
+            <th>工序/工时/设备</th>
             <th>表面处理</th>
             <th>状态</th>
             <th>开始时间</th>
             <th>交期</th>
-            <th>是否延期</th>
             <th>备注</th>
             <th>操作</th>
           </tr>
@@ -139,6 +135,143 @@
     <p class="hint">提示：双击单元格可编辑；Enter 保存并跳转下一行同列；</p>
     <div class="scroll-tail" aria-hidden="true"></div>
   </main>
+
+  <div id="attachmentDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="attachmentTitle">
+      <header class="dialog-head">
+        <h3 id="attachmentTitle">零件图纸</h3>
+        <button id="attachmentCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="attachmentSubTitle" class="dialog-subtitle"></p>
+      <div class="dialog-upload-row">
+        <label class="btn upload-btn">
+          选择文件
+          <input id="attachmentUploadInput" type="file" hidden />
+        </label>
+        <span id="attachmentHint" class="dialog-hint"></span>
+      </div>
+      <div id="attachmentList" class="attachment-list"></div>
+    </section>
+  </div>
+
+  <div id="previewDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel preview-panel" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+      <header class="dialog-head">
+        <h3 id="previewTitle">图纸预览</h3>
+        <button id="previewCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="previewSubTitle" class="dialog-subtitle"></p>
+      <div id="previewBody" class="preview-body"></div>
+    </section>
+  </div>
+
+  <div id="processTimeDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel process-time-panel" role="dialog" aria-modal="true" aria-labelledby="processTimeTitle">
+      <header class="dialog-head">
+        <h3 id="processTimeTitle">预计工时设置</h3>
+        <button id="processTimeCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="processTimeSubTitle" class="dialog-subtitle"></p>
+      <div class="process-time-form">
+        <label class="process-time-field">
+          <span>程序单</span>
+          <select id="processProgramInput"></select>
+        </label>
+        <label class="process-time-field">
+          <span>总共几序</span>
+          <select id="processNameInput"></select>
+        </label>
+        <label class="process-time-field">
+          <span>工时（分钟）</span>
+          <input id="processMinutesInput" type="number" min="0" step="1" placeholder="例如 45" />
+        </label>
+        <label class="process-time-field">
+          <span>机台</span>
+          <select id="processMachineInput"></select>
+        </label>
+        <label class="process-time-field">
+          <span>车床</span>
+          <select id="processLatheInput"></select>
+        </label>
+      </div>
+      <div class="process-time-actions">
+        <button id="processTimeClearBtn" class="btn btn-secondary" type="button">清空</button>
+        <button id="processTimeSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="statusDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel status-panel" role="dialog" aria-modal="true" aria-labelledby="statusTitle">
+      <header class="dialog-head">
+        <h3 id="statusTitle">状态设置</h3>
+        <button id="statusCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="statusSubTitle" class="dialog-subtitle"></p>
+      <div class="status-form">
+        <label class="status-field">
+          <span>状态</span>
+          <select id="statusInput"></select>
+        </label>
+        <label id="statusStepWrap" class="status-field">
+          <span>加工序号</span>
+          <select id="statusStepInput"></select>
+        </label>
+      </div>
+      <div class="status-actions">
+        <button id="statusSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="dateDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel date-panel" role="dialog" aria-modal="true" aria-labelledby="dateTitle">
+      <header class="dialog-head">
+        <h3 id="dateTitle">日期设置</h3>
+        <button id="dateCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="dateSubTitle" class="dialog-subtitle"></p>
+      <div class="date-form">
+        <label class="date-field">
+          <span>月份</span>
+          <select id="dateMonthInput"></select>
+        </label>
+        <label class="date-field">
+          <span>日期</span>
+          <select id="dateDayInput"></select>
+        </label>
+      </div>
+      <div class="date-actions">
+        <button id="dateClearBtn" class="btn btn-secondary" type="button">清空</button>
+        <button id="dateSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="surfaceDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel surface-panel" role="dialog" aria-modal="true" aria-labelledby="surfaceTitle">
+      <header class="dialog-head">
+        <h3 id="surfaceTitle">表面处理设置</h3>
+        <button id="surfaceCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="surfaceSubTitle" class="dialog-subtitle"></p>
+      <div class="surface-form">
+        <label class="surface-field">
+          <span>常用选项</span>
+          <select id="surfacePresetInput"></select>
+        </label>
+        <label class="surface-field">
+          <span>自定义（新增一行）</span>
+          <input id="surfaceCustomInput" type="text" placeholder="输入自定义表面处理" />
+        </label>
+      </div>
+      <div class="surface-actions">
+        <button id="surfaceClearBtn" class="btn btn-secondary" type="button">清空</button>
+        <button id="surfaceSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
   <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
 
   <script src="xlsx.full.min.js"></script>

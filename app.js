@@ -3,6 +3,8 @@ const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
 
 const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "已发货"];
 const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
+const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
+const PROCESS_OPTIONS = ["", "1", "2", "3", "4", "5", "6"];
 const XLSX_COLUMNS = [
   { key: "orderNo", title: "订单号" },
   { key: "customer", title: "客户" },
@@ -10,7 +12,8 @@ const XLSX_COLUMNS = [
   { key: "drawingNo", title: "图号" },
   { key: "qty", title: "数量" },
   { key: "programNo", title: "程序单" },
-  { key: "plannedHours", title: "预计工时" },
+  { key: "processName", title: "工序" },
+  { key: "plannedHours", title: "预计工时(分钟)" },
   { key: "machine", title: "机台" },
   { key: "lathe", title: "车床" },
   { key: "surface", title: "表面处理" },
@@ -24,6 +27,9 @@ const XLSX_COLUMNS = [
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
+const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
+const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
+const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar");
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
 let orders = [];
@@ -39,6 +45,17 @@ let abnormalOnly = false;
 let lastSyncAt = "";
 let stickyOffsetRaf = 0;
 let columnWidths = loadColumnWidths();
+let attachmentPanelOrderId = "";
+let attachmentItems = [];
+let attachmentLoading = false;
+let previewObjectUrl = "";
+let attachmentStateByLineId = new Map();
+let attachmentStateLoading = new Set();
+let processTimeEditingOrderId = "";
+let statusEditingOrderId = "";
+let dateEditingOrderId = "";
+let dateEditingKey = "";
+let surfaceEditingOrderId = "";
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -55,6 +72,49 @@ const lastSyncTime = document.getElementById("lastSyncTime");
 const abnormalFilterBtn = document.getElementById("abnormalFilterBtn");
 const orderFilters = document.getElementById("orderFilters");
 const filterToggleBtn = document.getElementById("filterToggleBtn");
+const attachmentDialog = document.getElementById("attachmentDialog");
+const attachmentTitle = document.getElementById("attachmentTitle");
+const attachmentSubTitle = document.getElementById("attachmentSubTitle");
+const attachmentHint = document.getElementById("attachmentHint");
+const attachmentList = document.getElementById("attachmentList");
+const attachmentUploadInput = document.getElementById("attachmentUploadInput");
+const attachmentCloseBtn = document.getElementById("attachmentCloseBtn");
+const previewDialog = document.getElementById("previewDialog");
+const previewCloseBtn = document.getElementById("previewCloseBtn");
+const previewTitle = document.getElementById("previewTitle");
+const previewSubTitle = document.getElementById("previewSubTitle");
+const previewBody = document.getElementById("previewBody");
+const processTimeDialog = document.getElementById("processTimeDialog");
+const processTimeCloseBtn = document.getElementById("processTimeCloseBtn");
+const processTimeSaveBtn = document.getElementById("processTimeSaveBtn");
+const processTimeClearBtn = document.getElementById("processTimeClearBtn");
+const processTimeSubTitle = document.getElementById("processTimeSubTitle");
+const processProgramInput = document.getElementById("processProgramInput");
+const processNameInput = document.getElementById("processNameInput");
+const processMinutesInput = document.getElementById("processMinutesInput");
+const processMachineInput = document.getElementById("processMachineInput");
+const processLatheInput = document.getElementById("processLatheInput");
+const statusDialog = document.getElementById("statusDialog");
+const statusCloseBtn = document.getElementById("statusCloseBtn");
+const statusSaveBtn = document.getElementById("statusSaveBtn");
+const statusSubTitle = document.getElementById("statusSubTitle");
+const statusInput = document.getElementById("statusInput");
+const statusStepWrap = document.getElementById("statusStepWrap");
+const statusStepInput = document.getElementById("statusStepInput");
+const dateDialog = document.getElementById("dateDialog");
+const dateCloseBtn = document.getElementById("dateCloseBtn");
+const dateSaveBtn = document.getElementById("dateSaveBtn");
+const dateClearBtn = document.getElementById("dateClearBtn");
+const dateSubTitle = document.getElementById("dateSubTitle");
+const dateMonthInput = document.getElementById("dateMonthInput");
+const dateDayInput = document.getElementById("dateDayInput");
+const surfaceDialog = document.getElementById("surfaceDialog");
+const surfaceCloseBtn = document.getElementById("surfaceCloseBtn");
+const surfaceSaveBtn = document.getElementById("surfaceSaveBtn");
+const surfaceClearBtn = document.getElementById("surfaceClearBtn");
+const surfaceSubTitle = document.getElementById("surfaceSubTitle");
+const surfacePresetInput = document.getElementById("surfacePresetInput");
+const surfaceCustomInput = document.getElementById("surfaceCustomInput");
 
 init();
 
@@ -100,6 +160,147 @@ function bindEvents() {
   document.getElementById("saveBtn").addEventListener("click", exportXlsx);
   document.getElementById("importInput").addEventListener("change", importXlsx);
   backTopBtn.addEventListener("click", scrollToTopRow);
+  if (attachmentUploadInput) {
+    attachmentUploadInput.accept = UPLOAD_ACCEPT;
+    attachmentUploadInput.addEventListener("change", (event) => {
+      void uploadAttachmentFromInput(event);
+    });
+  }
+  if (attachmentCloseBtn) {
+    attachmentCloseBtn.addEventListener("click", closeAttachmentDialog);
+  }
+  if (attachmentDialog) {
+    attachmentDialog.addEventListener("click", (event) => {
+      if (event.target === attachmentDialog) closeAttachmentDialog();
+    });
+  }
+  if (previewCloseBtn) {
+    previewCloseBtn.addEventListener("click", closePreviewDialog);
+  }
+  if (previewDialog) {
+    previewDialog.addEventListener("click", (event) => {
+      if (event.target === previewDialog) closePreviewDialog();
+    });
+  }
+  initProcessTimeOptions();
+  if (processTimeCloseBtn) {
+    processTimeCloseBtn.addEventListener("click", closeProcessTimeDialog);
+  }
+  if (processTimeSaveBtn) {
+    processTimeSaveBtn.addEventListener("click", () => {
+      void saveProcessTimeDialog();
+    });
+  }
+  if (processTimeClearBtn) {
+    processTimeClearBtn.addEventListener("click", () => {
+      if (processProgramInput) processProgramInput.value = "";
+      if (processNameInput) processNameInput.value = "";
+      if (processMinutesInput) processMinutesInput.value = "";
+      if (processMachineInput) processMachineInput.value = "";
+      if (processLatheInput) processLatheInput.value = "";
+    });
+  }
+  if (processTimeDialog) {
+    processTimeDialog.addEventListener("click", (event) => {
+      if (event.target === processTimeDialog) closeProcessTimeDialog();
+    });
+  }
+  initStatusOptions();
+  if (statusCloseBtn) {
+    statusCloseBtn.addEventListener("click", closeStatusDialog);
+  }
+  if (statusSaveBtn) {
+    statusSaveBtn.addEventListener("click", () => {
+      void saveStatusDialog();
+    });
+  }
+  if (statusInput) {
+    statusInput.addEventListener("change", syncStatusStepVisibility);
+  }
+  if (statusDialog) {
+    statusDialog.addEventListener("click", (event) => {
+      if (event.target === statusDialog) closeStatusDialog();
+    });
+  }
+  initDateOptions();
+  if (dateCloseBtn) {
+    dateCloseBtn.addEventListener("click", closeDateDialog);
+  }
+  if (dateSaveBtn) {
+    dateSaveBtn.addEventListener("click", () => {
+      void saveDateDialog();
+    });
+  }
+  if (dateClearBtn) {
+    dateClearBtn.addEventListener("click", () => {
+      void clearDateDialogValue();
+    });
+  }
+  if (dateMonthInput) {
+    dateMonthInput.addEventListener("change", () => {
+      const m = Number(dateMonthInput.value || 0);
+      rebuildDateDayOptions(getDaysInMonthForCurrentYear(m));
+      if (dateDayInput && Number(dateDayInput.value || 0) > getDaysInMonthForCurrentYear(m)) {
+        dateDayInput.value = "";
+      }
+    });
+  }
+  if (dateDayInput) {
+    dateDayInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void saveDateDialog();
+      }
+    });
+  }
+  if (dateDialog) {
+    dateDialog.addEventListener("click", (event) => {
+      if (event.target === dateDialog) closeDateDialog();
+    });
+  }
+  initSurfaceOptions();
+  if (surfaceCloseBtn) {
+    surfaceCloseBtn.addEventListener("click", closeSurfaceDialog);
+  }
+  if (surfaceSaveBtn) {
+    surfaceSaveBtn.addEventListener("click", () => {
+      void saveSurfaceDialog();
+    });
+  }
+  if (surfaceClearBtn) {
+    surfaceClearBtn.addEventListener("click", () => {
+      void clearSurfaceDialogValue();
+    });
+  }
+  if (surfacePresetInput) {
+    surfacePresetInput.addEventListener("change", () => {
+      if (surfaceCustomInput && surfacePresetInput.value) surfaceCustomInput.value = "";
+    });
+  }
+  if (surfaceCustomInput) {
+    surfaceCustomInput.addEventListener("input", () => {
+      if (surfacePresetInput && surfaceCustomInput.value.trim()) surfacePresetInput.value = "";
+    });
+    surfaceCustomInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void saveSurfaceDialog();
+      }
+    });
+  }
+  if (surfaceDialog) {
+    surfaceDialog.addEventListener("click", (event) => {
+      if (event.target === surfaceDialog) closeSurfaceDialog();
+    });
+  }
+  if (processMinutesInput) {
+    processMinutesInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void saveProcessTimeDialog();
+      }
+    });
+  }
   if (reconnectBtn) {
     reconnectBtn.addEventListener("click", () => {
       void tryReconnectRemote(true);
@@ -156,6 +357,36 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && previewDialog && !previewDialog.hidden) {
+      e.preventDefault();
+      closePreviewDialog();
+      return;
+    }
+    if (e.key === "Escape" && processTimeDialog && !processTimeDialog.hidden) {
+      e.preventDefault();
+      closeProcessTimeDialog();
+      return;
+    }
+    if (e.key === "Escape" && statusDialog && !statusDialog.hidden) {
+      e.preventDefault();
+      closeStatusDialog();
+      return;
+    }
+    if (e.key === "Escape" && dateDialog && !dateDialog.hidden) {
+      e.preventDefault();
+      closeDateDialog();
+      return;
+    }
+    if (e.key === "Escape" && surfaceDialog && !surfaceDialog.hidden) {
+      e.preventDefault();
+      closeSurfaceDialog();
+      return;
+    }
+    if (e.key === "Escape" && attachmentDialog && !attachmentDialog.hidden) {
+      e.preventDefault();
+      closeAttachmentDialog();
+      return;
+    }
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
       e.preventDefault();
       void addBlankRow();
@@ -278,6 +509,8 @@ function createEmptyOrder() {
     name: "",
     qty: "",
     programNo: "未出",
+    processName: "",
+    processStepCurrent: "",
     plannedHours: "",
     machine: "",
     lathe: "",
@@ -322,8 +555,9 @@ async function quickAdd() {
     dueDate,
     status: "待排产",
     programNo: "未出",
-    startTime: new Date().toISOString().slice(0, 16).replace("T", " "),
+    startTime: new Date().toISOString().slice(0, 10),
   };
+  order.processStepCurrent = "";
   order.isDelayed = calcDelayed(order);
 
   orders.push(order);
@@ -359,27 +593,30 @@ function render() {
     tr.appendChild(textCell(idx + 1));
     tr.appendChild(editCell(o, "orderNo"));
     tr.appendChild(editCell(o, "customer"));
-    tr.appendChild(editCell(o, "name"));
-    tr.appendChild(editCell(o, "drawingNo"));
+    tr.appendChild(previewEditCell(o, "name"));
+    tr.appendChild(previewEditCell(o, "drawingNo"));
     tr.appendChild(editCell(o, "qty"));
-    tr.appendChild(selectCell(o, "programNo", ["已出", "未出"]));
-    tr.appendChild(editCell(o, "plannedHours"));
-    tr.appendChild(selectCell(o, "machine", MACHINES));
-    tr.appendChild(selectCell(o, "lathe", ["是", "否"]));
-    tr.appendChild(editCell(o, "surface"));
-    tr.appendChild(selectCell(o, "status", STATUS));
-    tr.appendChild(editCell(o, "startTime"));
-    tr.appendChild(editCell(o, "dueDate"));
-    tr.appendChild(textCell(o.isDelayed || ""));
+    tr.appendChild(processTimeCell(o));
+    tr.appendChild(surfaceCell(o));
+    tr.appendChild(statusCell(o));
+    tr.appendChild(dateCell(o, "startTime", "开始时间"));
+    tr.appendChild(dateCell(o, "dueDate", "交期"));
     tr.appendChild(editCell(o, "note"));
 
     const opTd = document.createElement("td");
+    const fileBtn = document.createElement("button");
+    fileBtn.className = "action-btn-secondary";
+    fileBtn.textContent = "图纸";
+    fileBtn.addEventListener("click", () => {
+      void openAttachmentDialog(o.id);
+    });
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
     delBtn.textContent = "删除";
     delBtn.addEventListener("click", () => {
       void removeOrder(o.id);
     });
+    opTd.appendChild(fileBtn);
     opTd.appendChild(delBtn);
     tr.appendChild(opTd);
 
@@ -390,6 +627,7 @@ function render() {
   queueStickyColumnOffsets();
   renderKanban(rows);
   renderKpis(orders);
+  void warmupAttachmentStates(rows);
 }
 
 function renderKanban(rows) {
@@ -466,8 +704,11 @@ function createKanbanCard(order, displayOrderNo = "") {
   meta.className = "kanban-meta";
   meta.appendChild(createKanbanTag(order.customer || "未填客户"));
   if (order.machine) meta.appendChild(createKanbanTag(order.machine));
+  if (order.status === "加工中" && normalizeStepValue(order.processStepCurrent)) {
+    meta.appendChild(createKanbanTag(`加工中第${normalizeStepValue(order.processStepCurrent)}序`));
+  }
   if (order.dueDate) meta.appendChild(createKanbanTag(`交期 ${toMonthDay(order.dueDate)}`));
-  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`工时 ${order.plannedHours}`));
+  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`工时 ${order.plannedHours}分`));
   if (order.isDelayed === "延期") meta.appendChild(createKanbanTag("延期", true));
 
   card.appendChild(top);
@@ -522,6 +763,583 @@ function editCell(order, key, type = "text") {
   return td;
 }
 
+function previewEditCell(order, key, type = "text") {
+  const td = document.createElement("td");
+  td.dataset.key = key;
+  td.dataset.id = order.id;
+  const rawValue = order[key] ?? "";
+  td.dataset.raw = String(rawValue);
+
+  const wrap = document.createElement("div");
+  wrap.className = "cell-with-action";
+  const text = document.createElement("span");
+  text.className = "cell-main-text";
+  text.classList.add("preview-text-link");
+  if (attachmentStateByLineId.get(order.id) === true) {
+    text.classList.add("preview-text-has-file");
+  }
+  text.textContent = formatDisplayValue(key, rawValue);
+  text.title = "点击预览图纸";
+  text.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void openLinePreview(order.id);
+  });
+  text.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  wrap.appendChild(text);
+  td.appendChild(wrap);
+
+  td.addEventListener("dblclick", () => beginEdit(td, type));
+  return td;
+}
+
+function processTimeCell(order) {
+  const td = document.createElement("td");
+  td.dataset.key = "plannedHours";
+  td.dataset.id = order.id;
+  td.className = "process-time-cell";
+  td.textContent = formatProcessTimeLabel(order);
+  td.title = "点击设置工序和工时（分钟）";
+  td.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openProcessTimeDialog(order.id);
+  });
+  return td;
+}
+
+function formatProcessTimeLabel(order) {
+  const minutes = normalizeValue("plannedHours", order.plannedHours);
+  const process = String(order.processName || "").trim();
+  const processText = process ? `共${process}序` : "";
+  const parts = [];
+  if (order.programNo) parts.push(`程序单${order.programNo}`);
+  if (processText) parts.push(processText);
+  if (minutes !== "") parts.push(`${minutes} 分钟`);
+  if (order.machine) parts.push(order.machine);
+  if (order.lathe) parts.push(`车床${order.lathe}`);
+  return parts.join(" · ");
+}
+
+function statusCell(order) {
+  const td = document.createElement("td");
+  td.dataset.key = "status";
+  td.dataset.id = order.id;
+  td.className = "status-cell";
+  td.textContent = formatStatusLabel(order);
+  td.title = "点击设置状态";
+  td.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openStatusDialog(order.id);
+  });
+  return td;
+}
+
+function dateCell(order, key, label) {
+  const td = document.createElement("td");
+  td.dataset.key = key;
+  td.dataset.id = order.id;
+  td.className = "date-cell";
+  td.textContent = formatDisplayValue(key, order[key] ?? "");
+  td.title = `点击设置${label}（月/日）`;
+  td.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openDateDialog(order.id, key, label);
+  });
+  return td;
+}
+
+function surfaceCell(order) {
+  const td = document.createElement("td");
+  td.dataset.key = "surface";
+  td.dataset.id = order.id;
+  td.className = "surface-cell";
+  td.textContent = String(order.surface || "");
+  td.title = "点击设置表面处理";
+  td.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openSurfaceDialog(order.id);
+  });
+  return td;
+}
+
+function formatStatusLabel(order) {
+  const base = String(order.status || "").trim() || "待排产";
+  if (base !== "加工中") return base;
+  const step = normalizeStepValue(order.processStepCurrent);
+  return step ? `加工中第${step}序` : "加工中";
+}
+
+function initProcessTimeOptions() {
+  if (processProgramInput) {
+    processProgramInput.innerHTML = "";
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "请选择";
+    processProgramInput.appendChild(blank);
+    ["已出", "未出"].forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      processProgramInput.appendChild(option);
+    });
+  }
+  if (!processNameInput) return;
+  processNameInput.innerHTML = "";
+  PROCESS_OPTIONS.forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name ? `共${name}序` : "请选择工序";
+    processNameInput.appendChild(option);
+  });
+  if (processMachineInput) {
+    processMachineInput.innerHTML = "";
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "请选择机台";
+    processMachineInput.appendChild(blank);
+    MACHINES.forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      processMachineInput.appendChild(option);
+    });
+  }
+  if (processLatheInput) {
+    processLatheInput.innerHTML = "";
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "请选择";
+    processLatheInput.appendChild(blank);
+    ["是", "否"].forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      processLatheInput.appendChild(option);
+    });
+  }
+}
+
+function initStatusOptions() {
+  if (!statusInput) return;
+  statusInput.innerHTML = "";
+  STATUS.forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    statusInput.appendChild(option);
+  });
+}
+
+function initDateOptions() {
+  if (!dateMonthInput) return;
+  dateMonthInput.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "请选择";
+  dateMonthInput.appendChild(blank);
+  for (let i = 1; i <= 12; i += 1) {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${i}月`;
+    dateMonthInput.appendChild(opt);
+  }
+  rebuildDateDayOptions(31);
+}
+
+function initSurfaceOptions() {
+  if (!surfacePresetInput) return;
+  surfacePresetInput.innerHTML = "";
+  SURFACE_OPTIONS.forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name || "请选择";
+    surfacePresetInput.appendChild(option);
+  });
+}
+
+function rebuildDateDayOptions(dayCount = 31) {
+  if (!dateDayInput) return;
+  dateDayInput.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "请选择";
+  dateDayInput.appendChild(blank);
+  const max = Math.max(28, Math.min(31, Number(dayCount) || 31));
+  for (let i = 1; i <= max; i += 1) {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${i}日`;
+    dateDayInput.appendChild(opt);
+  }
+}
+
+function getDaysInMonthForCurrentYear(month) {
+  const m = Number(month);
+  if (!Number.isFinite(m) || m < 1 || m > 12) return 31;
+  const y = new Date().getFullYear();
+  return new Date(y, m, 0).getDate();
+}
+
+function openDateDialog(orderId, key, label) {
+  const order = orders.find((x) => x.id === orderId);
+  if (!order || !dateDialog) return;
+  dateEditingOrderId = orderId;
+  dateEditingKey = key;
+
+  const normalized = normalizeDateOnlyInput(order[key] || "");
+  let month = "";
+  let day = "";
+  if (normalized) {
+    const m = normalized.match(/^\d{4}-(\d{2})-(\d{2})$/);
+    if (m) {
+      month = String(Number(m[1]));
+      day = String(Number(m[2]));
+    }
+  }
+
+  if (dateMonthInput) dateMonthInput.value = month;
+  rebuildDateDayOptions(getDaysInMonthForCurrentYear(month));
+  if (dateDayInput) dateDayInput.value = day;
+
+  if (dateSubTitle) {
+    const parts = [];
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    parts.push(`设置${label}（仅月/日）`);
+    dateSubTitle.textContent = parts.join(" · ");
+  }
+  dateDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeDateDialog() {
+  if (!dateDialog) return;
+  dateDialog.hidden = true;
+  dateEditingOrderId = "";
+  dateEditingKey = "";
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (previewDialog && !previewDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (processTimeDialog && !processTimeDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (statusDialog && !statusDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+async function saveDateDialog() {
+  if (!dateEditingOrderId || !dateEditingKey) return;
+  const order = orders.find((x) => x.id === dateEditingOrderId);
+  if (!order) {
+    closeDateDialog();
+    return;
+  }
+  const month = Number(dateMonthInput?.value || 0);
+  const day = Number(dateDayInput?.value || 0);
+  if (!month || !day) {
+    alert("请选择月份和日期。");
+    return;
+  }
+  const maxDay = getDaysInMonthForCurrentYear(month);
+  if (day > maxDay) {
+    alert("日期无效，请重新选择。");
+    return;
+  }
+  const year = new Date().getFullYear();
+  const next = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  if (order[dateEditingKey] !== next) {
+    order[dateEditingKey] = next;
+    if (dateEditingKey === "dueDate") {
+      order.isDelayed = calcDelayed(order);
+    }
+    await persistOrders({ changed: [order] });
+    render();
+  }
+  closeDateDialog();
+}
+
+async function clearDateDialogValue() {
+  if (!dateEditingOrderId || !dateEditingKey) return;
+  const order = orders.find((x) => x.id === dateEditingOrderId);
+  if (!order) {
+    closeDateDialog();
+    return;
+  }
+  if (order[dateEditingKey] !== "") {
+    order[dateEditingKey] = "";
+    if (dateEditingKey === "dueDate") {
+      order.isDelayed = calcDelayed(order);
+    }
+    await persistOrders({ changed: [order] });
+    render();
+  }
+  closeDateDialog();
+}
+
+function openSurfaceDialog(orderId) {
+  const order = orders.find((x) => x.id === orderId);
+  if (!order || !surfaceDialog) return;
+  surfaceEditingOrderId = orderId;
+  const current = String(order.surface || "").trim();
+  const existsInPreset = SURFACE_OPTIONS.includes(current);
+  if (surfacePresetInput) surfacePresetInput.value = existsInPreset ? current : "";
+  if (surfaceCustomInput) surfaceCustomInput.value = existsInPreset ? "" : current;
+  if (surfaceSubTitle) {
+    const parts = [];
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    surfaceSubTitle.textContent = parts.join(" · ") || "设置表面处理";
+  }
+  surfaceDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+  if (surfaceCustomInput) surfaceCustomInput.focus();
+}
+
+function closeSurfaceDialog() {
+  if (!surfaceDialog) return;
+  surfaceDialog.hidden = true;
+  surfaceEditingOrderId = "";
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (previewDialog && !previewDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (processTimeDialog && !processTimeDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (statusDialog && !statusDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (dateDialog && !dateDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+async function saveSurfaceDialog() {
+  if (!surfaceEditingOrderId) return;
+  const order = orders.find((x) => x.id === surfaceEditingOrderId);
+  if (!order) {
+    closeSurfaceDialog();
+    return;
+  }
+  const custom = String(surfaceCustomInput?.value || "").trim();
+  const preset = String(surfacePresetInput?.value || "").trim();
+  const next = custom || preset;
+  if (String(order.surface || "") !== next) {
+    order.surface = next;
+    await persistOrders({ changed: [order] });
+    render();
+  }
+  closeSurfaceDialog();
+}
+
+async function clearSurfaceDialogValue() {
+  if (!surfaceEditingOrderId) return;
+  const order = orders.find((x) => x.id === surfaceEditingOrderId);
+  if (!order) {
+    closeSurfaceDialog();
+    return;
+  }
+  if (String(order.surface || "") !== "") {
+    order.surface = "";
+    await persistOrders({ changed: [order] });
+    render();
+  }
+  closeSurfaceDialog();
+}
+
+function getMaxProcessStep(order) {
+  const max = Number(String(order?.processName || "").trim());
+  if (Number.isFinite(max) && max >= 1) return Math.min(6, Math.floor(max));
+  return 6;
+}
+
+function normalizeStepValue(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  const v = Math.floor(n);
+  if (v < 1 || v > 6) return "";
+  return String(v);
+}
+
+function rebuildStatusStepOptions(maxStep = 6) {
+  if (!statusStepInput) return;
+  statusStepInput.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "请选择";
+  statusStepInput.appendChild(blank);
+  for (let i = 1; i <= maxStep; i += 1) {
+    const option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = `第${i}序`;
+    statusStepInput.appendChild(option);
+  }
+}
+
+function syncStatusStepVisibility() {
+  if (!statusInput || !statusStepWrap) return;
+  const show = statusInput.value === "加工中";
+  statusStepWrap.style.display = show ? "grid" : "none";
+}
+
+function openStatusDialog(orderId) {
+  const order = orders.find((x) => x.id === orderId);
+  if (!order || !statusDialog) return;
+  statusEditingOrderId = orderId;
+  if (statusInput) statusInput.value = order.status || "待排产";
+  const maxStep = getMaxProcessStep(order);
+  rebuildStatusStepOptions(maxStep);
+  const normalizedStep = normalizeStepValue(order.processStepCurrent);
+  const clampedStep = normalizedStep && Number(normalizedStep) <= maxStep ? normalizedStep : "";
+  if (statusStepInput) statusStepInput.value = clampedStep;
+  syncStatusStepVisibility();
+  if (statusSubTitle) {
+    const parts = [];
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    parts.push(`最多第${maxStep}序`);
+    statusSubTitle.textContent = parts.join(" · ");
+  }
+  statusDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeStatusDialog() {
+  if (!statusDialog) return;
+  statusDialog.hidden = true;
+  statusEditingOrderId = "";
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (previewDialog && !previewDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (processTimeDialog && !processTimeDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+async function saveStatusDialog() {
+  if (!statusEditingOrderId) return;
+  const order = orders.find((x) => x.id === statusEditingOrderId);
+  if (!order) {
+    closeStatusDialog();
+    return;
+  }
+  const nextStatus = String(statusInput?.value || "待排产").trim() || "待排产";
+  const maxStep = getMaxProcessStep(order);
+  let nextStep = "";
+  if (nextStatus === "加工中") {
+    const rawStep = normalizeStepValue(statusStepInput?.value || "");
+    if (!rawStep) {
+      alert("请选择加工序号。");
+      return;
+    }
+    if (Number(rawStep) > maxStep) {
+      alert(`当前工序总数为 ${maxStep}，加工序号不能超过第${maxStep}序。`);
+      return;
+    }
+    nextStep = rawStep;
+  }
+  const changed = order.status !== nextStatus || String(order.processStepCurrent || "") !== nextStep;
+  order.status = nextStatus;
+  order.processStepCurrent = nextStep;
+  if (changed) {
+    await persistOrders({ changed: [order] });
+    render();
+  }
+  closeStatusDialog();
+}
+
+function openProcessTimeDialog(orderId) {
+  const order = orders.find((x) => x.id === orderId);
+  if (!order || !processTimeDialog) return;
+  processTimeEditingOrderId = orderId;
+  if (processProgramInput) processProgramInput.value = order.programNo || "未出";
+  if (processNameInput) processNameInput.value = order.processName || "";
+  if (processMinutesInput) processMinutesInput.value = order.plannedHours === "" ? "" : String(order.plannedHours);
+  if (processMachineInput) processMachineInput.value = order.machine || "";
+  if (processLatheInput) processLatheInput.value = order.lathe || "";
+  if (processTimeSubTitle) {
+    const parts = [];
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    processTimeSubTitle.textContent = parts.join(" · ") || "设置工序与工时";
+  }
+  processTimeDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+  if (processMinutesInput) processMinutesInput.focus();
+}
+
+function closeProcessTimeDialog() {
+  if (!processTimeDialog) return;
+  processTimeDialog.hidden = true;
+  processTimeEditingOrderId = "";
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (previewDialog && !previewDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+async function saveProcessTimeDialog() {
+  if (!processTimeEditingOrderId) return;
+  const target = orders.find((x) => x.id === processTimeEditingOrderId);
+  if (!target) {
+    closeProcessTimeDialog();
+    return;
+  }
+  const nextProgramNo = String(processProgramInput?.value || "").trim();
+  const nextProcess = String(processNameInput?.value || "").trim();
+  const minuteRaw = String(processMinutesInput?.value || "").trim();
+  const nextMachine = String(processMachineInput?.value || "").trim();
+  const nextLathe = String(processLatheInput?.value || "").trim();
+  const nextMinutes = normalizeValue("plannedHours", minuteRaw);
+  if (minuteRaw !== "" && nextMinutes === "") {
+    alert("工时格式无效，请输入整数分钟。");
+    return;
+  }
+  const prevStep = String(target.processStepCurrent || "");
+  let changed =
+    target.processName !== nextProcess ||
+    target.plannedHours !== nextMinutes ||
+    String(target.programNo || "") !== nextProgramNo ||
+    String(target.machine || "") !== nextMachine ||
+    String(target.lathe || "") !== nextLathe;
+  target.programNo = nextProgramNo;
+  target.processName = nextProcess;
+  target.plannedHours = nextMinutes;
+  target.machine = nextMachine;
+  target.lathe = nextLathe;
+  const maxStep = getMaxProcessStep(target);
+  const currentStep = normalizeStepValue(target.processStepCurrent);
+  if (currentStep && Number(currentStep) > maxStep) {
+    target.processStepCurrent = String(maxStep);
+  }
+  if (String(target.processStepCurrent || "") !== prevStep) changed = true;
+  if (changed) {
+    await persistOrders({ changed: [target] });
+    render();
+  }
+  closeProcessTimeDialog();
+}
+
 function beginEdit(td, type = "text") {
   if (td.classList.contains("editing")) return;
   const oldValue = td.dataset.raw ?? td.textContent;
@@ -560,7 +1378,7 @@ function beginEdit(td, type = "text") {
     }
     if (e.key === "Escape") {
       td.classList.remove("editing");
-      td.textContent = oldValue;
+      render();
     }
   });
 }
@@ -604,7 +1422,7 @@ async function updateOrder(id, key, value) {
 
   const normalized = normalizeValue(key, value);
   if ((key === "dueDate" || key === "startTime") && (value || "").trim() !== "" && normalized === "") {
-    alert(key === "dueDate" ? "交期格式无效，请输入 YYYY-MM-DD 或 M-D（如 2-20）" : "开始时间格式无效，请输入 YYYY-MM-DD HH:mm 或 M-D H:mm");
+    alert(key === "dueDate" ? "交期格式无效，请输入 YYYY-MM-DD 或 M-D（如 2-20）" : "开始时间格式无效，请输入 YYYY-MM-DD 或 M-D（如 2-20）");
     render();
     return;
   }
@@ -621,10 +1439,12 @@ function normalizeValue(key, value) {
   if (key === "qty" || key === "plannedHours") {
     if (value === "") return "";
     const num = Number(value);
-    return Number.isFinite(num) ? num : "";
+    if (!Number.isFinite(num)) return "";
+    if (key === "plannedHours") return Math.max(0, Math.round(num));
+    return num;
   }
   if (key === "dueDate") return normalizeDateOnlyInput(value);
-  if (key === "startTime") return normalizeStartTimeInput(value);
+  if (key === "startTime") return normalizeDateOnlyInput(value);
   if (key === "orderNo") return normalizeOrderNoInput(value);
   return (value || "").trim();
 }
@@ -675,7 +1495,9 @@ function getFilteredOrders() {
   return orders.filter((o, idx, arr) => {
     const qOk =
       !filters.q ||
-      [o.orderNo, o.drawingNo, o.customer, o.name, o.note].some((x) => (x || "").toString().toLowerCase().includes(filters.q));
+      [o.orderNo, o.drawingNo, o.customer, o.name, o.processName, o.note].some((x) =>
+        (x || "").toString().toLowerCase().includes(filters.q)
+      );
     const effectiveOrderNo = getEffectiveOrderNoForMonthFilter(arr, idx);
     const monthOk = !filters.month || getMonthFromOrderNo(effectiveOrderNo) === filters.month;
     const mOk = !filters.machine || o.machine === filters.machine;
@@ -895,6 +1717,12 @@ async function tryReconnectRemote(manual = false) {
 }
 
 function toDbRow(order, updatedAtOverride = "") {
+  const normalizedProcess = String(order.processName || "").trim();
+  const normalizedStep = order.status === "加工中" ? normalizeStepValue(order.processStepCurrent) : "";
+  const mergedNote = mergeOrderMetaIntoNote(order.note || "", {
+    processName: normalizedProcess,
+    processStepCurrent: normalizedStep,
+  });
   return {
     id: order.id,
     order_no: order.orderNo || "",
@@ -911,7 +1739,7 @@ function toDbRow(order, updatedAtOverride = "") {
     start_time: toDbStartTime(order.startTime),
     due_date: toDbDueDate(order.dueDate),
     is_delayed: order.isDelayed || "",
-    note: order.note || "",
+    note: mergedNote,
     created_at: order.createdAt || updatedAtOverride || new Date().toISOString(),
     updated_at: updatedAtOverride || new Date().toISOString(),
   };
@@ -919,6 +1747,7 @@ function toDbRow(order, updatedAtOverride = "") {
 
 function fromDbRow(row) {
   const o = createEmptyOrder();
+  const parsedNote = splitNoteAndMeta(row.note || "");
   o.id = row.id || crypto.randomUUID();
   o.createdAt = row.created_at || row.updated_at || new Date().toISOString();
   o.orderNo = row.order_no || "";
@@ -934,7 +1763,9 @@ function fromDbRow(row) {
   o.status = row.status || "待排产";
   o.startTime = formatStartTimeFromDb(row.start_time);
   o.dueDate = formatDueDateFromDb(row.due_date);
-  o.note = row.note || "";
+  o.processName = parsedNote.processName || "";
+  o.processStepCurrent = parsedNote.processStepCurrent || "";
+  o.note = parsedNote.note || "";
   o.updatedAt = row.updated_at || "";
   o.isDelayed = calcDelayed(o);
   return o;
@@ -1027,6 +1858,424 @@ function syncReconnectButton() {
   reconnectBtn.style.display = remoteOnline ? "none" : "inline-flex";
 }
 
+function closeAttachmentDialog() {
+  if (previewDialog && !previewDialog.hidden) closePreviewDialog();
+  if (!attachmentDialog) return;
+  attachmentDialog.hidden = true;
+  document.body.style.overflow = "";
+  attachmentPanelOrderId = "";
+  attachmentItems = [];
+  attachmentLoading = false;
+}
+
+function closePreviewDialog() {
+  if (!previewDialog) return;
+  previewDialog.hidden = true;
+  if (previewBody) previewBody.innerHTML = "";
+  if (previewObjectUrl) {
+    URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = "";
+  }
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+async function openLinePreview(orderId) {
+  const order = orders.find((x) => x.id === orderId);
+  if (!order) return;
+  if (!UPLOAD_API_BASE) {
+    alert("未配置上传服务地址，请先设置 config.js 的 UPLOAD_API_BASE。");
+    return;
+  }
+  try {
+    const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
+    const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+    setAttachmentState(orderId, items.length > 0);
+    if (items.length === 0) {
+      alert("该零件暂无图纸，请先上传。");
+      await openAttachmentDialog(orderId);
+      return;
+    }
+    const previewable = items.find((item) => isPreviewableFile(item));
+    if (!previewable) {
+      alert("当前图纸类型不支持在线预览，请在附件列表中下载查看。");
+      await openAttachmentDialog(orderId);
+      return;
+    }
+    await previewOrderFile(previewable, order);
+  } catch (e) {
+    const detail = e?.message || "未知错误";
+    alert(`预览失败：${detail}`);
+  }
+}
+
+async function openAttachmentDialog(orderId) {
+  const order = orders.find((x) => x.id === orderId);
+  if (!order || !attachmentDialog) return;
+  attachmentPanelOrderId = orderId;
+  attachmentItems = [];
+  attachmentLoading = true;
+  syncAttachmentHeader(order);
+  renderAttachmentList();
+  attachmentDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+  await loadOrderFiles(orderId);
+}
+
+function syncAttachmentHeader(order) {
+  if (attachmentTitle) attachmentTitle.textContent = "零件图纸";
+  if (attachmentSubTitle) {
+    const parts = [];
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    attachmentSubTitle.textContent = parts.join(" · ") || "未填写订单基础信息";
+  }
+  if (attachmentHint) {
+    attachmentHint.textContent = `支持类型: ${UPLOAD_ACCEPT}，单文件上限 ${UPLOAD_MAX_MB}MB`;
+  }
+}
+
+function renderAttachmentList() {
+  if (!attachmentList) return;
+  attachmentList.innerHTML = "";
+
+  if (!UPLOAD_API_BASE) {
+    const empty = document.createElement("div");
+    empty.className = "attachment-empty";
+    empty.textContent = "未配置上传服务地址，请在 config.js 中设置 UPLOAD_API_BASE。";
+    attachmentList.appendChild(empty);
+    return;
+  }
+
+  if (attachmentLoading) {
+    const empty = document.createElement("div");
+    empty.className = "attachment-empty";
+    empty.textContent = "附件加载中...";
+    attachmentList.appendChild(empty);
+    return;
+  }
+
+  if (attachmentItems.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "attachment-empty";
+    empty.textContent = "暂无附件";
+    attachmentList.appendChild(empty);
+    return;
+  }
+
+  attachmentItems.forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "attachment-item";
+
+    const meta = document.createElement("div");
+    meta.className = "attachment-meta";
+    const name = document.createElement("div");
+    name.className = "attachment-name";
+    name.textContent = getAttachmentName(item);
+    const desc = document.createElement("div");
+    desc.className = "attachment-desc";
+    desc.textContent = `${formatFileSize(item.size_bytes || item.size || 0)} · ${formatDateTime(item.created_at || item.createdAt || "")}`;
+    meta.appendChild(name);
+    meta.appendChild(desc);
+
+    const actions = document.createElement("div");
+    actions.className = "attachment-actions";
+    const previewBtn = document.createElement("button");
+    previewBtn.type = "button";
+    previewBtn.className = "action-btn-secondary";
+    previewBtn.textContent = "预览";
+    previewBtn.addEventListener("click", () => {
+      void previewOrderFile(item);
+    });
+    const downloadBtn = document.createElement("button");
+    downloadBtn.type = "button";
+    downloadBtn.className = "action-btn-secondary";
+    downloadBtn.textContent = "下载";
+    downloadBtn.addEventListener("click", () => {
+      void downloadOrderFile(item);
+    });
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "action-btn";
+    deleteBtn.textContent = "删除";
+    deleteBtn.addEventListener("click", () => {
+      void deleteOrderFile(item);
+    });
+    actions.appendChild(previewBtn);
+    actions.appendChild(downloadBtn);
+    actions.appendChild(deleteBtn);
+
+    row.appendChild(meta);
+    row.appendChild(actions);
+    attachmentList.appendChild(row);
+  });
+}
+
+async function loadOrderFiles(orderId) {
+  if (!orderId) return;
+  if (!UPLOAD_API_BASE) {
+    attachmentLoading = false;
+    renderAttachmentList();
+    return;
+  }
+  attachmentLoading = true;
+  renderAttachmentList();
+  try {
+    const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
+    attachmentItems = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+    setAttachmentState(orderId, attachmentItems.length > 0);
+  } catch (e) {
+    const detail = e?.message || "未知错误";
+    alert(`加载附件失败：${detail}`);
+    attachmentItems = [];
+  } finally {
+    attachmentLoading = false;
+    renderAttachmentList();
+  }
+}
+
+async function uploadAttachmentFromInput(event) {
+  const file = event?.target?.files?.[0];
+  event.target.value = "";
+  if (!file || !attachmentPanelOrderId) return;
+  if (!UPLOAD_API_BASE) {
+    alert("未配置上传服务地址，请先设置 config.js 的 UPLOAD_API_BASE。");
+    return;
+  }
+  const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
+  if (file.size > maxBytes) {
+    alert(`文件过大，当前限制 ${UPLOAD_MAX_MB}MB。`);
+    return;
+  }
+  const ext = `.${(file.name.split(".").pop() || "").toLowerCase()}`;
+  const allowList = UPLOAD_ACCEPT.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  if (allowList.length > 0 && !allowList.includes(ext)) {
+    alert(`文件类型不支持：${ext || "未知"}。`);
+    return;
+  }
+
+  try {
+    const form = new FormData();
+    const order = orders.find((x) => x.id === attachmentPanelOrderId);
+    form.append("orderId", attachmentPanelOrderId);
+    form.append("lineId", attachmentPanelOrderId);
+    form.append("orderNo", order?.orderNo || "");
+    form.append("drawingNo", order?.drawingNo || "");
+    form.append("partName", order?.name || "");
+    form.append("file", file);
+    await apiFetchJson("/api/files/upload", { method: "POST", body: form });
+    setAttachmentState(attachmentPanelOrderId, true);
+    await loadOrderFiles(attachmentPanelOrderId);
+  } catch (e) {
+    const detail = e?.message || "未知错误";
+    alert(`上传失败：${detail}`);
+  }
+}
+
+async function deleteOrderFile(item) {
+  const id = item?.id;
+  if (!id) return;
+  if (!confirm(`确认删除附件“${getAttachmentName(item)}”吗？`)) return;
+  try {
+    await apiFetchJson(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
+    attachmentItems = attachmentItems.filter((x) => x.id !== id);
+    setAttachmentState(attachmentPanelOrderId, attachmentItems.length > 0);
+    renderAttachmentList();
+  } catch (e) {
+    const detail = e?.message || "未知错误";
+    alert(`删除失败：${detail}`);
+  }
+}
+
+async function downloadOrderFile(item) {
+  const id = item?.id;
+  if (!id) return;
+  try {
+    const blob = await apiFetchBlob(`/api/files/download/${encodeURIComponent(id)}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = getAttachmentName(item);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    const detail = e?.message || "未知错误";
+    alert(`下载失败：${detail}`);
+  }
+}
+
+async function previewOrderFile(item, orderOverride = null) {
+  const id = item?.id;
+  if (!id || !previewDialog || !previewBody) return;
+  const order = orderOverride || orders.find((x) => x.id === attachmentPanelOrderId) || null;
+  if (previewTitle) previewTitle.textContent = "图纸预览";
+  if (previewSubTitle) {
+    const seg = [];
+    if (order?.orderNo) seg.push(`订单号 ${order.orderNo}`);
+    if (order?.drawingNo) seg.push(`图号 ${order.drawingNo}`);
+    seg.push(getAttachmentName(item));
+    previewSubTitle.textContent = seg.join(" · ");
+  }
+  previewBody.innerHTML = `<div class="preview-empty">加载中...</div>`;
+  previewDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+
+  try {
+    if (previewObjectUrl) {
+      URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = "";
+    }
+    const blob = await apiFetchBlob(`/api/files/download/${encodeURIComponent(id)}`);
+    previewObjectUrl = URL.createObjectURL(blob);
+    const kind = getPreviewKind(item, blob.type || "");
+    previewBody.innerHTML = "";
+    if (kind === "image") {
+      const img = document.createElement("img");
+      img.className = "preview-image";
+      img.alt = getAttachmentName(item);
+      img.src = previewObjectUrl;
+      previewBody.appendChild(img);
+      return;
+    }
+    if (kind === "pdf") {
+      const frame = document.createElement("iframe");
+      frame.className = "preview-pdf";
+      frame.src = previewObjectUrl;
+      frame.title = getAttachmentName(item);
+      previewBody.appendChild(frame);
+      return;
+    }
+    previewBody.innerHTML = `<div class="preview-empty">该文件类型暂不支持在线预览，请下载查看。</div>`;
+  } catch (e) {
+    const detail = e?.message || "未知错误";
+    previewBody.innerHTML = `<div class="preview-empty">预览失败：${detail}</div>`;
+  }
+}
+
+function getAttachmentName(item) {
+  return item?.file_name || item?.name || item?.filename || "未命名附件";
+}
+
+function setAttachmentState(orderId, hasFiles) {
+  if (!orderId) return;
+  attachmentStateByLineId.set(orderId, Boolean(hasFiles));
+  syncPreviewCellState(orderId, Boolean(hasFiles));
+}
+
+function syncPreviewCellState(orderId, hasFiles) {
+  const selector = `td[data-id="${orderId}"][data-key="name"] .preview-text-link, td[data-id="${orderId}"][data-key="drawingNo"] .preview-text-link`;
+  const nodes = document.querySelectorAll(selector);
+  nodes.forEach((node) => {
+    if (hasFiles) node.classList.add("preview-text-has-file");
+    else node.classList.remove("preview-text-has-file");
+  });
+}
+
+async function warmupAttachmentStates(rows) {
+  if (!UPLOAD_API_BASE) return;
+  const targets = rows
+    .map((row) => row.id)
+    .filter((id) => id && !attachmentStateByLineId.has(id) && !attachmentStateLoading.has(id))
+    .slice(0, 12);
+  if (targets.length === 0) return;
+  await Promise.all(targets.map((id) => fetchAndSetAttachmentState(id)));
+}
+
+async function fetchAndSetAttachmentState(orderId) {
+  attachmentStateLoading.add(orderId);
+  try {
+    const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
+    const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+    setAttachmentState(orderId, items.length > 0);
+  } catch (_e) {
+    // ignore status warmup failures, keep default style
+  } finally {
+    attachmentStateLoading.delete(orderId);
+  }
+}
+
+function isPreviewableFile(item) {
+  const kind = getPreviewKind(item, String(item?.mime_type || item?.content_type || ""));
+  return kind === "image" || kind === "pdf";
+}
+
+function getPreviewKind(item, mimeRaw = "") {
+  const mime = String(mimeRaw || item?.mime_type || item?.content_type || "").toLowerCase();
+  if (mime.startsWith("image/")) return "image";
+  if (mime.includes("pdf")) return "pdf";
+  const name = getAttachmentName(item).toLowerCase();
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
+  if ([".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"].includes(ext)) return "image";
+  if (ext === ".pdf") return "pdf";
+  return "unknown";
+}
+
+function formatFileSize(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "时间未知";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+async function apiFetchJson(path, options = {}) {
+  const token = await getAccessToken();
+  const headers = new Headers(options.headers || {});
+  if (!(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const resp = await fetch(`${UPLOAD_API_BASE}${path}`, { ...options, headers });
+  if (!resp.ok) throw await parseHttpError(resp);
+  if (resp.status === 204) return null;
+  return await resp.json();
+}
+
+async function apiFetchBlob(path, options = {}) {
+  const token = await getAccessToken();
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const resp = await fetch(`${UPLOAD_API_BASE}${path}`, { ...options, headers });
+  if (!resp.ok) throw await parseHttpError(resp);
+  return await resp.blob();
+}
+
+async function getAccessToken() {
+  if (authSession?.access_token) return authSession.access_token;
+  if (!db?.auth) return "";
+  const { data } = await db.auth.getSession();
+  return data?.session?.access_token || "";
+}
+
+async function parseHttpError(resp) {
+  let message = `HTTP ${resp.status}`;
+  try {
+    const data = await resp.json();
+    message = data?.message || data?.error || message;
+  } catch (_e) {
+    // ignore parse error
+  }
+  return new Error(message);
+}
+
 function exportXlsx() {
   if (!window.XLSX) {
     alert("Excel组件加载失败，请刷新页面后重试");
@@ -1062,6 +2311,7 @@ async function importXlsx(event) {
       const firstSheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
       const titleToKey = Object.fromEntries(XLSX_COLUMNS.map((x) => [x.title, x.key]));
+      titleToKey["预计工时"] = "plannedHours";
       const existingIdByKey = new Map();
       const usedIds = new Set();
       orders.forEach((item) => {
@@ -1080,6 +2330,8 @@ async function importXlsx(event) {
           if (key === "qty" || key === "plannedHours") value = normalizeImportedNumber(value);
           next[key] = value;
         });
+        next.processName = String(next.processName || "").trim();
+        next.plannedHours = normalizeValue("plannedHours", next.plannedHours);
         const key = getOrderImportMatchKey(next);
         const matchedId = key ? existingIdByKey.get(key) : "";
         if (matchedId && !usedIds.has(matchedId)) {
@@ -1160,9 +2412,9 @@ function toFiniteOrNull(v) {
 }
 
 function toDbStartTime(v) {
-  const s = normalizeStartTimeInput(v);
+  const s = normalizeDateOnlyInput(v);
   if (!s) return null;
-  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(s)) return `${s.replace(" ", "T")}:00Z`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00Z`;
   return null;
 }
 
@@ -1174,15 +2426,50 @@ function toDbDueDate(v) {
 function formatStartTimeFromDb(v) {
   if (!v) return "";
   const s = String(v).trim();
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
-  if (m) return `${m[1]} ${m[2]}`;
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
   const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 16).replace("T", " ");
+  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   return s;
 }
 
 function formatDueDateFromDb(v) {
   return normalizeImportedDate(v);
+}
+
+function splitNoteAndMeta(noteValue) {
+  let clean = String(noteValue || "");
+  let processName = "";
+  let processStepCurrent = "";
+
+  clean = clean.replace(/\s*\[STEP:([^\]]*)\]\s*/g, (_all, v) => {
+    processStepCurrent = normalizeStepValue(v || "");
+    return " ";
+  });
+  clean = clean.replace(/\s*\[PROC:([^\]]*)\]\s*/g, (_all, v) => {
+    processName = String(v || "").trim();
+    return " ";
+  });
+  clean = clean.replace(/\s+/g, " ").trim();
+
+  return {
+    note: clean,
+    processName,
+    processStepCurrent,
+  };
+}
+
+function mergeOrderMetaIntoNote(noteValue, { processName = "", processStepCurrent = "" } = {}) {
+  const base = splitNoteAndMeta(noteValue).note;
+  const process = String(processName || "").trim();
+  const step = normalizeStepValue(processStepCurrent);
+  const tail = [];
+  if (step) tail.push(`[STEP:${step}]`);
+  if (process) tail.push(`[PROC:${process}]`);
+  if (!base && tail.length === 0) return "";
+  if (!base) return tail.join(" ");
+  if (tail.length === 0) return base;
+  return `${base} ${tail.join(" ")}`;
 }
 
 function normalizeDateOnlyInput(v) {
