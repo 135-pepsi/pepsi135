@@ -69,6 +69,7 @@ let attachmentLatestTimeByLineId = new Map();
 let dirtyCellMarks = new Set();
 let pendingDeleteOrderId = "";
 let authLoginSubmitting = false;
+let authLoginSubmittingMode = "";
 let authLoginCooldownUntil = 0;
 let authLoginCooldownTimer = 0;
 
@@ -150,8 +151,10 @@ const deleteConfirmCancelBtn = document.getElementById("deleteConfirmCancelBtn")
 const deleteConfirmOkBtn = document.getElementById("deleteConfirmOkBtn");
 const authLoginDialog = document.getElementById("authLoginDialog");
 const authLoginEmailInput = document.getElementById("authLoginEmailInput");
+const authLoginPasswordInput = document.getElementById("authLoginPasswordInput");
 const authLoginCloseBtn = document.getElementById("authLoginCloseBtn");
 const authLoginCancelBtn = document.getElementById("authLoginCancelBtn");
+const authPasswordLoginBtn = document.getElementById("authPasswordLoginBtn");
 const authLoginSubmitBtn = document.getElementById("authLoginSubmitBtn");
 const PROCESS_TIME_TITLE_BASE = "预计工时设置";
 const STATUS_TITLE_BASE = "状态设置";
@@ -515,6 +518,11 @@ function bindEvents() {
   if (authLoginCancelBtn) {
     authLoginCancelBtn.addEventListener("click", closeAuthLoginDialog);
   }
+  if (authPasswordLoginBtn) {
+    authPasswordLoginBtn.addEventListener("click", () => {
+      void submitPasswordLoginFromDialog();
+    });
+  }
   if (authLoginSubmitBtn) {
     authLoginSubmitBtn.addEventListener("click", () => {
       void submitEmailLoginFromDialog();
@@ -524,7 +532,19 @@ function bindEvents() {
     authLoginEmailInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        void submitEmailLoginFromDialog();
+        if (String(authLoginPasswordInput?.value || "").trim()) {
+          void submitPasswordLoginFromDialog();
+        } else {
+          void submitEmailLoginFromDialog();
+        }
+      }
+    });
+  }
+  if (authLoginPasswordInput) {
+    authLoginPasswordInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submitPasswordLoginFromDialog();
       }
     });
   }
@@ -715,6 +735,7 @@ async function beginEmailLogin() {
 function openAuthLoginDialog() {
   if (!REMOTE_ENABLED || !db?.auth || !authLoginDialog) return;
   if (authLoginEmailInput) authLoginEmailInput.value = "";
+  if (authLoginPasswordInput) authLoginPasswordInput.value = "";
   authLoginDialog.hidden = false;
   refreshAuthLoginSubmitUi();
   document.body.style.overflow = "hidden";
@@ -744,8 +765,9 @@ function closeAuthLoginDialog() {
   }
 }
 
-function setAuthLoginSubmitting(submitting) {
+function setAuthLoginSubmitting(submitting, mode = "") {
   authLoginSubmitting = Boolean(submitting);
+  authLoginSubmittingMode = authLoginSubmitting ? String(mode || "") : "";
   refreshAuthLoginSubmitUi();
 }
 
@@ -754,11 +776,16 @@ function getAuthLoginCooldownSeconds() {
 }
 
 function refreshAuthLoginSubmitUi() {
-  if (!authLoginSubmitBtn) return;
   const remain = getAuthLoginCooldownSeconds();
-  const locked = authLoginSubmitting || remain > 0;
-  authLoginSubmitBtn.disabled = locked;
-  if (authLoginSubmitting) {
+  const otpLocked = authLoginSubmitting || remain > 0;
+  const pwdLocked = authLoginSubmitting;
+  if (authPasswordLoginBtn) {
+    authPasswordLoginBtn.disabled = pwdLocked;
+    authPasswordLoginBtn.textContent = authLoginSubmitting && authLoginSubmittingMode === "password" ? "登录中..." : "密码登录";
+  }
+  if (!authLoginSubmitBtn) return;
+  authLoginSubmitBtn.disabled = otpLocked;
+  if (authLoginSubmitting && authLoginSubmittingMode === "otp") {
     authLoginSubmitBtn.textContent = "发送中...";
   } else if (remain > 0) {
     authLoginSubmitBtn.textContent = `请 ${remain}s 后重试`;
@@ -805,7 +832,7 @@ async function submitEmailLoginFromDialog() {
     alert("请输入登录邮箱。");
     return;
   }
-  setAuthLoginSubmitting(true);
+  setAuthLoginSubmitting(true, "otp");
   try {
     const { error } = await db.auth.signInWithOtp({
       email,
@@ -828,6 +855,32 @@ async function submitEmailLoginFromDialog() {
     }
     const detail = e?.message || e?.error_description || "未知错误";
     alert(`发送登录邮件失败：${detail}`);
+    setAuthLoginSubmitting(false);
+  }
+}
+
+async function submitPasswordLoginFromDialog() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  if (authLoginSubmitting) return;
+  const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
+  const password = String(authLoginPasswordInput?.value || "");
+  if (!email) {
+    alert("请输入登录邮箱。");
+    return;
+  }
+  if (!password) {
+    alert("请输入登录密码。");
+    return;
+  }
+  setAuthLoginSubmitting(true, "password");
+  try {
+    const { error } = await db.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    closeAuthLoginDialog();
+    alert("登录成功。");
+  } catch (e) {
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`密码登录失败：${detail}`);
     setAuthLoginSubmitting(false);
   }
 }

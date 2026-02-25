@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>元源紫泽 生产管理系统</title>
-  <link rel="stylesheet" href="styles.css?v=20260225g" />
+  <link rel="stylesheet" href="styles.css?v=20260225h" />
 </head>
 <body>
   <header class="topbar">
@@ -278,36 +278,41 @@
         <h3 id="authLoginTitle">邮箱登录</h3>
         <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
-      <p class="dialog-subtitle">请输入登录邮箱，系统会发送登录链接。</p>
+      <p class="dialog-subtitle">优先使用邮箱+密码登录；也可发送邮箱登录链接。</p>
       <div class="auth-login-form">
         <label class="auth-login-field" for="authLoginEmailInput">
           <span>邮箱</span>
           <input id="authLoginEmailInput" type="email" autocomplete="email" placeholder="name@example.com" />
         </label>
+        <label class="auth-login-field" for="authLoginPasswordInput">
+          <span>密码</span>
+          <input id="authLoginPasswordInput" type="password" autocomplete="current-password" placeholder="请输入密码" />
+        </label>
       </div>
       <div class="auth-login-actions">
         <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="authLoginSubmitBtn" class="btn btn-primary" type="button">发送登录邮件</button>
+        <button id="authPasswordLoginBtn" class="btn btn-primary" type="button">密码登录</button>
+        <button id="authLoginSubmitBtn" class="btn btn-secondary" type="button">发送登录邮件</button>
       </div>
     </section>
   </div>
 
   <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
 
-  <script src="xlsx.full.min.js?v=20260225g"></script>
-  <script src="supabase.min.js?v=20260225g"></script>
-  <script src="config.prod.js?v=20260225g"></script>
+  <script src="xlsx.full.min.js?v=20260225h"></script>
+  <script src="supabase.min.js?v=20260225h"></script>
+  <script src="config.prod.js?v=20260225h"></script>
   <script>
     (function () {
       var h = location.hostname;
       var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
       if (!isLocal) return;
       var s = document.createElement("script");
-      s.src = "config.js?v=20260225g";
+      s.src = "config.js?v=20260225h";
       document.head.appendChild(s);
     })();
   </script>
-  <script src="app.js?v=20260225g"></script>
+  <script src="app.js?v=20260225h"></script>
 </body>
 </html>
 
