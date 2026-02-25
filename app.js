@@ -1,30 +1,30 @@
-ï»¿const STORAGE_KEY = "mini_mes_orders_v1";
+const STORAGE_KEY = "mini_mes_orders_v1";
 const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
 const SHIFT_DEFAULTS_KEY = "mini_mes_shift_defaults_v1";
 const COMPACT_MODE_KEY = "mini_mes_compact_mode_v1";
 
-const STATUS = ["å¾…æ’äº§", "å·²æ’äº§", "åŠ å·¥ä¸­", "å®Œæˆå¾…æ£€", "è¿”å·¥", "å·²å‘è´§"];
+const STATUS = ["´ıÅÅ²ú", "ÒÑÅÅ²ú", "¼Ó¹¤ÖĞ", "Íê³É´ı¼ì", "·µ¹¤", "ÒÑ·¢»õ"];
 const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
 const FIXED_COL_WIDTHS = {};
-const SURFACE_OPTIONS = ["", "é˜³ææ°§åŒ–", "å‘é»‘", "å–·ç ‚", "å–·æ¼†", "ç”µé•€", "æ‹‰ä¸", "æŠ›å…‰", "çƒ­å¤„ç†", "é’åŒ–"];
+const SURFACE_OPTIONS = ["", "Ñô¼«Ñõ»¯", "·¢ºÚ", "ÅçÉ°", "ÅçÆá", "µç¶Æ", "À­Ë¿", "Å×¹â", "ÈÈ´¦Àí", "¶Û»¯"];
 const PROCESS_OPTIONS = ["", "1", "2", "3", "4", "5", "6"];
 const XLSX_COLUMNS = [
-  { key: "orderNo", title: "è®¢å•å·" },
-  { key: "customer", title: "å®¢æˆ·" },
-  { key: "name", title: "åç§°" },
-  { key: "drawingNo", title: "å›¾å·" },
-  { key: "qty", title: "æ•°é‡" },
-  { key: "programNo", title: "ç¨‹åºå•" },
-  { key: "processName", title: "å·¥åº" },
-  { key: "plannedHours", title: "é¢„è®¡å·¥æ—¶(åˆ†é’Ÿ)" },
-  { key: "machine", title: "æœºå°" },
-  { key: "lathe", title: "è½¦åºŠ" },
-  { key: "surface", title: "è¡¨é¢å¤„ç†" },
-  { key: "status", title: "çŠ¶æ€" },
-  { key: "startTime", title: "å¼€å§‹æ—¶é—´" },
-  { key: "dueDate", title: "äº¤æœŸ" },
-  { key: "isDelayed", title: "æ˜¯å¦å»¶æœŸ" },
-  { key: "note", title: "å¤‡æ³¨" },
+  { key: "orderNo", title: "¶©µ¥ºÅ" },
+  { key: "customer", title: "¿Í»§" },
+  { key: "name", title: "Ãû³Æ" },
+  { key: "drawingNo", title: "Í¼ºÅ" },
+  { key: "qty", title: "ÊıÁ¿" },
+  { key: "programNo", title: "³ÌĞòµ¥" },
+  { key: "processName", title: "¹¤Ğò" },
+  { key: "plannedHours", title: "Ô¤¼Æ¹¤Ê±(·ÖÖÓ)" },
+  { key: "machine", title: "»úÌ¨" },
+  { key: "lathe", title: "³µ´²" },
+  { key: "surface", title: "±íÃæ´¦Àí" },
+  { key: "status", title: "×´Ì¬" },
+  { key: "startTime", title: "¿ªÊ¼Ê±¼ä" },
+  { key: "dueDate", title: "½»ÆÚ" },
+  { key: "isDelayed", title: "ÊÇ·ñÑÓÆÚ" },
+  { key: "note", title: "±¸×¢" },
 ];
 
 const MES_CONFIG = window.MES_CONFIG || {};
@@ -69,6 +69,8 @@ let attachmentLatestTimeByLineId = new Map();
 let dirtyCellMarks = new Set();
 let pendingDeleteOrderId = "";
 let authLoginSubmitting = false;
+let authLoginCooldownUntil = 0;
+let authLoginCooldownTimer = 0;
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -151,10 +153,10 @@ const authLoginEmailInput = document.getElementById("authLoginEmailInput");
 const authLoginCloseBtn = document.getElementById("authLoginCloseBtn");
 const authLoginCancelBtn = document.getElementById("authLoginCancelBtn");
 const authLoginSubmitBtn = document.getElementById("authLoginSubmitBtn");
-const PROCESS_TIME_TITLE_BASE = "é¢„è®¡å·¥æ—¶è®¾ç½®";
-const STATUS_TITLE_BASE = "çŠ¶æ€è®¾ç½®";
-const DATE_TITLE_BASE = "æ—¥æœŸè®¾ç½®";
-const SURFACE_TITLE_BASE = "è¡¨é¢å¤„ç†è®¾ç½®";
+const PROCESS_TIME_TITLE_BASE = "Ô¤¼Æ¹¤Ê±ÉèÖÃ";
+const STATUS_TITLE_BASE = "×´Ì¬ÉèÖÃ";
+const DATE_TITLE_BASE = "ÈÕÆÚÉèÖÃ";
+const SURFACE_TITLE_BASE = "±íÃæ´¦ÀíÉèÖÃ";
 
 init();
 
@@ -165,13 +167,13 @@ async function init() {
   updatePinnedOffsets();
   if (REMOTE_ENABLED) {
     await initAuth();
-    setModeText(authSession ? "äº‘ç«¯å…±äº«æ¨¡å¼" : "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰");
+    setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) await refreshFromRemote(false);
     }, AUTO_REFRESH_MS);
   } else {
-    setModeText("æœ¬åœ°æ¨¡å¼");
+    setModeText("±¾µØÄ£Ê½");
     orders = loadOrdersLocal();
     render();
     setLastSyncTime();
@@ -181,8 +183,8 @@ async function init() {
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
   syncReconnectButton();
-  if (lastSyncTime && text.includes("å¤±è´¥")) lastSyncTime.classList.add("sync-warning");
-  if (lastSyncTime && !text.includes("å¤±è´¥")) lastSyncTime.classList.remove("sync-warning");
+  if (lastSyncTime && text.includes("Ê§°Ü")) lastSyncTime.classList.add("sync-warning");
+  if (lastSyncTime && !text.includes("Ê§°Ü")) lastSyncTime.classList.remove("sync-warning");
   updatePinnedOffsets();
 }
 
@@ -191,7 +193,7 @@ function setLastSyncTime() {
   if (!lastSyncTime) return;
   const d = new Date(lastSyncAt);
   const t = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-  lastSyncTime.textContent = `æœ€è¿‘åŒæ­¥ ${t}`;
+  lastSyncTime.textContent = `×î½üÍ¬²½ ${t}`;
 }
 
 function getErrorKey(orderId, key) {
@@ -216,7 +218,7 @@ function appendDirtyCellDot(td, orderId, key) {
   if (!hasDirtyCellMark(orderId, key)) return;
   const dot = document.createElement("span");
   dot.className = "cell-dirty-dot";
-  dot.title = "å·²ä¿®æ”¹æœªä¿å­˜";
+  dot.title = "ÒÑĞŞ¸ÄÎ´±£´æ";
   td.appendChild(dot);
 }
 
@@ -262,19 +264,19 @@ function rebuildRuleCellErrors() {
   orderNoMap.forEach((ids) => {
     if (ids.length < 2) return;
     ids.forEach((id) => {
-      next.set(getErrorKey(id, "orderNo"), "è®¢å•å·é‡å¤");
+      next.set(getErrorKey(id, "orderNo"), "¶©µ¥ºÅÖØ¸´");
     });
   });
 
   orders.forEach((order) => {
     const qtyRaw = String(order.qty ?? "").trim();
     if (qtyRaw !== "" && !Number.isFinite(Number(qtyRaw))) {
-      next.set(getErrorKey(order.id, "qty"), "æ•°é‡å¿…é¡»ä¸ºæ•°å­—");
+      next.set(getErrorKey(order.id, "qty"), "ÊıÁ¿±ØĞëÎªÊı×Ö");
     }
     const start = normalizeDateOnlyInput(order.startTime);
     const due = normalizeDateOnlyInput(order.dueDate);
     if (start && due && due < start) {
-      const msg = "äº¤æœŸä¸èƒ½æ—©äºå¼€å§‹æ—¶é—´";
+      const msg = "½»ÆÚ²»ÄÜÔçÓÚ¿ªÊ¼Ê±¼ä";
       next.set(getErrorKey(order.id, "startTime"), msg);
       next.set(getErrorKey(order.id, "dueDate"), msg);
     }
@@ -288,7 +290,7 @@ function markRowSaved(orderId) {
   rowSavedUntil.set(orderId, Date.now() + 1500);
 }
 
-function showSaveFeedback(message = "å·²ä¿å­˜åˆ° NAS") {
+function showSaveFeedback(message = "ÒÑ±£´æµ½ NAS") {
   if (!saveFeedback) return;
   saveFeedback.textContent = message;
   saveFeedback.classList.add("is-visible");
@@ -558,7 +560,7 @@ function bindEvents() {
   if (abnormalFilterBtn) {
     abnormalFilterBtn.addEventListener("click", () => {
       abnormalOnly = !abnormalOnly;
-      abnormalFilterBtn.textContent = abnormalOnly ? "æ˜¾ç¤ºå…¨éƒ¨" : "åªçœ‹å¼‚å¸¸";
+      abnormalFilterBtn.textContent = abnormalOnly ? "ÏÔÊ¾È«²¿" : "Ö»¿´Òì³£";
       render();
     });
   }
@@ -593,7 +595,7 @@ function bindEvents() {
   if (filterToggleBtn && orderFilters) {
     filterToggleBtn.addEventListener("click", () => {
       const collapsed = orderFilters.classList.toggle("collapsed");
-      filterToggleBtn.textContent = collapsed ? "å±•å¼€ç­›é€‰" : "æ”¶èµ·ç­›é€‰";
+      filterToggleBtn.textContent = collapsed ? "Õ¹¿ªÉ¸Ñ¡" : "ÊÕÆğÉ¸Ñ¡";
       filterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
       updatePinnedOffsets();
     });
@@ -677,7 +679,7 @@ function syncFilterPanelForViewport() {
   if (!orderFilters || !filterToggleBtn) return;
   if (window.innerWidth > 780) {
     orderFilters.classList.remove("collapsed");
-    filterToggleBtn.textContent = "æ”¶èµ·ç­›é€‰";
+    filterToggleBtn.textContent = "ÊÕÆğÉ¸Ñ¡";
     filterToggleBtn.setAttribute("aria-expanded", "true");
   }
 }
@@ -689,7 +691,7 @@ async function initAuth() {
     if (error) throw error;
     authSession = data?.session || null;
   } catch (e) {
-    console.warn("è¯»å–ç™»å½•æ€å¤±è´¥", e);
+    console.warn("¶ÁÈ¡µÇÂ¼Ì¬Ê§°Ü", e);
     authSession = null;
   }
   updateAuthUi();
@@ -698,7 +700,7 @@ async function initAuth() {
     authWriteHintNotified = false;
     updateAuthUi();
     if (remoteOnline) {
-      setModeText(authSession ? "äº‘ç«¯å…±äº«æ¨¡å¼" : "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰");
+      setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
     }
     if (authSession && remoteOnline) {
       void refreshFromRemote(false);
@@ -714,6 +716,7 @@ function openAuthLoginDialog() {
   if (!REMOTE_ENABLED || !db?.auth || !authLoginDialog) return;
   if (authLoginEmailInput) authLoginEmailInput.value = "";
   authLoginDialog.hidden = false;
+  refreshAuthLoginSubmitUi();
   document.body.style.overflow = "hidden";
   if (authLoginEmailInput) authLoginEmailInput.focus();
 }
@@ -743,18 +746,63 @@ function closeAuthLoginDialog() {
 
 function setAuthLoginSubmitting(submitting) {
   authLoginSubmitting = Boolean(submitting);
-  if (authLoginSubmitBtn) {
-    authLoginSubmitBtn.disabled = authLoginSubmitting;
-    authLoginSubmitBtn.textContent = authLoginSubmitting ? "å‘é€ä¸­..." : "å‘é€ç™»å½•é‚®ä»¶";
+  refreshAuthLoginSubmitUi();
+}
+
+function getAuthLoginCooldownSeconds() {
+  return Math.max(0, Math.ceil((authLoginCooldownUntil - Date.now()) / 1000));
+}
+
+function refreshAuthLoginSubmitUi() {
+  if (!authLoginSubmitBtn) return;
+  const remain = getAuthLoginCooldownSeconds();
+  const locked = authLoginSubmitting || remain > 0;
+  authLoginSubmitBtn.disabled = locked;
+  if (authLoginSubmitting) {
+    authLoginSubmitBtn.textContent = "·¢ËÍÖĞ...";
+  } else if (remain > 0) {
+    authLoginSubmitBtn.textContent = `Çë ${remain}s ºóÖØÊÔ`;
+  } else {
+    authLoginSubmitBtn.textContent = "·¢ËÍµÇÂ¼ÓÊ¼ş";
   }
+}
+
+function startAuthLoginCooldown(seconds) {
+  authLoginCooldownUntil = Date.now() + Math.max(1, Number(seconds) || 0) * 1000;
+  if (authLoginCooldownTimer) clearInterval(authLoginCooldownTimer);
+  refreshAuthLoginSubmitUi();
+  authLoginCooldownTimer = setInterval(() => {
+    if (getAuthLoginCooldownSeconds() <= 0) {
+      clearInterval(authLoginCooldownTimer);
+      authLoginCooldownTimer = 0;
+      authLoginCooldownUntil = 0;
+    }
+    refreshAuthLoginSubmitUi();
+  }, 1000);
+}
+
+function isRateLimitError(err) {
+  const msg = String(err?.message || err?.error_description || "").toLowerCase();
+  return Number(err?.status) === 429 || msg.includes("rate limit");
+}
+
+function getRetryAfterSeconds(err, fallback = 60) {
+  const v = Number(err?.retry_after || err?.retryAfter || 0);
+  if (Number.isFinite(v) && v > 0) return Math.ceil(v);
+  return fallback;
 }
 
 async function submitEmailLoginFromDialog() {
   if (!REMOTE_ENABLED || !db?.auth) return;
   if (authLoginSubmitting) return;
+  const cooldown = getAuthLoginCooldownSeconds();
+  if (cooldown > 0) {
+    alert(`ÇëÇó¹ıÓÚÆµ·±£¬Çë ${cooldown} ÃëºóÖØÊÔ¡£`);
+    return;
+  }
   const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
-    alert("è¯·è¾“å…¥ç™»å½•é‚®ç®±ã€‚");
+    alert("ÇëÊäÈëµÇÂ¼ÓÊÏä¡£");
     return;
   }
   setAuthLoginSubmitting(true);
@@ -767,11 +815,19 @@ async function submitEmailLoginFromDialog() {
       },
     });
     if (error) throw error;
+    startAuthLoginCooldown(60);
     closeAuthLoginDialog();
-    alert("ç™»å½•é‚®ä»¶å·²å‘é€ï¼Œè¯·åœ¨é‚®ç®±ä¸­ç‚¹å‡»ç™»å½•é“¾æ¥åè¿”å›æœ¬é¡µã€‚");
+    alert("µÇÂ¼ÓÊ¼şÒÑ·¢ËÍ£¬ÇëÔÚÓÊÏäÖĞµã»÷µÇÂ¼Á´½Óºó·µ»Ø±¾Ò³¡£");
   } catch (e) {
-    const detail = e?.message || e?.error_description || "æœªçŸ¥é”™è¯¯";
-    alert(`å‘é€ç™»å½•é‚®ä»¶å¤±è´¥ï¼š${detail}`);
+    if (isRateLimitError(e)) {
+      const retry = getRetryAfterSeconds(e, 120);
+      startAuthLoginCooldown(retry);
+      alert(`·¢ËÍ¹ıÓÚÆµ·±£¬Çë ${retry} ÃëºóÔÙÊÔ¡£`);
+      setAuthLoginSubmitting(false);
+      return;
+    }
+    const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
+    alert(`·¢ËÍµÇÂ¼ÓÊ¼şÊ§°Ü£º${detail}`);
     setAuthLoginSubmitting(false);
   }
 }
@@ -783,16 +839,16 @@ async function logoutAuth() {
     if (error) throw error;
     authSession = null;
     updateAuthUi();
-    setModeText(remoteOnline ? "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰" : "æœ¬åœ°æ¨¡å¼ï¼ˆäº‘è¿æ¥å¤±è´¥ï¼‰");
+    setModeText(remoteOnline ? "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©" : "±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
   } catch (e) {
-    const detail = e?.message || e?.error_description || "æœªçŸ¥é”™è¯¯";
-    alert(`é€€å‡ºå¤±è´¥ï¼š${detail}`);
+    const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
+    alert(`ÍË³öÊ§°Ü£º${detail}`);
   }
 }
 
 function updateAuthUi() {
   if (authUser) {
-    authUser.textContent = authSession?.user?.email || "æœªç™»å½•";
+    authUser.textContent = authSession?.user?.email || "Î´µÇÂ¼";
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
@@ -855,7 +911,7 @@ function saveCompactMode(enabled) {
 
 function applyCompactMode() {
   document.body.classList.toggle("compact-mode", compactMode);
-  if (compactModeBtn) compactModeBtn.textContent = `ç´§å‡‘æ¨¡å¼: ${compactMode ? "å¼€" : "å…³"}`;
+  if (compactModeBtn) compactModeBtn.textContent = `½ô´ÕÄ£Ê½: ${compactMode ? "¿ª" : "¹Ø"}`;
   updatePinnedOffsets();
 }
 function canWriteRemote(notify = true) {
@@ -863,7 +919,7 @@ function canWriteRemote(notify = true) {
   if (authSession) return true;
   if (notify && !authWriteHintNotified) {
     authWriteHintNotified = true;
-    alert("å½“å‰ä¸ºåªè¯»æ¨¡å¼ï¼Œè¯·å…ˆç‚¹å‡»â€œé‚®ç®±ç™»å½•â€åå†å†™å…¥äº‘ç«¯æ•°æ®ã€‚");
+    alert("µ±Ç°ÎªÖ»¶ÁÄ£Ê½£¬ÇëÏÈµã»÷¡°ÓÊÏäµÇÂ¼¡±ºóÔÙĞ´ÈëÔÆ¶ËÊı¾İ¡£");
   }
   return false;
 }
@@ -877,14 +933,14 @@ function createEmptyOrder() {
     customer: "",
     name: "",
     qty: "",
-    programNo: "æœªå‡º",
+    programNo: "Î´³ö",
     processName: "",
     processStepCurrent: "",
     plannedHours: "",
     machine: "",
     lathe: "",
     surface: "",
-    status: "å¾…æ’äº§",
+    status: "´ıÅÅ²ú",
     startTime: "",
     dueDate: "",
     isDelayed: "",
@@ -898,11 +954,11 @@ async function quickAdd() {
   const customer = valueOf("qaCustomer");
 
   if (!orderNoInput) {
-    alert("è¯·å¡«å†™ç¼–å·");
+    alert("ÇëÌîĞ´±àºÅ");
     return;
   }
   if (!orderNo) {
-    alert("ç¼–å·æ ¼å¼æ— æ•ˆï¼Œè¯·è¾“å…¥1-3ä½æ•°å­—ï¼ˆå¦‚ 30 æˆ– 030ï¼‰");
+    alert("±àºÅ¸ñÊ½ÎŞĞ§£¬ÇëÊäÈë1-3Î»Êı×Ö£¨Èç 30 »ò 030£©");
     return;
   }
 
@@ -910,8 +966,8 @@ async function quickAdd() {
     ...createEmptyOrder(),
     orderNo,
     customer,
-    status: "å¾…æ’äº§",
-    programNo: "æœªå‡º",
+    status: "´ıÅÅ²ú",
+    programNo: "Î´³ö",
     startTime: "",
   };
   order.processStepCurrent = "";
@@ -950,7 +1006,7 @@ function render() {
     tr.dataset.id = o.id;
 
     const stateClass =
-      o.isDelayed === "å»¶æœŸ" ? "row-delayed" : o.status === "åŠ å·¥ä¸­" ? "row-working" : o.status === "å·²å‘è´§" ? "row-shipped" : "";
+      o.isDelayed === "ÑÓÆÚ" ? "row-delayed" : o.status === "¼Ó¹¤ÖĞ" ? "row-working" : o.status === "ÒÑ·¢»õ" ? "row-shipped" : "";
     if (stateClass) tr.classList.add(stateClass);
     if ((rowSavedUntil.get(o.id) || 0) > now) tr.classList.add("row-saved");
 
@@ -963,20 +1019,20 @@ function render() {
     tr.appendChild(processTimeCell(o));
     tr.appendChild(surfaceCell(o));
     tr.appendChild(statusCell(o));
-    tr.appendChild(dateCell(o, "startTime", "å¼€å§‹æ—¶é—´"));
-    tr.appendChild(dateCell(o, "dueDate", "äº¤æœŸ"));
+    tr.appendChild(dateCell(o, "startTime", "¿ªÊ¼Ê±¼ä"));
+    tr.appendChild(dateCell(o, "dueDate", "½»ÆÚ"));
     tr.appendChild(editCell(o, "note"));
 
     const opTd = document.createElement("td");
     const fileBtn = document.createElement("button");
     fileBtn.className = "action-btn-secondary";
-    fileBtn.textContent = "å›¾çº¸";
+    fileBtn.textContent = "Í¼Ö½";
     fileBtn.addEventListener("click", () => {
       void openAttachmentDialog(o.id);
     });
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
-    delBtn.textContent = "åˆ é™¤";
+    delBtn.textContent = "É¾³ı";
     delBtn.addEventListener("click", () => {
       void removeOrder(o.id);
     });
@@ -1008,7 +1064,7 @@ function renderKanban(rows) {
   const total = rows.length;
   const totalPill = document.createElement("span");
   totalPill.className = "board-pill";
-  totalPill.textContent = `å½“å‰è®¢å• ${total}`;
+  totalPill.textContent = `µ±Ç°¶©µ¥ ${total}`;
   boardSummary.appendChild(totalPill);
 
   STATUS.forEach((status) => {
@@ -1027,7 +1083,7 @@ function renderKanban(rows) {
     const title = document.createElement("strong");
     title.textContent = status;
     const count = document.createElement("span");
-    count.textContent = `${list.length} å•`;
+    count.textContent = `${list.length} µ¥`;
     head.appendChild(title);
     head.appendChild(count);
 
@@ -1037,7 +1093,7 @@ function renderKanban(rows) {
     if (list.length === 0) {
       const empty = document.createElement("div");
       empty.className = "kanban-empty";
-      empty.textContent = "æš‚æ— è®¢å•";
+      empty.textContent = "ÔİÎŞ¶©µ¥";
       body.appendChild(empty);
     } else {
       list.forEach((order) => {
@@ -1061,23 +1117,23 @@ function createKanbanCard(order, displayOrderNo = "") {
   top.className = "kanban-card-top";
   const orderNo = document.createElement("span");
   orderNo.className = "kanban-order";
-  orderNo.textContent = displayOrderNo || "æœªå¡«è®¢å•å·";
+  orderNo.textContent = displayOrderNo || "Î´Ìî¶©µ¥ºÅ";
   top.appendChild(orderNo);
 
   const name = document.createElement("div");
   name.className = "kanban-name";
-  name.textContent = order.name || order.drawingNo || "æœªå‘½åé›¶ä»¶";
+  name.textContent = order.name || order.drawingNo || "Î´ÃüÃûÁã¼ş";
 
   const meta = document.createElement("div");
   meta.className = "kanban-meta";
-  meta.appendChild(createKanbanTag(order.customer || "æœªå¡«å®¢æˆ·"));
+  meta.appendChild(createKanbanTag(order.customer || "Î´Ìî¿Í»§"));
   if (order.machine) meta.appendChild(createKanbanTag(order.machine));
-  if (order.status === "åŠ å·¥ä¸­" && normalizeStepValue(order.processStepCurrent)) {
-    meta.appendChild(createKanbanTag(`åŠ å·¥ä¸­ç¬¬${normalizeStepValue(order.processStepCurrent)}åº`));
+  if (order.status === "¼Ó¹¤ÖĞ" && normalizeStepValue(order.processStepCurrent)) {
+    meta.appendChild(createKanbanTag(`¼Ó¹¤ÖĞµÚ${normalizeStepValue(order.processStepCurrent)}Ğò`));
   }
-  if (order.dueDate) meta.appendChild(createKanbanTag(`äº¤æœŸ ${toMonthDay(order.dueDate)}`));
-  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`å·¥æ—¶ ${order.plannedHours}åˆ†`));
-  if (order.isDelayed === "å»¶æœŸ") meta.appendChild(createKanbanTag("å»¶æœŸ", true));
+  if (order.dueDate) meta.appendChild(createKanbanTag(`½»ÆÚ ${toMonthDay(order.dueDate)}`));
+  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`¹¤Ê± ${order.plannedHours}·Ö`));
+  if (order.isDelayed === "ÑÓÆÚ") meta.appendChild(createKanbanTag("ÑÓÆÚ", true));
 
   card.appendChild(top);
   card.appendChild(name);
@@ -1152,7 +1208,7 @@ function previewEditCell(order, key, type = "text") {
   }
   const display = formatDisplayValue(key, rawValue);
   text.textContent = display;
-  text.title = display ? `${display}\nç‚¹å‡»é¢„è§ˆå›¾çº¸` : "ç‚¹å‡»é¢„è§ˆå›¾çº¸";
+  text.title = display ? `${display}\nµã»÷Ô¤ÀÀÍ¼Ö½` : "µã»÷Ô¤ÀÀÍ¼Ö½";
   text.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1167,7 +1223,7 @@ function previewEditCell(order, key, type = "text") {
   if (key === "name" && uploadedAt) {
     const timeTag = document.createElement("span");
     timeTag.className = "preview-upload-time";
-    timeTag.textContent = `å·²ä¸Šä¼  ${uploadedAt}`;
+    timeTag.textContent = `ÒÑÉÏ´« ${uploadedAt}`;
     wrap.appendChild(timeTag);
   }
   appendDirtyCellDot(td, order.id, key);
@@ -1183,7 +1239,7 @@ function processTimeCell(order) {
   td.dataset.id = order.id;
   td.className = "process-time-cell";
   td.textContent = formatProcessTimeLabel(order);
-  td.title = "ç‚¹å‡»è®¾ç½®å·¥åºå’Œå·¥æ—¶ï¼ˆåˆ†é’Ÿï¼‰";
+  td.title = "µã»÷ÉèÖÃ¹¤ĞòºÍ¹¤Ê±£¨·ÖÖÓ£©";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1195,14 +1251,14 @@ function processTimeCell(order) {
 function formatProcessTimeLabel(order) {
   const minutes = normalizeValue("plannedHours", order.plannedHours);
   const process = String(order.processName || "").trim();
-  const processText = process ? `å…±${process}åº` : "";
+  const processText = process ? `¹²${process}Ğò` : "";
   const parts = [];
-  if (order.programNo) parts.push(`ç¨‹åºå•${order.programNo}`);
+  if (order.programNo) parts.push(`³ÌĞòµ¥${order.programNo}`);
   if (processText) parts.push(processText);
-  if (minutes !== "") parts.push(`${minutes} åˆ†é’Ÿ`);
+  if (minutes !== "") parts.push(`${minutes} ·ÖÖÓ`);
   if (order.machine) parts.push(order.machine);
-  if (order.lathe) parts.push(`è½¦åºŠ${order.lathe}`);
-  return parts.join(" Â· ");
+  if (order.lathe) parts.push(`³µ´²${order.lathe}`);
+  return parts.join(" ¡¤ ");
 }
 
 function statusCell(order) {
@@ -1225,7 +1281,7 @@ function statusCell(order) {
   const progress = buildStatusProgress(order);
   if (progress) wrap.appendChild(progress);
   td.appendChild(wrap);
-  td.title = "ç‚¹å‡»è®¾ç½®çŠ¶æ€";
+  td.title = "µã»÷ÉèÖÃ×´Ì¬";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1240,7 +1296,7 @@ function dateCell(order, key, label) {
   td.dataset.id = order.id;
   td.className = "date-cell";
   td.textContent = formatDisplayValue(key, order[key] ?? "");
-  td.title = `ç‚¹å‡»è®¾ç½®${label}ï¼ˆæœˆ/æ—¥ï¼‰`;
+  td.title = `µã»÷ÉèÖÃ${label}£¨ÔÂ/ÈÕ£©`;
   appendCellError(td, order.id, key);
   td.addEventListener("click", (event) => {
     event.preventDefault();
@@ -1256,7 +1312,7 @@ function surfaceCell(order) {
   td.dataset.id = order.id;
   td.className = "surface-cell";
   td.textContent = String(order.surface || "");
-  td.title = "ç‚¹å‡»è®¾ç½®è¡¨é¢å¤„ç†";
+  td.title = "µã»÷ÉèÖÃ±íÃæ´¦Àí";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1266,14 +1322,14 @@ function surfaceCell(order) {
 }
 
 function formatStatusLabel(order) {
-  const base = String(order.status || "").trim() || "å¾…æ’äº§";
-  if (base !== "åŠ å·¥ä¸­") return base;
+  const base = String(order.status || "").trim() || "´ıÅÅ²ú";
+  if (base !== "¼Ó¹¤ÖĞ") return base;
   const step = normalizeStepValue(order.processStepCurrent);
-  return step ? `åŠ å·¥ä¸­ç¬¬${step}åº` : "åŠ å·¥ä¸­";
+  return step ? `¼Ó¹¤ÖĞµÚ${step}Ğò` : "¼Ó¹¤ÖĞ";
 }
 
 function buildStatusProgress(order) {
-  if (String(order.status || "").trim() !== "åŠ å·¥ä¸­") return null;
+  if (String(order.status || "").trim() !== "¼Ó¹¤ÖĞ") return null;
   const maxStep = Math.max(1, getMaxProcessStep(order));
   const currentRaw = Number(normalizeStepValue(order.processStepCurrent) || 0);
   const current = Math.max(0, Math.min(maxStep, currentRaw));
@@ -1297,12 +1353,12 @@ function buildStatusProgress(order) {
 
 function getStatusClassName(status) {
   const s = String(status || "").trim();
-  if (s === "å¾…æ’äº§") return "status-pending";
-  if (s === "å·²æ’äº§") return "status-planned";
-  if (s === "åŠ å·¥ä¸­") return "status-working";
-  if (s === "å®Œæˆå¾…æ£€") return "status-done";
-  if (s === "è¿”å·¥") return "status-rework";
-  if (s === "å·²å‘è´§") return "status-done";
+  if (s === "´ıÅÅ²ú") return "status-pending";
+  if (s === "ÒÑÅÅ²ú") return "status-planned";
+  if (s === "¼Ó¹¤ÖĞ") return "status-working";
+  if (s === "Íê³É´ı¼ì") return "status-done";
+  if (s === "·µ¹¤") return "status-rework";
+  if (s === "ÒÑ·¢»õ") return "status-done";
   return "status-pending";
 }
 
@@ -1311,9 +1367,9 @@ function initProcessTimeOptions() {
     processProgramInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "è¯·é€‰æ‹©";
+    blank.textContent = "ÇëÑ¡Ôñ";
     processProgramInput.appendChild(blank);
-    ["å·²å‡º", "æœªå‡º"].forEach((name) => {
+    ["ÒÑ³ö", "Î´³ö"].forEach((name) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = name;
@@ -1325,14 +1381,14 @@ function initProcessTimeOptions() {
   PROCESS_OPTIONS.forEach((name) => {
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name ? `å…±${name}åº` : "è¯·é€‰æ‹©å·¥åº";
+    option.textContent = name ? `¹²${name}Ğò` : "ÇëÑ¡Ôñ¹¤Ğò";
     processNameInput.appendChild(option);
   });
   if (processMachineInput) {
     processMachineInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "è¯·é€‰æ‹©æœºå°";
+    blank.textContent = "ÇëÑ¡Ôñ»úÌ¨";
     processMachineInput.appendChild(blank);
     MACHINES.forEach((name) => {
       const option = document.createElement("option");
@@ -1345,9 +1401,9 @@ function initProcessTimeOptions() {
     processLatheInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "è¯·é€‰æ‹©";
+    blank.textContent = "ÇëÑ¡Ôñ";
     processLatheInput.appendChild(blank);
-    ["æ˜¯", "å¦"].forEach((name) => {
+    ["ÊÇ", "·ñ"].forEach((name) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = name;
@@ -1372,12 +1428,12 @@ function initDateOptions() {
   dateMonthInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "è¯·é€‰æ‹©";
+  blank.textContent = "ÇëÑ¡Ôñ";
   dateMonthInput.appendChild(blank);
   for (let i = 1; i <= 12; i += 1) {
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = `${i}æœˆ`;
+    opt.textContent = `${i}ÔÂ`;
     dateMonthInput.appendChild(opt);
   }
   rebuildDateDayOptions(31);
@@ -1389,7 +1445,7 @@ function initSurfaceOptions() {
   SURFACE_OPTIONS.forEach((name) => {
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name || "è¯·é€‰æ‹©";
+    option.textContent = name || "ÇëÑ¡Ôñ";
     surfacePresetInput.appendChild(option);
   });
 }
@@ -1399,13 +1455,13 @@ function rebuildDateDayOptions(dayCount = 31) {
   dateDayInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "è¯·é€‰æ‹©";
+  blank.textContent = "ÇëÑ¡Ôñ";
   dateDayInput.appendChild(blank);
   const max = Math.max(28, Math.min(31, Number(dayCount) || 31));
   for (let i = 1; i <= max; i += 1) {
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = `${i}æ—¥`;
+    opt.textContent = `${i}ÈÕ`;
     dateDayInput.appendChild(opt);
   }
 }
@@ -1419,7 +1475,7 @@ function getDaysInMonthForCurrentYear(month) {
 
 function formatDialogTitle(baseTitle, orderNo = "") {
   const no = String(orderNo || "").trim();
-  return no ? `${baseTitle} Â· ${no}` : baseTitle;
+  return no ? `${baseTitle} ¡¤ ${no}` : baseTitle;
 }
 
 function openDateDialog(orderId, key, label) {
@@ -1446,11 +1502,11 @@ function openDateDialog(orderId, key, label) {
 
   if (dateSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`è®¢å•å· ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`å›¾å· ${order.drawingNo}`);
-    if (order.name) parts.push(`åç§° ${order.name}`);
-    parts.push(`è®¾ç½®${label}ï¼ˆä»…æœˆ/æ—¥ï¼‰`);
-    dateSubTitle.textContent = parts.join(" Â· ");
+    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
+    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
+    parts.push(`ÉèÖÃ${label}£¨½öÔÂ/ÈÕ£©`);
+    dateSubTitle.textContent = parts.join(" ¡¤ ");
   }
   dateDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1485,12 +1541,12 @@ async function saveDateDialog() {
   const month = Number(dateMonthInput?.value || 0);
   const day = Number(dateDayInput?.value || 0);
   if (!month || !day) {
-    alert("è¯·é€‰æ‹©æœˆä»½å’Œæ—¥æœŸã€‚");
+    alert("ÇëÑ¡ÔñÔÂ·İºÍÈÕÆÚ¡£");
     return;
   }
   const maxDay = getDaysInMonthForCurrentYear(month);
   if (day > maxDay) {
-    alert("æ—¥æœŸæ— æ•ˆï¼Œè¯·é‡æ–°é€‰æ‹©ã€‚");
+    alert("ÈÕÆÚÎŞĞ§£¬ÇëÖØĞÂÑ¡Ôñ¡£");
     return;
   }
   const year = new Date().getFullYear();
@@ -1498,7 +1554,7 @@ async function saveDateDialog() {
   const nextStart = dateEditingKey === "startTime" ? next : normalizeDateOnlyInput(order.startTime);
   const nextDue = dateEditingKey === "dueDate" ? next : normalizeDateOnlyInput(order.dueDate);
   if (nextStart && nextDue && nextDue < nextStart) {
-    const msg = "äº¤æœŸä¸èƒ½æ—©äºå¼€å§‹æ—¶é—´";
+    const msg = "½»ÆÚ²»ÄÜÔçÓÚ¿ªÊ¼Ê±¼ä";
     setTransientCellError(order.id, "startTime", msg);
     setTransientCellError(order.id, "dueDate", msg);
     render();
@@ -1553,10 +1609,10 @@ function openSurfaceDialog(orderId) {
   if (surfaceCustomInput) surfaceCustomInput.value = existsInPreset ? "" : current;
   if (surfaceSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`è®¢å•å· ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`å›¾å· ${order.drawingNo}`);
-    if (order.name) parts.push(`åç§° ${order.name}`);
-    surfaceSubTitle.textContent = parts.join(" Â· ") || "è®¾ç½®è¡¨é¢å¤„ç†";
+    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
+    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
+    surfaceSubTitle.textContent = parts.join(" ¡¤ ") || "ÉèÖÃ±íÃæ´¦Àí";
   }
   surfaceDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1640,19 +1696,19 @@ function rebuildStatusStepOptions(maxStep = 6) {
   statusStepInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "è¯·é€‰æ‹©";
+  blank.textContent = "ÇëÑ¡Ôñ";
   statusStepInput.appendChild(blank);
   for (let i = 1; i <= maxStep; i += 1) {
     const option = document.createElement("option");
     option.value = String(i);
-    option.textContent = `ç¬¬${i}åº`;
+    option.textContent = `µÚ${i}Ğò`;
     statusStepInput.appendChild(option);
   }
 }
 
 function syncStatusStepVisibility() {
   if (!statusInput || !statusStepWrap) return;
-  const show = statusInput.value === "åŠ å·¥ä¸­";
+  const show = statusInput.value === "¼Ó¹¤ÖĞ";
   statusStepWrap.style.display = show ? "grid" : "none";
   if (statusNextBtn) statusNextBtn.style.display = show || statusInput.value ? "inline-flex" : "none";
   syncStatusNextButtonState();
@@ -1663,7 +1719,7 @@ function openStatusDialog(orderId) {
   if (!order || !statusDialog) return;
   statusEditingOrderId = orderId;
   if (statusTitle) statusTitle.textContent = formatDialogTitle(STATUS_TITLE_BASE, order.orderNo);
-  if (statusInput) statusInput.value = order.status || "å¾…æ’äº§";
+  if (statusInput) statusInput.value = order.status || "´ıÅÅ²ú";
   const maxStep = getMaxProcessStep(order);
   rebuildStatusStepOptions(maxStep);
   const normalizedStep = normalizeStepValue(order.processStepCurrent);
@@ -1673,11 +1729,11 @@ function openStatusDialog(orderId) {
   syncStatusStepHint();
   if (statusSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`è®¢å•å· ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`å›¾å· ${order.drawingNo}`);
-    if (order.name) parts.push(`åç§° ${order.name}`);
-    parts.push(`æœ€å¤šç¬¬${maxStep}åº`);
-    statusSubTitle.textContent = parts.join(" Â· ");
+    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
+    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
+    parts.push(`×î¶àµÚ${maxStep}Ğò`);
+    statusSubTitle.textContent = parts.join(" ¡¤ ");
   }
   statusDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1688,7 +1744,7 @@ function closeStatusDialog() {
   statusDialog.hidden = true;
   statusEditingOrderId = "";
   if (statusTitle) statusTitle.textContent = STATUS_TITLE_BASE;
-  if (statusProcessContext) statusProcessContext.textContent = "å½“å‰ç¬¬0åº / å…±1åº / å‰©ä½™1åº";
+  if (statusProcessContext) statusProcessContext.textContent = "µ±Ç°µÚ0Ğò / ¹²1Ğò / Ê£Óà1Ğò";
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -1707,17 +1763,17 @@ async function saveStatusDialog() {
     closeStatusDialog();
     return;
   }
-  const nextStatus = String(statusInput?.value || "å¾…æ’äº§").trim() || "å¾…æ’äº§";
+  const nextStatus = String(statusInput?.value || "´ıÅÅ²ú").trim() || "´ıÅÅ²ú";
   const maxStep = getMaxProcessStep(order);
   let nextStep = "";
-  if (nextStatus === "åŠ å·¥ä¸­") {
+  if (nextStatus === "¼Ó¹¤ÖĞ") {
     const rawStep = normalizeStepValue(statusStepInput?.value || "");
     if (!rawStep) {
-      alert("è¯·é€‰æ‹©åŠ å·¥åºå·ã€‚");
+      alert("ÇëÑ¡Ôñ¼Ó¹¤ĞòºÅ¡£");
       return;
     }
     if (Number(rawStep) > maxStep) {
-      alert(`å½“å‰å·¥åºæ€»æ•°ä¸º ${maxStep}ï¼ŒåŠ å·¥åºå·ä¸èƒ½è¶…è¿‡ç¬¬${maxStep}åºã€‚`);
+      alert(`µ±Ç°¹¤Ğò×ÜÊıÎª ${maxStep}£¬¼Ó¹¤ĞòºÅ²»ÄÜ³¬¹ıµÚ${maxStep}Ğò¡£`);
       return;
     }
     nextStep = rawStep;
@@ -1736,21 +1792,21 @@ async function saveStatusDialog() {
 
 function applyStatusNextStep() {
   if (!statusInput) return;
-  const current = String(statusInput.value || "").trim() || "å¾…æ’äº§";
-  if (current === "å¾…æ’äº§") {
-    statusInput.value = "å·²æ’äº§";
+  const current = String(statusInput.value || "").trim() || "´ıÅÅ²ú";
+  if (current === "´ıÅÅ²ú") {
+    statusInput.value = "ÒÑÅÅ²ú";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "å·²æ’äº§") {
-    statusInput.value = "åŠ å·¥ä¸­";
+  if (current === "ÒÑÅÅ²ú") {
+    statusInput.value = "¼Ó¹¤ÖĞ";
     if (statusStepInput && !normalizeStepValue(statusStepInput.value)) statusStepInput.value = "1";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "åŠ å·¥ä¸­") {
+  if (current === "¼Ó¹¤ÖĞ") {
     const maxStep = statusEditingOrderId ? getMaxProcessStep(orders.find((x) => x.id === statusEditingOrderId) || {}) : 1;
     const nowStep = Number(normalizeStepValue(statusStepInput?.value || "1") || 1);
     if (nowStep < maxStep) {
@@ -1758,14 +1814,14 @@ function applyStatusNextStep() {
       syncStatusStepHint();
       return;
     }
-    statusInput.value = "å®Œæˆå¾…æ£€";
+    statusInput.value = "Íê³É´ı¼ì";
     if (statusStepInput) statusStepInput.value = "";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "å®Œæˆå¾…æ£€") {
-    statusInput.value = "å·²å‘è´§";
+  if (current === "Íê³É´ı¼ì") {
+    statusInput.value = "ÒÑ·¢»õ";
     if (statusStepInput) statusStepInput.value = "";
     syncStatusStepVisibility();
     syncStatusStepHint();
@@ -1775,7 +1831,7 @@ function applyStatusNextStep() {
 
 function syncStatusStepHint() {
   if (!statusStepHint || !statusInput) return;
-  if (statusInput.value !== "åŠ å·¥ä¸­") {
+  if (statusInput.value !== "¼Ó¹¤ÖĞ") {
     statusStepHint.textContent = "";
     syncStatusProcessContext();
     return;
@@ -1784,12 +1840,12 @@ function syncStatusStepHint() {
   const maxStep = getMaxProcessStep(order || {});
   const currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
   if (!currentStep) {
-    statusStepHint.textContent = `å½“å‰æœªé€‰æ‹©åºå·ï¼Œå…±${maxStep}åºã€‚`;
+    statusStepHint.textContent = `µ±Ç°Î´Ñ¡ÔñĞòºÅ£¬¹²${maxStep}Ğò¡£`;
     syncStatusProcessContext();
     return;
   }
   const remain = Math.max(0, maxStep - currentStep);
-  statusStepHint.textContent = `å½“å‰ç¬¬${currentStep}åºï¼Œå‰©ä½™${remain}åºã€‚`;
+  statusStepHint.textContent = `µ±Ç°µÚ${currentStep}Ğò£¬Ê£Óà${remain}Ğò¡£`;
   syncStatusProcessContext();
 }
 
@@ -1799,37 +1855,37 @@ function syncStatusProcessContext() {
   const maxStep = getMaxProcessStep(order);
   const status = String(statusInput?.value || order.status || "").trim();
   let currentStep = 0;
-  if (status === "åŠ å·¥ä¸­") {
+  if (status === "¼Ó¹¤ÖĞ") {
     currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
-  } else if (String(order.status || "").trim() === "åŠ å·¥ä¸­") {
+  } else if (String(order.status || "").trim() === "¼Ó¹¤ÖĞ") {
     currentStep = Number(normalizeStepValue(order.processStepCurrent) || 0);
   }
   currentStep = Math.max(0, Math.min(maxStep, currentStep));
   const remain = Math.max(0, maxStep - currentStep);
-  statusProcessContext.textContent = `å½“å‰ç¬¬${currentStep}åº / å…±${maxStep}åº / å‰©ä½™${remain}åº`;
+  statusProcessContext.textContent = `µ±Ç°µÚ${currentStep}Ğò / ¹²${maxStep}Ğò / Ê£Óà${remain}Ğò`;
 }
 
 function syncStatusNextButtonState() {
   if (!statusNextBtn || !statusInput) return;
-  const current = String(statusInput.value || "").trim() || "å¾…æ’äº§";
-  statusNextBtn.disabled = current === "å·²å‘è´§";
-  if (current === "å¾…æ’äº§") {
-    statusNextBtn.textContent = "ä¸‹ä¸€æ­¥ï¼šå·²æ’äº§";
+  const current = String(statusInput.value || "").trim() || "´ıÅÅ²ú";
+  statusNextBtn.disabled = current === "ÒÑ·¢»õ";
+  if (current === "´ıÅÅ²ú") {
+    statusNextBtn.textContent = "ÏÂÒ»²½£ºÒÑÅÅ²ú";
     return;
   }
-  if (current === "å·²æ’äº§") {
-    statusNextBtn.textContent = "ä¸‹ä¸€æ­¥ï¼šåŠ å·¥ä¸­";
+  if (current === "ÒÑÅÅ²ú") {
+    statusNextBtn.textContent = "ÏÂÒ»²½£º¼Ó¹¤ÖĞ";
     return;
   }
-  if (current === "åŠ å·¥ä¸­") {
-    statusNextBtn.textContent = "ä¸‹ä¸€æ­¥ï¼šæ¨è¿›åºå·";
+  if (current === "¼Ó¹¤ÖĞ") {
+    statusNextBtn.textContent = "ÏÂÒ»²½£ºÍÆ½øĞòºÅ";
     return;
   }
-  if (current === "å®Œæˆå¾…æ£€") {
-    statusNextBtn.textContent = "ä¸‹ä¸€æ­¥ï¼šå·²å‘è´§";
+  if (current === "Íê³É´ı¼ì") {
+    statusNextBtn.textContent = "ÏÂÒ»²½£ºÒÑ·¢»õ";
     return;
   }
-  statusNextBtn.textContent = "å·²å®Œæˆ";
+  statusNextBtn.textContent = "ÒÑÍê³É";
 }
 
 function openProcessTimeDialog(orderId) {
@@ -1838,17 +1894,17 @@ function openProcessTimeDialog(orderId) {
   const defaults = getShiftDefaults();
   processTimeEditingOrderId = orderId;
   if (processTimeTitle) processTimeTitle.textContent = formatDialogTitle(PROCESS_TIME_TITLE_BASE, order.orderNo);
-  if (processProgramInput) processProgramInput.value = order.programNo || "æœªå‡º";
+  if (processProgramInput) processProgramInput.value = order.programNo || "Î´³ö";
   if (processNameInput) processNameInput.value = order.processName || "";
   if (processMinutesInput) processMinutesInput.value = order.plannedHours === "" ? "" : String(order.plannedHours);
   if (processMachineInput) processMachineInput.value = order.machine || defaults.machine || "";
   if (processLatheInput) processLatheInput.value = order.lathe || defaults.lathe || "";
   if (processTimeSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`è®¢å•å· ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`å›¾å· ${order.drawingNo}`);
-    if (order.name) parts.push(`åç§° ${order.name}`);
-    processTimeSubTitle.textContent = parts.join(" Â· ") || "è®¾ç½®å·¥åºä¸å·¥æ—¶";
+    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
+    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
+    processTimeSubTitle.textContent = parts.join(" ¡¤ ") || "ÉèÖÃ¹¤ĞòÓë¹¤Ê±";
   }
   processTimeDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1883,7 +1939,7 @@ async function saveProcessTimeDialog() {
   const nextLathe = String(processLatheInput?.value || "").trim();
   const nextMinutes = normalizeValue("plannedHours", minuteRaw);
   if (minuteRaw !== "" && nextMinutes === "") {
-    alert("å·¥æ—¶æ ¼å¼æ— æ•ˆï¼Œè¯·è¾“å…¥æ•´æ•°åˆ†é’Ÿã€‚");
+    alert("¹¤Ê±¸ñÊ½ÎŞĞ§£¬ÇëÊäÈëÕûÊı·ÖÖÓ¡£");
     return;
   }
   const prevStep = String(target.processStepCurrent || "");
@@ -2026,14 +2082,14 @@ async function updateOrder(id, key, value) {
   const normalized = normalizeValue(key, value);
   if (key === "qty" && raw !== "" && !Number.isFinite(Number(raw))) {
     setDirtyCellMark(id, key, true);
-    setTransientCellError(id, "qty", "æ•°é‡å¿…é¡»ä¸ºæ•°å­—");
+    setTransientCellError(id, "qty", "ÊıÁ¿±ØĞëÎªÊı×Ö");
     render();
     return false;
   }
   if (key === "orderNo") {
     if (raw !== "" && normalized === "") {
       setDirtyCellMark(id, key, true);
-      setTransientCellError(id, "orderNo", "è®¢å•å·æ ¼å¼æ— æ•ˆ");
+      setTransientCellError(id, "orderNo", "¶©µ¥ºÅ¸ñÊ½ÎŞĞ§");
       render();
       return false;
     }
@@ -2042,14 +2098,14 @@ async function updateOrder(id, key, value) {
       : false;
     if (dup) {
       setDirtyCellMark(id, key, true);
-      setTransientCellError(id, "orderNo", "è®¢å•å·é‡å¤");
+      setTransientCellError(id, "orderNo", "¶©µ¥ºÅÖØ¸´");
       render();
       return false;
     }
   }
   if ((key === "dueDate" || key === "startTime") && raw !== "" && normalized === "") {
     setDirtyCellMark(id, key, true);
-    setTransientCellError(id, key, key === "dueDate" ? "äº¤æœŸæ ¼å¼æ— æ•ˆ" : "å¼€å§‹æ—¶é—´æ ¼å¼æ— æ•ˆ");
+    setTransientCellError(id, key, key === "dueDate" ? "½»ÆÚ¸ñÊ½ÎŞĞ§" : "¿ªÊ¼Ê±¼ä¸ñÊ½ÎŞĞ§");
     render();
     return false;
   }
@@ -2063,7 +2119,7 @@ async function updateOrder(id, key, value) {
     const nextStart = key === "startTime" ? normalized : normalizeDateOnlyInput(target.startTime);
     const nextDue = key === "dueDate" ? normalized : normalizeDateOnlyInput(target.dueDate);
     if (nextStart && nextDue && nextDue < nextStart) {
-      const msg = "äº¤æœŸä¸èƒ½æ—©äºå¼€å§‹æ—¶é—´";
+      const msg = "½»ÆÚ²»ÄÜÔçÓÚ¿ªÊ¼Ê±¼ä";
       setDirtyCellMark(id, key, true);
       setTransientCellError(id, "startTime", msg);
       setTransientCellError(id, "dueDate", msg);
@@ -2128,9 +2184,9 @@ function toMonthDay(value) {
 }
 
 function calcDelayed(order) {
-  if (!order.dueDate || order.status === "å·²å‘è´§") return "";
+  if (!order.dueDate || order.status === "ÒÑ·¢»õ") return "";
   const due = new Date(order.dueDate + "T23:59:59");
-  return Date.now() > due.getTime() ? "å»¶æœŸ" : "æ­£å¸¸";
+  return Date.now() > due.getTime() ? "ÑÓÆÚ" : "Õı³£";
 }
 
 function removeOrder(id) {
@@ -2141,8 +2197,8 @@ function openDeleteConfirmDialog(id) {
   const order = orders.find((o) => o.id === id);
   if (!order || !deleteConfirmDialog) return;
   pendingDeleteOrderId = id;
-  const no = String(order.orderNo || "").trim() || "æœªå¡«å†™";
-  if (deleteConfirmText) deleteConfirmText.textContent = `ç¡®è®¤åˆ é™¤è®¢å•å· ${no} å—ï¼Ÿæ­¤æ“ä½œä¸å¯æ’¤é”€ã€‚`;
+  const no = String(order.orderNo || "").trim() || "Î´ÌîĞ´";
+  if (deleteConfirmText) deleteConfirmText.textContent = `È·ÈÏÉ¾³ı¶©µ¥ºÅ ${no} Âğ£¿´Ë²Ù×÷²»¿É³·Ïú¡£`;
   deleteConfirmDialog.hidden = false;
   document.body.style.overflow = "hidden";
 }
@@ -2213,7 +2269,7 @@ function getMonthFromOrderNo(v) {
 
 function renderKpis(data) {
   const totalOrders = data.length;
-  const inProduction = data.filter((x) => x.status === "åŠ å·¥ä¸­").length;
+  const inProduction = data.filter((x) => x.status === "¼Ó¹¤ÖĞ").length;
   const dueToday = data.filter((x) => isDueToday(x.dueDate)).length;
   const abnormalCount = data.filter((x) => isAbnormalOrder(x)).length;
 
@@ -2224,7 +2280,7 @@ function renderKpis(data) {
 }
 
 function isAbnormalOrder(order) {
-  return order.isDelayed === "å»¶æœŸ" || order.status === "è¿”å·¥" || isDueToday(order.dueDate);
+  return order.isDelayed === "ÑÓÆÚ" || order.status === "·µ¹¤" || isDueToday(order.dueDate);
 }
 
 function isDueToday(dueDate) {
@@ -2258,11 +2314,11 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
       authSession = null;
       authWriteHintNotified = false;
       updateAuthUi();
-      setModeText(remoteOnline ? "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰" : "æœ¬åœ°æ¨¡å¼ï¼ˆäº‘è¿æ¥å¤±è´¥ï¼‰");
-      alert("å†™å…¥å¤±è´¥ï¼šç™»å½•æ€å·²å¤±æ•ˆï¼Œè¯·é‡æ–°ç™»å½•ã€‚");
+      setModeText(remoteOnline ? "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©" : "±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
+      alert("Ğ´ÈëÊ§°Ü£ºµÇÂ¼Ì¬ÒÑÊ§Ğ§£¬ÇëÖØĞÂµÇÂ¼¡£");
       return;
     }
-    handleRemoteError("äº‘ç«¯åŒæ­¥å¤±è´¥", e);
+    handleRemoteError("ÔÆ¶ËÍ¬²½Ê§°Ü", e);
   } finally {
     syncing = false;
   }
@@ -2285,7 +2341,7 @@ function loadOrdersLocal() {
         }));
       }
     } catch (e) {
-      console.warn("è¯»å–æœ¬åœ°ç¼“å­˜å¤±è´¥", e);
+      console.warn("¶ÁÈ¡±¾µØ»º´æÊ§°Ü", e);
     }
   }
   return demoData();
@@ -2310,18 +2366,18 @@ async function refreshFromRemote(showAlert = false) {
     setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
-    if (showAlert) alert("å·²ä»äº‘ç«¯åˆ·æ–°æœ€æ–°æ•°æ®");
+    if (showAlert) alert("ÒÑ´ÓÔÆ¶ËË¢ĞÂ×îĞÂÊı¾İ");
   } catch (e) {
     if (isAuthError(e) && !authSession) {
       remoteOnline = true;
       remoteErrorNotified = false;
-      setModeText("äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰");
+      setModeText("ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
       orders = loadOrdersLocal();
       render();
       setLastSyncTime();
       return;
     }
-    handleRemoteError("äº‘ç«¯è¯»å–å¤±è´¥", e);
+    handleRemoteError("ÔÆ¶Ë¶ÁÈ¡Ê§°Ü", e);
     orders = loadOrdersLocal();
     render();
   }
@@ -2330,12 +2386,12 @@ async function refreshFromRemote(showAlert = false) {
 function handleRemoteError(prefix, err) {
   console.error(prefix, err);
   remoteOnline = false;
-  setModeText("æœ¬åœ°æ¨¡å¼ï¼ˆäº‘è¿æ¥å¤±è´¥ï¼‰");
+  setModeText("±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
   scheduleReconnect();
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
-    const detail = err?.message || err?.error_description || "æœªçŸ¥é”™è¯¯";
-    alert(`${prefix}ï¼š${detail}\nå·²è‡ªåŠ¨åˆ‡æ¢æœ¬åœ°æ¨¡å¼ã€‚`);
+    const detail = err?.message || err?.error_description || "Î´Öª´íÎó";
+    alert(`${prefix}£º${detail}\nÒÑ×Ô¶¯ÇĞ»»±¾µØÄ£Ê½¡£`);
   }
 }
 
@@ -2361,23 +2417,23 @@ async function tryReconnectRemote(manual = false) {
     if (error) throw error;
     remoteOnline = true;
     reconnectDelayMs = 5000;
-    setModeText(authSession ? "äº‘ç«¯å…±äº«æ¨¡å¼" : "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰");
+    setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
     await refreshFromRemote(false);
-    if (manual) alert("äº‘ç«¯è¿æ¥å·²æ¢å¤");
+    if (manual) alert("ÔÆ¶ËÁ¬½ÓÒÑ»Ö¸´");
   } catch (e) {
     remoteOnline = false;
-    setModeText("æœ¬åœ°æ¨¡å¼ï¼ˆäº‘è¿æ¥å¤±è´¥ï¼‰");
+    setModeText("±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
     scheduleReconnect();
     if (manual) {
-      const detail = e?.message || e?.error_description || "æœªçŸ¥é”™è¯¯";
-      alert(`é‡è¿å¤±è´¥ï¼š${detail}`);
+      const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
+      alert(`ÖØÁ¬Ê§°Ü£º${detail}`);
     }
   }
 }
 
 function toDbRow(order, updatedAtOverride = "") {
   const normalizedProcess = String(order.processName || "").trim();
-  const normalizedStep = order.status === "åŠ å·¥ä¸­" ? normalizeStepValue(order.processStepCurrent) : "";
+  const normalizedStep = order.status === "¼Ó¹¤ÖĞ" ? normalizeStepValue(order.processStepCurrent) : "";
   const mergedNote = mergeOrderMetaIntoNote(order.note || "", {
     processName: normalizedProcess,
     processStepCurrent: normalizedStep,
@@ -2394,7 +2450,7 @@ function toDbRow(order, updatedAtOverride = "") {
     machine: order.machine || "",
     lathe: order.lathe || "",
     surface: order.surface || "",
-    status: order.status || "å¾…æ’äº§",
+    status: order.status || "´ıÅÅ²ú",
     start_time: toDbStartTime(order.startTime),
     due_date: toDbDueDate(order.dueDate),
     is_delayed: order.isDelayed || "",
@@ -2414,12 +2470,12 @@ function fromDbRow(row) {
   o.customer = row.customer || "";
   o.name = row.item_name || "";
   o.qty = row.qty ?? "";
-  o.programNo = row.program_no || "æœªå‡º";
+  o.programNo = row.program_no || "Î´³ö";
   o.plannedHours = row.planned_hours ?? "";
   o.machine = row.machine || "";
   o.lathe = row.lathe || "";
   o.surface = row.surface || "";
-  o.status = row.status || "å¾…æ’äº§";
+  o.status = row.status || "´ıÅÅ²ú";
   o.startTime = formatStartTimeFromDb(row.start_time);
   o.dueDate = formatDueDateFromDb(row.due_date);
   o.processName = parsedNote.processName || "";
@@ -2436,49 +2492,49 @@ function demoData() {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0003",
       drawingNo: "DW-2025-003",
-      customer: "æµ·å°”",
-      name: "å£³ä½“A",
+      customer: "º£¶û",
+      name: "¿ÇÌåA",
       qty: 289,
-      programNo: "å·²å‡º",
+      programNo: "ÒÑ³ö",
       plannedHours: 19.1,
       machine: "CNC1",
-      lathe: "æ˜¯",
-      surface: "é˜³ææ°§åŒ–",
-      status: "å·²æ’äº§",
+      lathe: "ÊÇ",
+      surface: "Ñô¼«Ñõ»¯",
+      status: "ÒÑÅÅ²ú",
       startTime: "2026-02-14 08:30",
       dueDate: "2026-02-18",
-      note: "ä¼˜å…ˆè®¢å•",
+      note: "ÓÅÏÈ¶©µ¥",
     },
     {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0004",
       drawingNo: "DW-2025-003",
-      customer: "æ¯”äºšè¿ª",
-      name: "æ”¯æ¶B",
+      customer: "±ÈÑÇµÏ",
+      name: "Ö§¼ÜB",
       qty: 758,
-      programNo: "å·²å‡º",
+      programNo: "ÒÑ³ö",
       plannedHours: 38.5,
       machine: "CNC3",
-      lathe: "å¦",
-      surface: "å‘é»‘",
-      status: "åŠ å·¥ä¸­",
+      lathe: "·ñ",
+      surface: "·¢ºÚ",
+      status: "¼Ó¹¤ÖĞ",
       startTime: "2026-02-14 09:20",
       dueDate: "2026-02-16",
-      note: "å¤œç­è·Ÿè¿›",
+      note: "Ò¹°à¸ú½ø",
     },
     {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0005",
       drawingNo: "DW-2025-004",
-      customer: "è”æƒ³",
-      name: "ç«¯ç›–C",
+      customer: "ÁªÏë",
+      name: "¶Ë¸ÇC",
       qty: 403,
-      programNo: "æœªå‡º",
+      programNo: "Î´³ö",
       plannedHours: 22.8,
       machine: "CNC5",
-      lathe: "æ˜¯",
-      surface: "å–·ç ‚",
-      status: "å¾…æ’äº§",
+      lathe: "ÊÇ",
+      surface: "ÅçÉ°",
+      status: "´ıÅÅ²ú",
       startTime: "",
       dueDate: "2026-02-15",
       note: "",
@@ -2547,7 +2603,7 @@ async function openLinePreview(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order) return;
   if (!UPLOAD_API_BASE) {
-    alert("æœªé…ç½®ä¸Šä¼ æœåŠ¡åœ°å€ï¼Œè¯·å…ˆè®¾ç½® config.js çš„ UPLOAD_API_BASEã€‚");
+    alert("Î´ÅäÖÃÉÏ´«·şÎñµØÖ·£¬ÇëÏÈÉèÖÃ config.js µÄ UPLOAD_API_BASE¡£");
     return;
   }
   try {
@@ -2555,20 +2611,20 @@ async function openLinePreview(orderId) {
     const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
     setAttachmentStateFromItems(orderId, items);
     if (items.length === 0) {
-      alert("è¯¥é›¶ä»¶æš‚æ— å›¾çº¸ï¼Œè¯·å…ˆä¸Šä¼ ã€‚");
+      alert("¸ÃÁã¼şÔİÎŞÍ¼Ö½£¬ÇëÏÈÉÏ´«¡£");
       await openAttachmentDialog(orderId);
       return;
     }
     const previewable = items.find((item) => isPreviewableFile(item));
     if (!previewable) {
-      alert("å½“å‰å›¾çº¸ç±»å‹ä¸æ”¯æŒåœ¨çº¿é¢„è§ˆï¼Œè¯·åœ¨é™„ä»¶åˆ—è¡¨ä¸­ä¸‹è½½æŸ¥çœ‹ã€‚");
+      alert("µ±Ç°Í¼Ö½ÀàĞÍ²»Ö§³ÖÔÚÏßÔ¤ÀÀ£¬ÇëÔÚ¸½¼şÁĞ±íÖĞÏÂÔØ²é¿´¡£");
       await openAttachmentDialog(orderId);
       return;
     }
     await previewOrderFile(previewable, order);
   } catch (e) {
-    const detail = e?.message || "æœªçŸ¥é”™è¯¯";
-    alert(`é¢„è§ˆå¤±è´¥ï¼š${detail}`);
+    const detail = e?.message || "Î´Öª´íÎó";
+    alert(`Ô¤ÀÀÊ§°Ü£º${detail}`);
   }
 }
 
@@ -2586,16 +2642,16 @@ async function openAttachmentDialog(orderId) {
 }
 
 function syncAttachmentHeader(order) {
-  if (attachmentTitle) attachmentTitle.textContent = "é›¶ä»¶å›¾çº¸";
+  if (attachmentTitle) attachmentTitle.textContent = "Áã¼şÍ¼Ö½";
   if (attachmentSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`è®¢å•å· ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`å›¾å· ${order.drawingNo}`);
-    if (order.name) parts.push(`åç§° ${order.name}`);
-    attachmentSubTitle.textContent = parts.join(" Â· ") || "æœªå¡«å†™è®¢å•åŸºç¡€ä¿¡æ¯";
+    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
+    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
+    attachmentSubTitle.textContent = parts.join(" ¡¤ ") || "Î´ÌîĞ´¶©µ¥»ù´¡ĞÅÏ¢";
   }
   if (attachmentHint) {
-    attachmentHint.textContent = `æ”¯æŒç±»å‹: ${UPLOAD_ACCEPT}ï¼Œå•æ–‡ä»¶ä¸Šé™ ${UPLOAD_MAX_MB}MB`;
+    attachmentHint.textContent = `Ö§³ÖÀàĞÍ: ${UPLOAD_ACCEPT}£¬µ¥ÎÄ¼şÉÏÏŞ ${UPLOAD_MAX_MB}MB`;
   }
 }
 
@@ -2606,7 +2662,7 @@ function renderAttachmentList() {
   if (!UPLOAD_API_BASE) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "æœªé…ç½®ä¸Šä¼ æœåŠ¡åœ°å€ï¼Œè¯·åœ¨ config.js ä¸­è®¾ç½® UPLOAD_API_BASEã€‚";
+    empty.textContent = "Î´ÅäÖÃÉÏ´«·şÎñµØÖ·£¬ÇëÔÚ config.js ÖĞÉèÖÃ UPLOAD_API_BASE¡£";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2614,7 +2670,7 @@ function renderAttachmentList() {
   if (attachmentLoading) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "é™„ä»¶åŠ è½½ä¸­...";
+    empty.textContent = "¸½¼ş¼ÓÔØÖĞ...";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2622,7 +2678,7 @@ function renderAttachmentList() {
   if (attachmentItems.length === 0) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "æš‚æ— é™„ä»¶";
+    empty.textContent = "ÔİÎŞ¸½¼ş";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2638,7 +2694,7 @@ function renderAttachmentList() {
     name.textContent = getAttachmentName(item);
     const desc = document.createElement("div");
     desc.className = "attachment-desc";
-    desc.textContent = `${formatFileSize(item.size_bytes || item.size || 0)} Â· ${formatDateTime(item.created_at || item.createdAt || "")}`;
+    desc.textContent = `${formatFileSize(item.size_bytes || item.size || 0)} ¡¤ ${formatDateTime(item.created_at || item.createdAt || "")}`;
     meta.appendChild(name);
     meta.appendChild(desc);
 
@@ -2647,21 +2703,21 @@ function renderAttachmentList() {
     const previewBtn = document.createElement("button");
     previewBtn.type = "button";
     previewBtn.className = "action-btn-secondary";
-    previewBtn.textContent = "é¢„è§ˆ";
+    previewBtn.textContent = "Ô¤ÀÀ";
     previewBtn.addEventListener("click", () => {
       void previewOrderFile(item);
     });
     const downloadBtn = document.createElement("button");
     downloadBtn.type = "button";
     downloadBtn.className = "action-btn-secondary";
-    downloadBtn.textContent = "ä¸‹è½½";
+    downloadBtn.textContent = "ÏÂÔØ";
     downloadBtn.addEventListener("click", () => {
       void downloadOrderFile(item);
     });
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "action-btn";
-    deleteBtn.textContent = "åˆ é™¤";
+    deleteBtn.textContent = "É¾³ı";
     deleteBtn.addEventListener("click", () => {
       void deleteOrderFile(item);
     });
@@ -2689,8 +2745,8 @@ async function loadOrderFiles(orderId) {
     attachmentItems = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
     setAttachmentStateFromItems(orderId, attachmentItems);
   } catch (e) {
-    const detail = e?.message || "æœªçŸ¥é”™è¯¯";
-    alert(`åŠ è½½é™„ä»¶å¤±è´¥ï¼š${detail}`);
+    const detail = e?.message || "Î´Öª´íÎó";
+    alert(`¼ÓÔØ¸½¼şÊ§°Ü£º${detail}`);
     attachmentItems = [];
   } finally {
     attachmentLoading = false;
@@ -2703,18 +2759,18 @@ async function uploadAttachmentFromInput(event) {
   event.target.value = "";
   if (!file || !attachmentPanelOrderId) return;
   if (!UPLOAD_API_BASE) {
-    alert("æœªé…ç½®ä¸Šä¼ æœåŠ¡åœ°å€ï¼Œè¯·å…ˆè®¾ç½® config.js çš„ UPLOAD_API_BASEã€‚");
+    alert("Î´ÅäÖÃÉÏ´«·şÎñµØÖ·£¬ÇëÏÈÉèÖÃ config.js µÄ UPLOAD_API_BASE¡£");
     return;
   }
   const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
   if (file.size > maxBytes) {
-    alert(`æ–‡ä»¶è¿‡å¤§ï¼Œå½“å‰é™åˆ¶ ${UPLOAD_MAX_MB}MBã€‚`);
+    alert(`ÎÄ¼ş¹ı´ó£¬µ±Ç°ÏŞÖÆ ${UPLOAD_MAX_MB}MB¡£`);
     return;
   }
   const ext = `.${(file.name.split(".").pop() || "").toLowerCase()}`;
   const allowList = UPLOAD_ACCEPT.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (allowList.length > 0 && !allowList.includes(ext)) {
-    alert(`æ–‡ä»¶ç±»å‹ä¸æ”¯æŒï¼š${ext || "æœªçŸ¥"}ã€‚`);
+    alert(`ÎÄ¼şÀàĞÍ²»Ö§³Ö£º${ext || "Î´Öª"}¡£`);
     return;
   }
 
@@ -2732,15 +2788,15 @@ async function uploadAttachmentFromInput(event) {
     await loadOrderFiles(attachmentPanelOrderId);
     render();
   } catch (e) {
-    const detail = e?.message || "æœªçŸ¥é”™è¯¯";
-    alert(`ä¸Šä¼ å¤±è´¥ï¼š${detail}`);
+    const detail = e?.message || "Î´Öª´íÎó";
+    alert(`ÉÏ´«Ê§°Ü£º${detail}`);
   }
 }
 
 async function deleteOrderFile(item) {
   const id = item?.id;
   if (!id) return;
-  if (!confirm(`ç¡®è®¤åˆ é™¤é™„ä»¶â€œ${getAttachmentName(item)}â€å—ï¼Ÿ`)) return;
+  if (!confirm(`È·ÈÏÉ¾³ı¸½¼ş¡°${getAttachmentName(item)}¡±Âğ£¿`)) return;
   try {
     await apiFetchJson(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
     attachmentItems = attachmentItems.filter((x) => x.id !== id);
@@ -2748,8 +2804,8 @@ async function deleteOrderFile(item) {
     renderAttachmentList();
     render();
   } catch (e) {
-    const detail = e?.message || "æœªçŸ¥é”™è¯¯";
-    alert(`åˆ é™¤å¤±è´¥ï¼š${detail}`);
+    const detail = e?.message || "Î´Öª´íÎó";
+    alert(`É¾³ıÊ§°Ü£º${detail}`);
   }
 }
 
@@ -2767,8 +2823,8 @@ async function downloadOrderFile(item) {
     a.remove();
     URL.revokeObjectURL(url);
   } catch (e) {
-    const detail = e?.message || "æœªçŸ¥é”™è¯¯";
-    alert(`ä¸‹è½½å¤±è´¥ï¼š${detail}`);
+    const detail = e?.message || "Î´Öª´íÎó";
+    alert(`ÏÂÔØÊ§°Ü£º${detail}`);
   }
 }
 
@@ -2776,15 +2832,15 @@ async function previewOrderFile(item, orderOverride = null) {
   const id = item?.id;
   if (!id || !previewDialog || !previewBody) return;
   const order = orderOverride || orders.find((x) => x.id === attachmentPanelOrderId) || null;
-  if (previewTitle) previewTitle.textContent = "å›¾çº¸é¢„è§ˆ";
+  if (previewTitle) previewTitle.textContent = "Í¼Ö½Ô¤ÀÀ";
   if (previewSubTitle) {
     const seg = [];
-    if (order?.orderNo) seg.push(`è®¢å•å· ${order.orderNo}`);
-    if (order?.drawingNo) seg.push(`å›¾å· ${order.drawingNo}`);
+    if (order?.orderNo) seg.push(`¶©µ¥ºÅ ${order.orderNo}`);
+    if (order?.drawingNo) seg.push(`Í¼ºÅ ${order.drawingNo}`);
     seg.push(getAttachmentName(item));
-    previewSubTitle.textContent = seg.join(" Â· ");
+    previewSubTitle.textContent = seg.join(" ¡¤ ");
   }
-  previewBody.innerHTML = `<div class="preview-empty">åŠ è½½ä¸­...</div>`;
+  previewBody.innerHTML = `<div class="preview-empty">¼ÓÔØÖĞ...</div>`;
   previewDialog.hidden = false;
   document.body.style.overflow = "hidden";
 
@@ -2813,15 +2869,15 @@ async function previewOrderFile(item, orderOverride = null) {
       previewBody.appendChild(frame);
       return;
     }
-    previewBody.innerHTML = `<div class="preview-empty">è¯¥æ–‡ä»¶ç±»å‹æš‚ä¸æ”¯æŒåœ¨çº¿é¢„è§ˆï¼Œè¯·ä¸‹è½½æŸ¥çœ‹ã€‚</div>`;
+    previewBody.innerHTML = `<div class="preview-empty">¸ÃÎÄ¼şÀàĞÍÔİ²»Ö§³ÖÔÚÏßÔ¤ÀÀ£¬ÇëÏÂÔØ²é¿´¡£</div>`;
   } catch (e) {
-    const detail = e?.message || "æœªçŸ¥é”™è¯¯";
-    previewBody.innerHTML = `<div class="preview-empty">é¢„è§ˆå¤±è´¥ï¼š${detail}</div>`;
+    const detail = e?.message || "Î´Öª´íÎó";
+    previewBody.innerHTML = `<div class="preview-empty">Ô¤ÀÀÊ§°Ü£º${detail}</div>`;
   }
 }
 
 function getAttachmentName(item) {
-  return item?.file_name || item?.name || item?.filename || "æœªå‘½åé™„ä»¶";
+  return item?.file_name || item?.name || item?.filename || "Î´ÃüÃû¸½¼ş";
 }
 
 function setAttachmentState(orderId, hasFiles) {
@@ -2873,7 +2929,7 @@ function syncPreviewUploadedTime(orderId, uploadedAt = "") {
       node.className = "preview-upload-time";
       wrap.appendChild(node);
     }
-    node.textContent = `å·²ä¸Šä¼  ${uploadedAt}`;
+    node.textContent = `ÒÑÉÏ´« ${uploadedAt}`;
   });
 }
 
@@ -2926,7 +2982,7 @@ function formatFileSize(bytes) {
 }
 
 function formatDateTime(value) {
-  if (!value) return "æ—¶é—´æœªçŸ¥";
+  if (!value) return "Ê±¼äÎ´Öª";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   const yyyy = d.getFullYear();
@@ -2990,7 +3046,7 @@ async function parseHttpError(resp) {
 
 function exportXlsx() {
   if (!window.XLSX) {
-    alert("Excelç»„ä»¶åŠ è½½å¤±è´¥ï¼Œè¯·åˆ·æ–°é¡µé¢åé‡è¯•");
+    alert("Excel×é¼ş¼ÓÔØÊ§°Ü£¬ÇëË¢ĞÂÒ³ÃæºóÖØÊÔ");
     return;
   }
   const rows = orders.map((o) => {
@@ -3002,7 +3058,7 @@ function exportXlsx() {
   });
   const ws = XLSX.utils.json_to_sheet(rows, { header: XLSX_COLUMNS.map((x) => x.title) });
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "ç”Ÿäº§æ•°æ®");
+  XLSX.utils.book_append_sheet(wb, ws, "Éú²úÊı¾İ");
   XLSX.writeFile(wb, `mes_orders_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.xlsx`);
 }
 
@@ -3010,7 +3066,7 @@ async function importXlsx(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (!window.XLSX) {
-    alert("Excelç»„ä»¶åŠ è½½å¤±è´¥ï¼Œè¯·åˆ·æ–°é¡µé¢åé‡è¯•");
+    alert("Excel×é¼ş¼ÓÔØÊ§°Ü£¬ÇëË¢ĞÂÒ³ÃæºóÖØÊÔ");
     event.target.value = "";
     return;
   }
@@ -3023,7 +3079,7 @@ async function importXlsx(event) {
       const firstSheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
       const titleToKey = Object.fromEntries(XLSX_COLUMNS.map((x) => [x.title, x.key]));
-      titleToKey["é¢„è®¡å·¥æ—¶"] = "plannedHours";
+      titleToKey["Ô¤¼Æ¹¤Ê±"] = "plannedHours";
       const existingIdByKey = new Map();
       const usedIds = new Set();
       orders.forEach((item) => {
@@ -3077,20 +3133,20 @@ async function importXlsx(event) {
       });
       const untouched = Math.max(0, previousCount - updateCount);
       const confirmed = confirm(
-        `å¯¼å…¥é¢„è§ˆï¼š\næ–°å¢ ${insertCount} æ¡\nè¦†ç›– ${updateCount} æ¡\nä¿ç•™å†å² ${untouched} æ¡\n\nç¡®è®¤ç»§ç»­å¯¼å…¥å—ï¼Ÿ`
+        `µ¼ÈëÔ¤ÀÀ£º\nĞÂÔö ${insertCount} Ìõ\n¸²¸Ç ${updateCount} Ìõ\n±£ÁôÀúÊ· ${untouched} Ìõ\n\nÈ·ÈÏ¼ÌĞøµ¼ÈëÂğ£¿`
       );
       if (!confirmed) return;
       orders = merged;
       await persistOrders({ changed: imported });
       render();
-      alert("å¯¼å…¥æˆåŠŸï¼šå·²è¦†ç›–åŒé”®è®¢å•å¹¶æ–°å¢æ–°è®¢å•ï¼Œæœªåˆ é™¤æœªåŒ…å«åœ¨Excelä¸­çš„å†å²è®¢å•ã€‚");
+      alert("µ¼Èë³É¹¦£ºÒÑ¸²¸ÇÍ¬¼ü¶©µ¥²¢ĞÂÔöĞÂ¶©µ¥£¬Î´É¾³ıÎ´°üº¬ÔÚExcelÖĞµÄÀúÊ·¶©µ¥¡£");
     } catch (e) {
       console.error(e);
       const msg = (e && e.message) ? e.message : "";
       if (msg.includes("item_name")) {
-        alert("å¯¼å…¥å¤±è´¥ï¼šäº‘ç«¯è¡¨ç¼ºå°‘ item_name å­—æ®µï¼Œè¯·åœ¨ Supabase æ‰§è¡Œæœ€æ–° supabase_schema.sql åé‡è¯•ã€‚");
+        alert("µ¼ÈëÊ§°Ü£ºÔÆ¶Ë±íÈ±ÉÙ item_name ×Ö¶Î£¬ÇëÔÚ Supabase Ö´ĞĞ×îĞÂ supabase_schema.sql ºóÖØÊÔ¡£");
       } else {
-        alert("å¯¼å…¥å¤±è´¥ï¼šè¯·ä½¿ç”¨ç³»ç»Ÿå¯¼å‡ºçš„ Excel æˆ–åŒ…å«æ ‡å‡†åˆ—åçš„ Excel");
+        alert("µ¼ÈëÊ§°Ü£ºÇëÊ¹ÓÃÏµÍ³µ¼³öµÄ Excel »ò°üº¬±ê×¼ÁĞÃûµÄ Excel");
       }
     }
   };

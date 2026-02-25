@@ -1,9 +1,9 @@
-ï»¿const STORAGE_KEY = "mini_mes_materials_v1";
+const STORAGE_KEY = "mini_mes_materials_v1";
 const COL_WIDTH_KEY = "mini_mes_materials_col_widths_v1";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
 const ORDER_SYNC_ENABLED = false;
 
-const READY_OPTIONS = ["æ˜¯", "å¦"];
+const READY_OPTIONS = ["ÊÇ", "·ñ"];
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
@@ -19,6 +19,8 @@ let reconnectDelayMs = 5000;
 let authSession = null;
 let authWriteHintNotified = false;
 let authLoginSubmitting = false;
+let authLoginCooldownUntil = 0;
+let authLoginCooldownTimer = 0;
 let stickyOffsetRaf = 0;
 let pageUnloading = false;
 let orderCustomerMap = new Map();
@@ -51,7 +53,7 @@ async function init() {
   updateLayoutMetrics();
   if (REMOTE_ENABLED) {
     await initAuth();
-    setModeText(authSession ? "äº‘ç«¯å…±äº«æ¨¡å¼" : "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰");
+    setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) {
@@ -59,7 +61,7 @@ async function init() {
       }
     }, AUTO_REFRESH_MS);
   } else {
-    setModeText("æœ¬åœ°æ¨¡å¼");
+    setModeText("±¾µØÄ£Ê½");
     materials = loadLocal();
     render();
     syncQuickCustomer();
@@ -69,8 +71,8 @@ async function init() {
 
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
-  if (lastSyncTime && text.includes("å¤±è´¥")) lastSyncTime.classList.add("sync-warning");
-  if (lastSyncTime && !text.includes("å¤±è´¥")) lastSyncTime.classList.remove("sync-warning");
+  if (lastSyncTime && text.includes("Ê§°Ü")) lastSyncTime.classList.add("sync-warning");
+  if (lastSyncTime && !text.includes("Ê§°Ü")) lastSyncTime.classList.remove("sync-warning");
   syncReconnectButton();
 }
 
@@ -78,7 +80,7 @@ function setLastSyncTime() {
   if (!lastSyncTime) return;
   const now = new Date();
   const t = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-  lastSyncTime.textContent = `æœ€è¿‘åŒæ­¥ ${t}`;
+  lastSyncTime.textContent = `×î½üÍ¬²½ ${t}`;
 }
 
 function bindEvents() {
@@ -139,7 +141,7 @@ function bindEvents() {
   if (materialFilterToggleBtn && materialFilters) {
     materialFilterToggleBtn.addEventListener("click", () => {
       const collapsed = materialFilters.classList.toggle("collapsed");
-      materialFilterToggleBtn.textContent = collapsed ? "å±•å¼€æœç´¢" : "æ”¶èµ·æœç´¢";
+      materialFilterToggleBtn.textContent = collapsed ? "Õ¹¿ªËÑË÷" : "ÊÕÆğËÑË÷";
       materialFilterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
       updateLayoutMetrics();
     });
@@ -190,7 +192,7 @@ function syncFilterPanelForViewport() {
   if (!materialFilters || !materialFilterToggleBtn) return;
   if (window.innerWidth > 780) {
     materialFilters.classList.remove("collapsed");
-    materialFilterToggleBtn.textContent = "æ”¶èµ·æœç´¢";
+    materialFilterToggleBtn.textContent = "ÊÕÆğËÑË÷";
     materialFilterToggleBtn.setAttribute("aria-expanded", "true");
   }
   updateLayoutMetrics();
@@ -212,7 +214,7 @@ async function initAuth() {
     if (error) throw error;
     authSession = data?.session || null;
   } catch (e) {
-    console.warn("è¯»å–ç™»å½•æ€å¤±è´¥", e);
+    console.warn("¶ÁÈ¡µÇÂ¼Ì¬Ê§°Ü", e);
     authSession = null;
   }
   updateAuthUi();
@@ -221,7 +223,7 @@ async function initAuth() {
     authWriteHintNotified = false;
     updateAuthUi();
     if (remoteOnline) {
-      setModeText(authSession ? "äº‘ç«¯å…±äº«æ¨¡å¼" : "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰");
+      setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
     }
     if (authSession && remoteOnline) {
       void refreshFromRemote(false);
@@ -237,6 +239,7 @@ function openAuthLoginDialog() {
   if (!REMOTE_ENABLED || !db?.auth || !authLoginDialog) return;
   if (authLoginEmailInput) authLoginEmailInput.value = "";
   authLoginDialog.hidden = false;
+  refreshAuthLoginSubmitUi();
   document.body.style.overflow = "hidden";
   if (authLoginEmailInput) authLoginEmailInput.focus();
 }
@@ -250,18 +253,64 @@ function closeAuthLoginDialog() {
 
 function setAuthLoginSubmitting(submitting) {
   authLoginSubmitting = Boolean(submitting);
-  if (authLoginSubmitBtn) {
-    authLoginSubmitBtn.disabled = authLoginSubmitting;
-    authLoginSubmitBtn.textContent = authLoginSubmitting ? "å‘é€ä¸­..." : "å‘é€ç™»å½•é‚®ä»¶";
+  refreshAuthLoginSubmitUi();
+}
+
+function getAuthLoginCooldownSeconds() {
+  return Math.max(0, Math.ceil((authLoginCooldownUntil - Date.now()) / 1000));
+}
+
+function refreshAuthLoginSubmitUi() {
+  if (!authLoginSubmitBtn) return;
+  const remain = getAuthLoginCooldownSeconds();
+  const locked = authLoginSubmitting || remain > 0;
+  authLoginSubmitBtn.disabled = locked;
+  if (authLoginSubmitting) {
+    authLoginSubmitBtn.textContent = "·¢ËÍÖĞ...";
+  } else if (remain > 0) {
+    authLoginSubmitBtn.textContent = `Çë ${remain}s ºóÖØÊÔ`;
+  } else {
+    authLoginSubmitBtn.textContent = "·¢ËÍµÇÂ¼ÓÊ¼ş";
   }
 }
+
+function startAuthLoginCooldown(seconds) {
+  authLoginCooldownUntil = Date.now() + Math.max(1, Number(seconds) || 0) * 1000;
+  if (authLoginCooldownTimer) clearInterval(authLoginCooldownTimer);
+  refreshAuthLoginSubmitUi();
+  authLoginCooldownTimer = setInterval(() => {
+    if (getAuthLoginCooldownSeconds() <= 0) {
+      clearInterval(authLoginCooldownTimer);
+      authLoginCooldownTimer = 0;
+      authLoginCooldownUntil = 0;
+    }
+    refreshAuthLoginSubmitUi();
+  }, 1000);
+}
+
+function isRateLimitError(err) {
+  const msg = String(err?.message || err?.error_description || "").toLowerCase();
+  return Number(err?.status) === 429 || msg.includes("rate limit");
+}
+
+function getRetryAfterSeconds(err, fallback = 60) {
+  const v = Number(err?.retry_after || err?.retryAfter || 0);
+  if (Number.isFinite(v) && v > 0) return Math.ceil(v);
+  return fallback;
+}
+
 
 async function submitEmailLoginFromDialog() {
   if (!REMOTE_ENABLED || !db?.auth) return;
   if (authLoginSubmitting) return;
+  const cooldown = getAuthLoginCooldownSeconds();
+  if (cooldown > 0) {
+    alert(`ÇëÇó¹ıÓÚÆµ·±£¬Çë ${cooldown} ÃëºóÖØÊÔ¡£`);
+    return;
+  }
   const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
-    alert("è¯·è¾“å…¥ç™»å½•é‚®ç®±ã€‚");
+    alert("ÇëÊäÈëµÇÂ¼ÓÊÏä¡£");
     return;
   }
   setAuthLoginSubmitting(true);
@@ -274,11 +323,19 @@ async function submitEmailLoginFromDialog() {
       },
     });
     if (error) throw error;
+    startAuthLoginCooldown(60);
     closeAuthLoginDialog();
-    alert("ç™»å½•é‚®ä»¶å·²å‘é€ï¼Œè¯·åœ¨é‚®ç®±ä¸­ç‚¹å‡»ç™»å½•é“¾æ¥åè¿”å›æœ¬é¡µã€‚");
+    alert("µÇÂ¼ÓÊ¼şÒÑ·¢ËÍ£¬ÇëÔÚÓÊÏäÖĞµã»÷µÇÂ¼Á´½Óºó·µ»Ø±¾Ò³¡£");
   } catch (e) {
-    const detail = e?.message || e?.error_description || "æœªçŸ¥é”™è¯¯";
-    alert(`å‘é€ç™»å½•é‚®ä»¶å¤±è´¥ï¼š${detail}`);
+    if (isRateLimitError(e)) {
+      const retry = getRetryAfterSeconds(e, 120);
+      startAuthLoginCooldown(retry);
+      alert(`·¢ËÍ¹ıÓÚÆµ·±£¬Çë ${retry} ÃëºóÔÙÊÔ¡£`);
+      setAuthLoginSubmitting(false);
+      return;
+    }
+    const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
+    alert(`·¢ËÍµÇÂ¼ÓÊ¼şÊ§°Ü£º${detail}`);
     setAuthLoginSubmitting(false);
   }
 }
@@ -290,16 +347,16 @@ async function logoutAuth() {
     if (error) throw error;
     authSession = null;
     updateAuthUi();
-    setModeText(remoteOnline ? "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰" : "æœ¬åœ°æ¨¡å¼ï¼ˆäº‘è¿æ¥å¤±è´¥ï¼‰");
+    setModeText(remoteOnline ? "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©" : "±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
   } catch (e) {
-    const detail = e?.message || e?.error_description || "æœªçŸ¥é”™è¯¯";
-    alert(`é€€å‡ºå¤±è´¥ï¼š${detail}`);
+    const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
+    alert(`ÍË³öÊ§°Ü£º${detail}`);
   }
 }
 
 function updateAuthUi() {
   if (authUser) {
-    authUser.textContent = authSession?.user?.email || "æœªç™»å½•";
+    authUser.textContent = authSession?.user?.email || "Î´µÇÂ¼";
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
@@ -310,7 +367,7 @@ function canWriteRemote(notify = true) {
   if (authSession) return true;
   if (notify && !authWriteHintNotified) {
     authWriteHintNotified = true;
-    alert("å½“å‰ä¸ºåªè¯»æ¨¡å¼ï¼Œè¯·å…ˆç‚¹å‡»â€œé‚®ç®±ç™»å½•â€åå†å†™å…¥äº‘ç«¯æ•°æ®ã€‚");
+    alert("µ±Ç°ÎªÖ»¶ÁÄ£Ê½£¬ÇëÏÈµã»÷¡°ÓÊÏäµÇÂ¼¡±ºóÔÙĞ´ÈëÔÆ¶ËÊı¾İ¡£");
   }
   return false;
 }
@@ -357,12 +414,12 @@ function clearQuickAdd() {
 async function quickAdd() {
   const orderNoInput = valueOf("qaOrderNo");
   if (!orderNoInput) {
-    alert("è¯·å…ˆè¾“å…¥ç¼–å·");
+    alert("ÇëÏÈÊäÈë±àºÅ");
     return;
   }
   const orderNo = normalizeOrderNoInput(orderNoInput);
   if (!orderNo) {
-    alert("è®¢å•å·æ ¼å¼æ— æ•ˆï¼Œè¯·è¾“å…¥ 1-3 ä½æ•°å­—æˆ–å®Œæ•´å•å·ï¼ˆZZYYMMNNNï¼‰");
+    alert("¶©µ¥ºÅ¸ñÊ½ÎŞĞ§£¬ÇëÊäÈë 1-3 Î»Êı×Ö»òÍêÕûµ¥ºÅ£¨ZZYYMMNNN£©");
     return;
   }
   const customer = resolveCustomerByOrderNo(orderNo, "");
@@ -417,7 +474,7 @@ function render() {
     const opTd = document.createElement("td");
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
-    delBtn.textContent = "åˆ é™¤";
+    delBtn.textContent = "É¾³ı";
     delBtn.addEventListener("click", () => {
       void removeItem(m.id);
     });
@@ -545,7 +602,7 @@ async function updateItem(id, key, value) {
 
   if (key === "orderNo") {
     if ((value || "").trim() !== "" && !normalized) {
-      alert("è®¢å•å·æ ¼å¼æ— æ•ˆï¼Œè¯·è¾“å…¥ 1-3 ä½æ•°å­—æˆ–å®Œæ•´å•å·ï¼ˆZZYYMMNNNï¼‰");
+      alert("¶©µ¥ºÅ¸ñÊ½ÎŞĞ§£¬ÇëÊäÈë 1-3 Î»Êı×Ö»òÍêÕûµ¥ºÅ£¨ZZYYMMNNN£©");
       render();
       return;
     }
@@ -621,7 +678,7 @@ function syncQuickCustomer() {
 }
 
 async function removeItem(id) {
-  const confirmed = confirm("ç¡®è®¤åˆ é™¤è¯¥ç‰©æ–™è¡Œå—ï¼Ÿ");
+  const confirmed = confirm("È·ÈÏÉ¾³ı¸ÃÎïÁÏĞĞÂğ£¿");
   if (!confirmed) return;
 
   materials = materials.filter((x) => x.id !== id);
@@ -646,7 +703,7 @@ function loadLocal() {
       createdAt: x.createdAt || new Date(Date.now() + idx).toISOString(),
     }));
   } catch (e) {
-    console.warn("è¯»å–æœ¬åœ°ç‰©æ–™ç¼“å­˜å¤±è´¥", e);
+    console.warn("¶ÁÈ¡±¾µØÎïÁÏ»º´æÊ§°Ü", e);
     return [];
   }
 }
@@ -679,11 +736,11 @@ async function persist({ changed = [], deletedId = null, deletedIds = [], notify
       authSession = null;
       authWriteHintNotified = false;
       updateAuthUi();
-      setModeText(remoteOnline ? "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰" : "æœ¬åœ°æ¨¡å¼ï¼ˆäº‘è¿æ¥å¤±è´¥ï¼‰");
-      alert("å†™å…¥å¤±è´¥ï¼šç™»å½•æ€å·²å¤±æ•ˆï¼Œè¯·é‡æ–°ç™»å½•ã€‚");
+      setModeText(remoteOnline ? "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©" : "±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
+      alert("Ğ´ÈëÊ§°Ü£ºµÇÂ¼Ì¬ÒÑÊ§Ğ§£¬ÇëÖØĞÂµÇÂ¼¡£");
       return;
     }
-    handleRemoteError("ç‰©æ–™äº‘ç«¯åŒæ­¥å¤±è´¥", e);
+    handleRemoteError("ÎïÁÏÔÆ¶ËÍ¬²½Ê§°Ü", e);
   } finally {
     syncing = false;
   }
@@ -712,20 +769,20 @@ async function refreshFromRemote(showAlert = false) {
     setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
-    if (showAlert) alert("å·²ä»äº‘ç«¯åˆ·æ–°æœ€æ–°ç‰©æ–™æ•°æ®");
+    if (showAlert) alert("ÒÑ´ÓÔÆ¶ËË¢ĞÂ×îĞÂÎïÁÏÊı¾İ");
   } catch (e) {
     if (pageUnloading || isAbortLikeError(e)) return;
     if (isAuthError(e) && !authSession) {
       remoteOnline = true;
       remoteErrorNotified = false;
-      setModeText("äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰");
+      setModeText("ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
       materials = loadLocal();
       render();
       syncQuickCustomer();
       setLastSyncTime();
       return;
     }
-    handleRemoteError("ç‰©æ–™äº‘ç«¯è¯»å–å¤±è´¥", e);
+    handleRemoteError("ÎïÁÏÔÆ¶Ë¶ÁÈ¡Ê§°Ü", e);
     materials = loadLocal();
     render();
     syncQuickCustomer();
@@ -772,7 +829,7 @@ async function refreshOrderCustomerMap() {
     await syncInheritedOrderRows();
     syncQuickCustomer();
   } catch (e) {
-    console.warn("è¯»å–è®¢å•-å®¢æˆ·æ˜ å°„å¤±è´¥ï¼Œæ”¹ç”¨æœ¬åœ°è®¢å•ç¼“å­˜", e);
+    console.warn("¶ÁÈ¡¶©µ¥-¿Í»§Ó³ÉäÊ§°Ü£¬¸ÄÓÃ±¾µØ¶©µ¥»º´æ", e);
     loadOrderCustomerMapFromLocal();
     await syncInheritedOrderRows();
     syncQuickCustomer();
@@ -810,7 +867,7 @@ function loadOrderCustomerMapFromLocal() {
     orderCustomerMap = map;
     serialOrderNoMap = serialMap;
   } catch (e) {
-    console.warn("è¯»å–æœ¬åœ°è®¢å•ç¼“å­˜å¤±è´¥", e);
+    console.warn("¶ÁÈ¡±¾µØ¶©µ¥»º´æÊ§°Ü", e);
   }
 }
 
@@ -915,7 +972,7 @@ function materialRowSignature(item) {
 
 async function removeDuplicateOrderRows(notify = false) {
   if (!Array.isArray(materials) || materials.length === 0) {
-    if (notify) alert("å½“å‰æ²¡æœ‰å¯æ¸…ç†çš„æ•°æ®ã€‚");
+    if (notify) alert("µ±Ç°Ã»ÓĞ¿ÉÇåÀíµÄÊı¾İ¡£");
     return;
   }
 
@@ -936,7 +993,7 @@ async function removeDuplicateOrderRows(notify = false) {
   });
 
   if (deletedIds.length === 0) {
-    if (notify) alert("æ²¡æœ‰å‘ç°é‡å¤è®¢å•è¡Œã€‚");
+    if (notify) alert("Ã»ÓĞ·¢ÏÖÖØ¸´¶©µ¥ĞĞ¡£");
     return;
   }
 
@@ -945,19 +1002,19 @@ async function removeDuplicateOrderRows(notify = false) {
   await persist({ deletedIds });
   render();
   syncQuickCustomer();
-  if (notify) alert(`å·²åˆ é™¤ ${deletedIds.length} è¡Œé‡å¤è®¢å•è®°å½•ã€‚`);
+  if (notify) alert(`ÒÑÉ¾³ı ${deletedIds.length} ĞĞÖØ¸´¶©µ¥¼ÇÂ¼¡£`);
 }
 
 function handleRemoteError(prefix, err) {
   if (pageUnloading || isAbortLikeError(err)) return;
   console.error(prefix, err);
   remoteOnline = false;
-  setModeText("æœ¬åœ°æ¨¡å¼ï¼ˆäº‘è¿æ¥å¤±è´¥ï¼‰");
+  setModeText("±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
   scheduleReconnect();
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
-    const detail = err?.message || err?.error_description || "æœªçŸ¥é”™è¯¯";
-    alert(`${prefix}ï¼š${detail}\nå·²è‡ªåŠ¨åˆ‡æ¢æœ¬åœ°æ¨¡å¼ã€‚`);
+    const detail = err?.message || err?.error_description || "Î´Öª´íÎó";
+    alert(`${prefix}£º${detail}\nÒÑ×Ô¶¯ÇĞ»»±¾µØÄ£Ê½¡£`);
   }
 }
 
@@ -989,16 +1046,16 @@ async function tryReconnectRemote(manual = false) {
     if (error) throw error;
     remoteOnline = true;
     reconnectDelayMs = 5000;
-    setModeText(authSession ? "äº‘ç«¯å…±äº«æ¨¡å¼" : "äº‘ç«¯åªè¯»ï¼ˆæœªç™»å½•ï¼‰");
+    setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
     await refreshFromRemote(false);
-    if (manual) alert("äº‘ç«¯è¿æ¥å·²æ¢å¤");
+    if (manual) alert("ÔÆ¶ËÁ¬½ÓÒÑ»Ö¸´");
   } catch (e) {
     remoteOnline = false;
-    setModeText("æœ¬åœ°æ¨¡å¼ï¼ˆäº‘è¿æ¥å¤±è´¥ï¼‰");
+    setModeText("±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
     scheduleReconnect();
     if (manual) {
-      const detail = e?.message || e?.error_description || "æœªçŸ¥é”™è¯¯";
-      alert(`é‡è¿å¤±è´¥ï¼š${detail}`);
+      const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
+      alert(`ÖØÁ¬Ê§°Ü£º${detail}`);
     }
   }
 }

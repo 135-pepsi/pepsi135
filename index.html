@@ -1,26 +1,26 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>元源紫泽 生产管理系统</title>
-  <link rel="stylesheet" href="styles.css?v=20260225d" />
+  <title>ԪԴ���� ��������ϵͳ</title>
+  <link rel="stylesheet" href="styles.css?v=20260225e" />
 </head>
 <body>
   <header class="topbar">
     <div>
-      <h1>元源紫泽 生产管理系统</h1>
-      <p>订单进度看板与明细协同 · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
+      <h1>ԪԴ���� ��������ϵͳ</h1>
+      <p>�������ȿ�������ϸЭͬ �� <span id="systemMode">����ģʽ</span> �� <span id="lastSyncTime">���ͬ�� --</span></p>
     </div>
     <div class="actions">
       <div class="actions-row actions-auth-row">
-        <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
-        <button id="loginBtn" class="btn" type="button">邮箱登录</button>
-        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">退出登录</button>
+        <span id="authUser" class="auth-user" title="��ǰ��¼�˺�">δ��¼</span>
+        <button id="loginBtn" class="btn" type="button">�����¼</button>
+        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">�˳���¼</button>
       </div>
       <div class="actions-row actions-main-row">
-        <button id="reconnectBtn" class="btn btn-secondary" type="button">重连云端</button>
-        <a class="btn btn-secondary" href="material.html">物料页面</a>
+        <button id="reconnectBtn" class="btn btn-secondary" type="button">�����ƶ�</button>
+        <a class="btn btn-secondary" href="material.html">����ҳ��</a>
       </div>
     </div>
   </header>
@@ -28,57 +28,57 @@
   <main>
     <section class="kpi-grid" id="kpiGrid">
       <article class="kpi-card kpi-b">
-        <span>总单</span>
+        <span>�ܵ�</span>
         <strong id="kpiTotalOrders">0</strong>
       </article>
       <article class="kpi-card kpi-a">
-        <span>加工中</span>
+        <span>�ӹ���</span>
         <strong id="kpiInProduction">0</strong>
       </article>
       <article class="kpi-card kpi-c">
-        <span>今日交期订单</span>
+        <span>���ս��ڶ���</span>
         <strong id="kpiDueToday">0</strong>
       </article>
       <article class="kpi-card kpi-d">
-        <span>异常数</span>
+        <span>�쳣��</span>
         <strong id="kpiAbnormalCount">0</strong>
       </article>
     </section>
     <section class="board-wrap">
       <div class="board-head">
-        <h2>订单进度看板</h2>
+        <h2>�������ȿ���</h2>
         <div id="boardSummary" class="board-summary"></div>
       </div>
       <div id="kanbanBoard" class="kanban-board"></div>
     </section>
 
-    <h2 class="detail-title">订单明细表</h2>
+    <h2 class="detail-title">������ϸ��</h2>
     <section class="order-control-row">
       <div class="order-control-left">
-        <select id="filterMonth" title="按订单号月份筛选">
-          <option value="">显示全部</option>
-          <option value="01">01月</option>
-          <option value="02">02月</option>
-          <option value="03">03月</option>
-          <option value="04">04月</option>
-          <option value="05">05月</option>
-          <option value="06">06月</option>
-          <option value="07">07月</option>
-          <option value="08">08月</option>
-          <option value="09">09月</option>
-          <option value="10">10月</option>
-          <option value="11">11月</option>
-          <option value="12">12月</option>
+        <select id="filterMonth" title="���������·�ɸѡ">
+          <option value="">��ʾȫ��</option>
+          <option value="01">01��</option>
+          <option value="02">02��</option>
+          <option value="03">03��</option>
+          <option value="04">04��</option>
+          <option value="05">05��</option>
+          <option value="06">06��</option>
+          <option value="07">07��</option>
+          <option value="08">08��</option>
+          <option value="09">09��</option>
+          <option value="10">10��</option>
+          <option value="11">11��</option>
+          <option value="12">12��</option>
         </select>
-        <input id="qaOrderNo" placeholder="编号(如030)" />
-        <input id="qaCustomer" placeholder="客户" />
-        <button id="quickAddBtn" class="btn btn-primary">新增订单</button>
+        <input id="qaOrderNo" placeholder="���(��030)" />
+        <input id="qaCustomer" placeholder="�ͻ�" />
+        <button id="quickAddBtn" class="btn btn-primary">��������</button>
       </div>
       <div class="order-control-right">
-        <button id="compactModeBtn" class="btn btn-secondary" type="button">紧凑模式: 关</button>
-        <button id="saveBtn" class="btn btn-secondary" type="button">导出Excel</button>
+        <button id="compactModeBtn" class="btn btn-secondary" type="button">����ģʽ: ��</button>
+        <button id="saveBtn" class="btn btn-secondary" type="button">����Excel</button>
         <label class="btn btn-secondary upload-btn">
-          导入Excel
+          ����Excel
           <input id="importInput" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden />
         </label>
         <span id="saveFeedback" class="save-feedback" aria-live="polite"></span>
@@ -89,42 +89,42 @@
       <table id="orderTable">
         <thead>
           <tr>
-            <th>序号</th>
-            <th>订单号</th>
-            <th>客户</th>
-            <th>名称</th>
-            <th>图号</th>
-            <th>数量</th>
-            <th>工序/工时/设备</th>
-            <th>表面处理</th>
-            <th>状态</th>
-            <th>开始时间</th>
-            <th>交期</th>
-            <th>备注</th>
-            <th>操作</th>
+            <th>���</th>
+            <th>������</th>
+            <th>�ͻ�</th>
+            <th>����</th>
+            <th>ͼ��</th>
+            <th>����</th>
+            <th>����/��ʱ/�豸</th>
+            <th>���洦��</th>
+            <th>״̬</th>
+            <th>��ʼʱ��</th>
+            <th>����</th>
+            <th>��ע</th>
+            <th>����</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
       </table>
     </section>
     <div class="table-footer-actions">
-      <button id="addBlankBottomBtn" class="btn btn-secondary" type="button">添加空白行</button>
+      <button id="addBlankBottomBtn" class="btn btn-secondary" type="button">���ӿհ���</button>
     </div>
 
-    <p class="hint">提示：双击单元格可编辑；Enter 保存并跳转下一行同列；</p>
+    <p class="hint">��ʾ��˫����Ԫ��ɱ༭��Enter ���沢��ת��һ��ͬ�У�</p>
     <div class="scroll-tail" aria-hidden="true"></div>
   </main>
 
   <div id="attachmentDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="attachmentTitle">
       <header class="dialog-head">
-        <h3 id="attachmentTitle">零件图纸</h3>
-        <button id="attachmentCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="attachmentTitle">���ͼֽ</h3>
+        <button id="attachmentCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
       </header>
       <p id="attachmentSubTitle" class="dialog-subtitle"></p>
       <div class="dialog-upload-row">
         <label class="btn upload-btn">
-          选择文件
+          ѡ���ļ�
           <input id="attachmentUploadInput" type="file" hidden />
         </label>
         <span id="attachmentHint" class="dialog-hint"></span>
@@ -136,8 +136,8 @@
   <div id="previewDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel preview-panel" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
       <header class="dialog-head">
-        <h3 id="previewTitle">图纸预览</h3>
-        <button id="previewCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="previewTitle">ͼֽԤ��</h3>
+        <button id="previewCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
       </header>
       <p id="previewSubTitle" class="dialog-subtitle"></p>
       <div id="previewBody" class="preview-body"></div>
@@ -147,36 +147,36 @@
   <div id="processTimeDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel process-time-panel" role="dialog" aria-modal="true" aria-labelledby="processTimeTitle">
       <header class="dialog-head">
-        <h3 id="processTimeTitle">预计工时设置</h3>
-        <button id="processTimeCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="processTimeTitle">Ԥ�ƹ�ʱ����</h3>
+        <button id="processTimeCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
       </header>
       <p id="processTimeSubTitle" class="dialog-subtitle"></p>
       <div class="process-time-form">
         <label class="process-time-field">
-          <span>程序单</span>
+          <span>����</span>
           <select id="processProgramInput"></select>
         </label>
         <label class="process-time-field">
-          <span>总共几序</span>
+          <span>�ܹ�����</span>
           <select id="processNameInput"></select>
         </label>
         <label class="process-time-field">
-          <span>工时（分钟）</span>
-          <input id="processMinutesInput" type="number" min="0" step="1" placeholder="例如 45" />
+          <span>��ʱ�����ӣ�</span>
+          <input id="processMinutesInput" type="number" min="0" step="1" placeholder="���� 45" />
         </label>
         <label class="process-time-field">
-          <span>机台</span>
+          <span>��̨</span>
           <select id="processMachineInput"></select>
         </label>
         <label class="process-time-field">
-          <span>车床</span>
+          <span>����</span>
           <select id="processLatheInput"></select>
         </label>
       </div>
       <div class="process-time-actions">
-        <button id="processTimeCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="processTimeClearBtn" class="btn btn-secondary" type="button">清空</button>
-        <button id="processTimeSaveBtn" class="btn btn-primary" type="button">保存</button>
+        <button id="processTimeCancelBtn" class="btn btn-secondary" type="button">ȡ��</button>
+        <button id="processTimeClearBtn" class="btn btn-secondary" type="button">���</button>
+        <button id="processTimeSaveBtn" class="btn btn-primary" type="button">����</button>
       </div>
     </section>
   </div>
@@ -184,26 +184,26 @@
   <div id="statusDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel status-panel" role="dialog" aria-modal="true" aria-labelledby="statusTitle">
       <header class="dialog-head">
-        <h3 id="statusTitle">状态设置</h3>
-        <button id="statusCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="statusTitle">״̬����</h3>
+        <button id="statusCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
       </header>
       <p id="statusSubTitle" class="dialog-subtitle"></p>
-      <p id="statusProcessContext" class="status-process-context">当前第0序 / 共1序 / 剩余1序</p>
+      <p id="statusProcessContext" class="status-process-context">��ǰ��0�� / ��1�� / ʣ��1��</p>
       <div class="status-form">
         <label class="status-field">
-          <span>状态</span>
+          <span>״̬</span>
           <select id="statusInput"></select>
         </label>
         <label id="statusStepWrap" class="status-field">
-          <span>加工序号</span>
+          <span>�ӹ����</span>
           <select id="statusStepInput"></select>
         </label>
         <p id="statusStepHint" class="status-step-hint"></p>
       </div>
       <div class="status-actions">
-        <button id="statusCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="statusNextBtn" class="btn btn-secondary" type="button">下一步</button>
-        <button id="statusSaveBtn" class="btn btn-primary" type="button">保存</button>
+        <button id="statusCancelBtn" class="btn btn-secondary" type="button">ȡ��</button>
+        <button id="statusNextBtn" class="btn btn-secondary" type="button">��һ��</button>
+        <button id="statusSaveBtn" class="btn btn-primary" type="button">����</button>
       </div>
     </section>
   </div>
@@ -211,24 +211,24 @@
   <div id="dateDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel date-panel" role="dialog" aria-modal="true" aria-labelledby="dateTitle">
       <header class="dialog-head">
-        <h3 id="dateTitle">日期设置</h3>
-        <button id="dateCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="dateTitle">��������</h3>
+        <button id="dateCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
       </header>
       <p id="dateSubTitle" class="dialog-subtitle"></p>
       <div class="date-form">
         <label class="date-field">
-          <span>月份</span>
+          <span>�·�</span>
           <select id="dateMonthInput"></select>
         </label>
         <label class="date-field">
-          <span>日期</span>
+          <span>����</span>
           <select id="dateDayInput"></select>
         </label>
       </div>
       <div class="date-actions">
-        <button id="dateCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="dateClearBtn" class="btn btn-secondary" type="button">清空</button>
-        <button id="dateSaveBtn" class="btn btn-primary" type="button">保存</button>
+        <button id="dateCancelBtn" class="btn btn-secondary" type="button">ȡ��</button>
+        <button id="dateClearBtn" class="btn btn-secondary" type="button">���</button>
+        <button id="dateSaveBtn" class="btn btn-primary" type="button">����</button>
       </div>
     </section>
   </div>
@@ -236,24 +236,24 @@
   <div id="surfaceDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel surface-panel" role="dialog" aria-modal="true" aria-labelledby="surfaceTitle">
       <header class="dialog-head">
-        <h3 id="surfaceTitle">表面处理设置</h3>
-        <button id="surfaceCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="surfaceTitle">���洦������</h3>
+        <button id="surfaceCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
       </header>
       <p id="surfaceSubTitle" class="dialog-subtitle"></p>
       <div class="surface-form">
         <label class="surface-field">
-          <span>常用选项</span>
+          <span>����ѡ��</span>
           <select id="surfacePresetInput"></select>
         </label>
         <label class="surface-field">
-          <span>自定义（新增一行）</span>
-          <input id="surfaceCustomInput" type="text" placeholder="输入自定义表面处理" />
+          <span>�Զ��壨����һ�У�</span>
+          <input id="surfaceCustomInput" type="text" placeholder="�����Զ�����洦��" />
         </label>
       </div>
       <div class="surface-actions">
-        <button id="surfaceCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="surfaceClearBtn" class="btn btn-secondary" type="button">清空</button>
-        <button id="surfaceSaveBtn" class="btn btn-primary" type="button">保存</button>
+        <button id="surfaceCancelBtn" class="btn btn-secondary" type="button">ȡ��</button>
+        <button id="surfaceClearBtn" class="btn btn-secondary" type="button">���</button>
+        <button id="surfaceSaveBtn" class="btn btn-primary" type="button">����</button>
       </div>
     </section>
   </div>
@@ -261,13 +261,13 @@
   <div id="deleteConfirmDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
       <header class="dialog-head">
-        <h3 id="deleteConfirmTitle">确认删除订单</h3>
-        <button id="deleteConfirmCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="deleteConfirmTitle">ȷ��ɾ������</h3>
+        <button id="deleteConfirmCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
       </header>
       <p id="deleteConfirmText" class="dialog-subtitle"></p>
       <div class="confirm-actions">
-        <button id="deleteConfirmCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="deleteConfirmOkBtn" class="btn btn-danger" type="button">确认删除</button>
+        <button id="deleteConfirmCancelBtn" class="btn btn-secondary" type="button">ȡ��</button>
+        <button id="deleteConfirmOkBtn" class="btn btn-danger" type="button">ȷ��ɾ��</button>
       </div>
     </section>
   </div>
@@ -275,38 +275,38 @@
   <div id="authLoginDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel auth-login-panel" role="dialog" aria-modal="true" aria-labelledby="authLoginTitle">
       <header class="dialog-head">
-        <h3 id="authLoginTitle">邮箱登录</h3>
-        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="authLoginTitle">�����¼</h3>
+        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
       </header>
-      <p class="dialog-subtitle">请输入登录邮箱，系统会发送登录链接。</p>
+      <p class="dialog-subtitle">�������¼���䣬ϵͳ�ᷢ�͵�¼���ӡ�</p>
       <div class="auth-login-form">
         <label class="auth-login-field" for="authLoginEmailInput">
-          <span>邮箱</span>
+          <span>����</span>
           <input id="authLoginEmailInput" type="email" autocomplete="email" placeholder="name@example.com" />
         </label>
       </div>
       <div class="auth-login-actions">
-        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="authLoginSubmitBtn" class="btn btn-primary" type="button">发送登录邮件</button>
+        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">ȡ��</button>
+        <button id="authLoginSubmitBtn" class="btn btn-primary" type="button">���͵�¼�ʼ�</button>
       </div>
     </section>
   </div>
 
-  <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
+  <button id="backTopBtn" class="back-top-btn" title="���ض���">���ض���</button>
 
-  <script src="xlsx.full.min.js?v=20260225d"></script>
-  <script src="supabase.min.js?v=20260225d"></script>
-  <script src="config.prod.js?v=20260225d"></script>
+  <script src="xlsx.full.min.js?v=20260225e"></script>
+  <script src="supabase.min.js?v=20260225e"></script>
+  <script src="config.prod.js?v=20260225e"></script>
   <script>
     (function () {
       var h = location.hostname;
       var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
       if (!isLocal) return;
       var s = document.createElement("script");
-      s.src = "config.js?v=20260225d";
+      s.src = "config.js?v=20260225e";
       document.head.appendChild(s);
     })();
   </script>
-  <script src="app.js?v=20260225d"></script>
+  <script src="app.js?v=20260225e"></script>
 </body>
 </html>
