@@ -3217,11 +3217,22 @@ function getColumnWidth(colIndex) {
 }
 
 function saveColumnWidths() {
-  // Disabled persistence to avoid env-specific width divergence
+  columnWidths = sanitizeColumnWidths(columnWidths);
+  localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(columnWidths));
 }
 
 function loadColumnWidths() {
-  return {};
+  try {
+    const raw = localStorage.getItem(COL_WIDTH_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const sanitized = sanitizeColumnWidths(parsed);
+    if (raw && JSON.stringify(parsed) !== JSON.stringify(sanitized)) {
+      localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(sanitized));
+    }
+    return sanitized;
+  } catch {
+    return {};
+  }
 }
 
 function sanitizeColumnWidths(input) {
