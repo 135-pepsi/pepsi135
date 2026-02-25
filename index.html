@@ -258,6 +258,20 @@
     </section>
   </div>
 
+  <div id="deleteConfirmDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+      <header class="dialog-head">
+        <h3 id="deleteConfirmTitle">确认删除订单</h3>
+        <button id="deleteConfirmCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="deleteConfirmText" class="dialog-subtitle"></p>
+      <div class="confirm-actions">
+        <button id="deleteConfirmCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="deleteConfirmOkBtn" class="btn btn-danger" type="button">确认删除</button>
+      </div>
+    </section>
+  </div>
+
   <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
 
   <script src="xlsx.full.min.js?v=20260225b"></script>

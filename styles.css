@@ -422,12 +422,12 @@ main {
 }
 
 .row-focus {
-  animation: rowPulse 1.1s ease;
+  animation: rowPulse 1s ease;
 }
 
 @keyframes rowPulse {
-  0% { box-shadow: inset 0 0 0 999px rgba(58, 158, 241, 0.3); }
-  100% { box-shadow: inset 0 0 0 999px rgba(58, 158, 241, 0); }
+  0% { box-shadow: inset 0 0 0 2px rgba(120, 210, 255, 0.95); }
+  100% { box-shadow: inset 0 0 0 2px rgba(120, 210, 255, 0); }
 }
 .quick-add,
 .filters {
@@ -951,6 +951,17 @@ body.compact-mode {
   background: linear-gradient(160deg, #132f54, #0c2342);
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.42);
   padding: 12px;
+}
+
+.confirm-panel {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.confirm-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .dialog-head {

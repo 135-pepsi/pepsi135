@@ -67,6 +67,7 @@ let rowSavedUntil = new Map();
 let saveFeedbackTimer = 0;
 let attachmentLatestTimeByLineId = new Map();
 let dirtyCellMarks = new Set();
+let pendingDeleteOrderId = "";
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -139,6 +140,11 @@ const surfacePresetInput = document.getElementById("surfacePresetInput");
 const surfaceCustomInput = document.getElementById("surfaceCustomInput");
 const compactModeBtn = document.getElementById("compactModeBtn");
 const saveFeedback = document.getElementById("saveFeedback");
+const deleteConfirmDialog = document.getElementById("deleteConfirmDialog");
+const deleteConfirmText = document.getElementById("deleteConfirmText");
+const deleteConfirmCloseBtn = document.getElementById("deleteConfirmCloseBtn");
+const deleteConfirmCancelBtn = document.getElementById("deleteConfirmCancelBtn");
+const deleteConfirmOkBtn = document.getElementById("deleteConfirmOkBtn");
 const PROCESS_TIME_TITLE_BASE = "预计工时设置";
 const STATUS_TITLE_BASE = "状态设置";
 const DATE_TITLE_BASE = "日期设置";
@@ -479,6 +485,22 @@ function bindEvents() {
       if (event.target === surfaceDialog) closeSurfaceDialog();
     });
   }
+  if (deleteConfirmCloseBtn) {
+    deleteConfirmCloseBtn.addEventListener("click", closeDeleteConfirmDialog);
+  }
+  if (deleteConfirmCancelBtn) {
+    deleteConfirmCancelBtn.addEventListener("click", closeDeleteConfirmDialog);
+  }
+  if (deleteConfirmOkBtn) {
+    deleteConfirmOkBtn.addEventListener("click", () => {
+      void confirmDeleteOrder();
+    });
+  }
+  if (deleteConfirmDialog) {
+    deleteConfirmDialog.addEventListener("click", (event) => {
+      if (event.target === deleteConfirmDialog) closeDeleteConfirmDialog();
+    });
+  }
   bindDialogEnterSave(surfaceDialog, saveSurfaceDialog);
   if (processMinutesInput) {
     processMinutesInput.addEventListener("keydown", (event) => {
@@ -583,6 +605,11 @@ function bindEvents() {
     if (e.key === "Escape" && attachmentDialog && !attachmentDialog.hidden) {
       e.preventDefault();
       closeAttachmentDialog();
+      return;
+    }
+    if (e.key === "Escape" && deleteConfirmDialog && !deleteConfirmDialog.hidden) {
+      e.preventDefault();
+      closeDeleteConfirmDialog();
       return;
     }
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
@@ -998,7 +1025,7 @@ function focusOrderRow(id) {
   row.scrollIntoView({ behavior: "smooth", block: "center" });
   requestAnimationFrame(() => {
     row.classList.add("row-focus");
-    setTimeout(() => row.classList.remove("row-focus"), 1200);
+    setTimeout(() => row.classList.remove("row-focus"), 1000);
   });
 }
 
@@ -2021,8 +2048,45 @@ function calcDelayed(order) {
   return Date.now() > due.getTime() ? "延期" : "正常";
 }
 
-async function removeOrder(id) {
-  if (!confirm("确认删除该订单吗？")) return;
+function removeOrder(id) {
+  openDeleteConfirmDialog(id);
+}
+
+function openDeleteConfirmDialog(id) {
+  const order = orders.find((o) => o.id === id);
+  if (!order || !deleteConfirmDialog) return;
+  pendingDeleteOrderId = id;
+  const no = String(order.orderNo || "").trim() || "未填写";
+  if (deleteConfirmText) deleteConfirmText.textContent = `确认删除订单号 ${no} 吗？此操作不可撤销。`;
+  deleteConfirmDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeDeleteConfirmDialog() {
+  if (!deleteConfirmDialog) return;
+  deleteConfirmDialog.hidden = true;
+  pendingDeleteOrderId = "";
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (previewDialog && !previewDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (processTimeDialog && !processTimeDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (statusDialog && !statusDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (dateDialog && !dateDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (surfaceDialog && !surfaceDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+async function confirmDeleteOrder() {
+  if (!pendingDeleteOrderId) return;
+  const id = pendingDeleteOrderId;
+  closeDeleteConfirmDialog();
   orders = orders.filter((o) => o.id !== id);
   await persistOrders({ deletedId: id });
   render();
