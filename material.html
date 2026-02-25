@@ -88,7 +88,16 @@
 
   <script src="supabase.min.js?v=20260225d"></script>
   <script src="config.prod.js?v=20260225d"></script>
-  <script src="config.js?v=20260225d"></script>
+  <script>
+    (function () {
+      var h = location.hostname;
+      var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
+      if (!isLocal) return;
+      var s = document.createElement("script");
+      s.src = "config.js?v=20260225d";
+      document.head.appendChild(s);
+    })();
+  </script>
   <script src="material.js?v=20260225d"></script>
 </body>
 </html>
