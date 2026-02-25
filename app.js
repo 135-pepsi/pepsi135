@@ -6,7 +6,7 @@ const COMPACT_MODE_KEY = "mini_mes_compact_mode_v1";
 const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "已发货"];
 const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
 const FIXED_COL_WIDTHS = {
-  1: 30, // 序号
+  1: 40, // 序号
   2: 80, // 订单号
   3: 60, // 客户
   9: 120, // 状态

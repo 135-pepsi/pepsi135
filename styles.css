@@ -654,9 +654,9 @@ body:not(.material-page) #orderTable th:nth-child(11) { background: linear-gradi
   position: sticky;
   left: var(--sticky-left-1, 0px);
   z-index: 2;
-  width: 30px;
-  min-width: 30px;
-  max-width: 30px;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
 }
 #orderTable th:nth-child(2),
 #orderTable td:nth-child(2) {
