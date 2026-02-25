@@ -10,7 +10,11 @@
 - `anon public key`
 
 ## 2. 配置前端
-复制 `config.example.js` 为 `config.js` 后再编辑：
+线上部署请维护 `config.prod.js`；本地如需临时覆盖再使用 `config.js`（可不提交）。
+
+推荐顺序：
+1. 先修改 `config.prod.js`（GitHub Pages 使用）
+2. 本地调试再复制 `config.example.js` 为 `config.js` 并覆盖个性化配置
 
 ```js
 window.MES_CONFIG = {
@@ -25,7 +29,7 @@ window.MES_CONFIG = {
 ```
 
 > 安全说明：当前 SQL 策略为“仅登录用户可读写，且按 owner_id 做用户隔离”。如未接入 Supabase 登录（Auth），页面将无法读取和写入云端数据。
-> 配置说明：`config.example.js` 可以提交到仓库；`config.js` 建议按环境分别维护，不要直接复用他人的线上配置。
+> 配置说明：`config.example.js` / `config.prod.js` 可以提交到仓库；`config.js` 建议仅本地维护（当前默认在 `.gitignore` 中）。
 
 ## 3. 本地验证
 - 直接打开 `index.html`
@@ -39,6 +43,7 @@ window.MES_CONFIG = {
 - `styles.css`
 - `app.js`
 - `supabase.min.js`
+- `config.prod.js`
 - `config.js`
 - `config.example.js`
 - `xlsx.full.min.js`
