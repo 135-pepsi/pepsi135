@@ -1,26 +1,26 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ԪԴ���� ���Ϲ���</title>
-  <link rel="stylesheet" href="styles.css?v=20260225e" />
+  <title>元源紫泽 物料管理</title>
+  <link rel="stylesheet" href="styles.css?v=20260225f" />
 </head>
 <body class="material-page">
   <header class="topbar">
     <div>
-      <h1>ԪԴ���� ���Ϲ���</h1>
-      <p>�������ſ���¼���뼴ʱ�޸� �� <span id="systemMode">����ģʽ</span> �� <span id="lastSyncTime">���ͬ�� --</span></p>
+      <h1>元源紫泽 物料管理</h1>
+      <p>按订单号快速录入与即时修改 · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
     </div>
     <div class="actions">
       <div class="actions-row actions-auth-row">
-        <span id="authUser" class="auth-user" title="��ǰ��¼�˺�">δ��¼</span>
-        <button id="loginBtn" class="btn" type="button">�����¼</button>
-        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">�˳���¼</button>
+        <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
+        <button id="loginBtn" class="btn" type="button">邮箱登录</button>
+        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">退出登录</button>
       </div>
       <div class="actions-row actions-main-row">
-        <button id="reconnectBtn" class="btn btn-secondary" type="button">�����ƶ�</button>
-        <a class="btn btn-secondary" href="index.html">���ض���ҳ��</a>
+        <button id="reconnectBtn" class="btn btn-secondary" type="button">重连云端</button>
+        <a class="btn btn-secondary" href="index.html">返回订单页面</a>
       </div>
     </div>
   </header>
@@ -28,16 +28,16 @@
   <main>
     <section class="toolbar">
       <div class="quick-add">
-        <input id="qaOrderNo" placeholder="���(�� 030)" />
-        <input id="qaCustomer" placeholder="�ͻ�(�Զ�����)" readonly />
-        <button id="quickAddBtn" class="btn btn-primary">����������</button>
+        <input id="qaOrderNo" placeholder="编号(如 030)" />
+        <input id="qaCustomer" placeholder="客户(自动带出)" readonly />
+        <button id="quickAddBtn" class="btn btn-primary">快速添加行</button>
       </div>
       <div class="filters material-filters" id="materialFilters">
-        <button id="materialFilterToggleBtn" class="btn btn-secondary filter-toggle" type="button" aria-expanded="true">��������</button>
+        <button id="materialFilterToggleBtn" class="btn btn-secondary filter-toggle" type="button" aria-expanded="true">收起搜索</button>
         <div class="filter-fields" id="materialFilterFields">
-          <input id="searchInput" placeholder="����������/�ͻ�/����/���/����" />
-          <button id="dedupeOrderBtn" class="btn btn-secondary" type="button">ɾ���ظ�������</button>
-          <button id="addRowInlineBtn" class="btn btn-primary" type="button">+ ������</button>
+          <input id="searchInput" placeholder="搜索订单号/客户/物料/规格/数量" />
+          <button id="dedupeOrderBtn" class="btn btn-secondary" type="button">删除重复订单行</button>
+          <button id="addRowInlineBtn" class="btn btn-primary" type="button">+ 添加行</button>
         </div>
       </div>
     </section>
@@ -46,58 +46,59 @@
       <table id="orderTable">
         <thead>
           <tr>
-            <th>������</th>
-            <th>�ͻ�</th>
-            <th>����</th>
-            <th>���</th>
-            <th>����</th>
-            <th>���</th>
-            <th>�Ƿ��뱸</th>
-            <th>����</th>
+            <th>订单号</th>
+            <th>客户</th>
+            <th>物料</th>
+            <th>规格</th>
+            <th>数量</th>
+            <th>金额</th>
+            <th>是否齐备</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
       </table>
     </section>
 
-    <p class="hint">��ʾ��˫����Ԫ��ɱ༭��Enter ���沢��ת��һ��ͬ�У�</p>
+    <p class="hint">提示：双击单元格可编辑；Enter 保存并跳转下一行同列；</p>
     <div class="scroll-tail" aria-hidden="true"></div>
   </main>
 
   <div id="authLoginDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel auth-login-panel" role="dialog" aria-modal="true" aria-labelledby="authLoginTitle">
       <header class="dialog-head">
-        <h3 id="authLoginTitle">�����¼</h3>
-        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">�ر�</button>
+        <h3 id="authLoginTitle">邮箱登录</h3>
+        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
-      <p class="dialog-subtitle">�������¼���䣬ϵͳ�ᷢ�͵�¼���ӡ�</p>
+      <p class="dialog-subtitle">请输入登录邮箱，系统会发送登录链接。</p>
       <div class="auth-login-form">
         <label class="auth-login-field" for="authLoginEmailInput">
-          <span>����</span>
+          <span>邮箱</span>
           <input id="authLoginEmailInput" type="email" autocomplete="email" placeholder="name@example.com" />
         </label>
       </div>
       <div class="auth-login-actions">
-        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">ȡ��</button>
-        <button id="authLoginSubmitBtn" class="btn btn-primary" type="button">���͵�¼�ʼ�</button>
+        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="authLoginSubmitBtn" class="btn btn-primary" type="button">发送登录邮件</button>
       </div>
     </section>
   </div>
 
-  <button id="backTopBtn" class="back-top-btn" title="���ض���">���ض���</button>
+  <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
 
-  <script src="supabase.min.js?v=20260225e"></script>
-  <script src="config.prod.js?v=20260225e"></script>
+  <script src="supabase.min.js?v=20260225f"></script>
+  <script src="config.prod.js?v=20260225f"></script>
   <script>
     (function () {
       var h = location.hostname;
       var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
       if (!isLocal) return;
       var s = document.createElement("script");
-      s.src = "config.js?v=20260225e";
+      s.src = "config.js?v=20260225f";
       document.head.appendChild(s);
     })();
   </script>
-  <script src="material.js?v=20260225e"></script>
+  <script src="material.js?v=20260225f"></script>
 </body>
 </html>
+

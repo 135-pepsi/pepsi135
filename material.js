@@ -1,9 +1,9 @@
-const STORAGE_KEY = "mini_mes_materials_v1";
+ï»¿const STORAGE_KEY = "mini_mes_materials_v1";
 const COL_WIDTH_KEY = "mini_mes_materials_col_widths_v1";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
 const ORDER_SYNC_ENABLED = false;
 
-const READY_OPTIONS = ["ÊÇ", "·ñ"];
+const READY_OPTIONS = ["ï¿½ï¿½", "ï¿½ï¿½"];
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
@@ -53,7 +53,7 @@ async function init() {
   updateLayoutMetrics();
   if (REMOTE_ENABLED) {
     await initAuth();
-    setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
+    setModeText(authSession ? "ï¿½Æ¶Ë¹ï¿½ï¿½ï¿½Ä£Ê½" : "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½");
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) {
@@ -61,7 +61,7 @@ async function init() {
       }
     }, AUTO_REFRESH_MS);
   } else {
-    setModeText("±¾µØÄ£Ê½");
+    setModeText("ï¿½ï¿½ï¿½ï¿½Ä£Ê½");
     materials = loadLocal();
     render();
     syncQuickCustomer();
@@ -71,8 +71,8 @@ async function init() {
 
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
-  if (lastSyncTime && text.includes("Ê§°Ü")) lastSyncTime.classList.add("sync-warning");
-  if (lastSyncTime && !text.includes("Ê§°Ü")) lastSyncTime.classList.remove("sync-warning");
+  if (lastSyncTime && text.includes("Ê§ï¿½ï¿½")) lastSyncTime.classList.add("sync-warning");
+  if (lastSyncTime && !text.includes("Ê§ï¿½ï¿½")) lastSyncTime.classList.remove("sync-warning");
   syncReconnectButton();
 }
 
@@ -80,7 +80,7 @@ function setLastSyncTime() {
   if (!lastSyncTime) return;
   const now = new Date();
   const t = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-  lastSyncTime.textContent = `×î½üÍ¬²½ ${t}`;
+  lastSyncTime.textContent = `ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ ${t}`;
 }
 
 function bindEvents() {
@@ -141,7 +141,7 @@ function bindEvents() {
   if (materialFilterToggleBtn && materialFilters) {
     materialFilterToggleBtn.addEventListener("click", () => {
       const collapsed = materialFilters.classList.toggle("collapsed");
-      materialFilterToggleBtn.textContent = collapsed ? "Õ¹¿ªËÑË÷" : "ÊÕÆðËÑË÷";
+      materialFilterToggleBtn.textContent = collapsed ? "Õ¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½" : "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½";
       materialFilterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
       updateLayoutMetrics();
     });
@@ -192,7 +192,7 @@ function syncFilterPanelForViewport() {
   if (!materialFilters || !materialFilterToggleBtn) return;
   if (window.innerWidth > 780) {
     materialFilters.classList.remove("collapsed");
-    materialFilterToggleBtn.textContent = "ÊÕÆðËÑË÷";
+    materialFilterToggleBtn.textContent = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½";
     materialFilterToggleBtn.setAttribute("aria-expanded", "true");
   }
   updateLayoutMetrics();
@@ -214,7 +214,7 @@ async function initAuth() {
     if (error) throw error;
     authSession = data?.session || null;
   } catch (e) {
-    console.warn("¶ÁÈ¡µÇÂ¼Ì¬Ê§°Ü", e);
+    console.warn("ï¿½ï¿½È¡ï¿½ï¿½Â¼Ì¬Ê§ï¿½ï¿½", e);
     authSession = null;
   }
   updateAuthUi();
@@ -223,7 +223,7 @@ async function initAuth() {
     authWriteHintNotified = false;
     updateAuthUi();
     if (remoteOnline) {
-      setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
+      setModeText(authSession ? "ï¿½Æ¶Ë¹ï¿½ï¿½ï¿½Ä£Ê½" : "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½");
     }
     if (authSession && remoteOnline) {
       void refreshFromRemote(false);
@@ -266,11 +266,11 @@ function refreshAuthLoginSubmitUi() {
   const locked = authLoginSubmitting || remain > 0;
   authLoginSubmitBtn.disabled = locked;
   if (authLoginSubmitting) {
-    authLoginSubmitBtn.textContent = "·¢ËÍÖÐ...";
+    authLoginSubmitBtn.textContent = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½...";
   } else if (remain > 0) {
-    authLoginSubmitBtn.textContent = `Çë ${remain}s ºóÖØÊÔ`;
+    authLoginSubmitBtn.textContent = `ï¿½ï¿½ ${remain}s ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½`;
   } else {
-    authLoginSubmitBtn.textContent = "·¢ËÍµÇÂ¼ÓÊ¼þ";
+    authLoginSubmitBtn.textContent = "ï¿½ï¿½ï¿½Íµï¿½Â¼ï¿½Ê¼ï¿½";
   }
 }
 
@@ -305,12 +305,12 @@ async function submitEmailLoginFromDialog() {
   if (authLoginSubmitting) return;
   const cooldown = getAuthLoginCooldownSeconds();
   if (cooldown > 0) {
-    alert(`ÇëÇó¹ýÓÚÆµ·±£¬Çë ${cooldown} ÃëºóÖØÊÔ¡£`);
+    alert(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${cooldown} ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¡ï¿½`);
     return;
   }
   const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
-    alert("ÇëÊäÈëµÇÂ¼ÓÊÏä¡£");
+    alert("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ä¡£");
     return;
   }
   setAuthLoginSubmitting(true);
@@ -325,17 +325,17 @@ async function submitEmailLoginFromDialog() {
     if (error) throw error;
     startAuthLoginCooldown(60);
     closeAuthLoginDialog();
-    alert("µÇÂ¼ÓÊ¼þÒÑ·¢ËÍ£¬ÇëÔÚÓÊÏäÖÐµã»÷µÇÂ¼Á´½Óºó·µ»Ø±¾Ò³¡£");
+    alert("ï¿½ï¿½Â¼ï¿½Ê¼ï¿½ï¿½Ñ·ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½Óºó·µ»Ø±ï¿½Ò³ï¿½ï¿½");
   } catch (e) {
     if (isRateLimitError(e)) {
       const retry = getRetryAfterSeconds(e, 120);
       startAuthLoginCooldown(retry);
-      alert(`·¢ËÍ¹ýÓÚÆµ·±£¬Çë ${retry} ÃëºóÔÙÊÔ¡£`);
+      alert(`ï¿½ï¿½ï¿½Í¹ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${retry} ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¡ï¿½`);
       setAuthLoginSubmitting(false);
       return;
     }
-    const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
-    alert(`·¢ËÍµÇÂ¼ÓÊ¼þÊ§°Ü£º${detail}`);
+    const detail = e?.message || e?.error_description || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`ï¿½ï¿½ï¿½Íµï¿½Â¼ï¿½Ê¼ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
     setAuthLoginSubmitting(false);
   }
 }
@@ -347,16 +347,16 @@ async function logoutAuth() {
     if (error) throw error;
     authSession = null;
     updateAuthUi();
-    setModeText(remoteOnline ? "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©" : "±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
+    setModeText(remoteOnline ? "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½" : "ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½");
   } catch (e) {
-    const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
-    alert(`ÍË³öÊ§°Ü£º${detail}`);
+    const detail = e?.message || e?.error_description || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`ï¿½Ë³ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
   }
 }
 
 function updateAuthUi() {
   if (authUser) {
-    authUser.textContent = authSession?.user?.email || "Î´µÇÂ¼";
+    authUser.textContent = authSession?.user?.email || "Î´ï¿½ï¿½Â¼";
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
@@ -367,7 +367,7 @@ function canWriteRemote(notify = true) {
   if (authSession) return true;
   if (notify && !authWriteHintNotified) {
     authWriteHintNotified = true;
-    alert("µ±Ç°ÎªÖ»¶ÁÄ£Ê½£¬ÇëÏÈµã»÷¡°ÓÊÏäµÇÂ¼¡±ºóÔÙÐ´ÈëÔÆ¶ËÊý¾Ý¡£");
+    alert("ï¿½ï¿½Ç°ÎªÖ»ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½Èµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½Æ¶ï¿½ï¿½ï¿½ï¿½Ý¡ï¿½");
   }
   return false;
 }
@@ -414,12 +414,12 @@ function clearQuickAdd() {
 async function quickAdd() {
   const orderNoInput = valueOf("qaOrderNo");
   if (!orderNoInput) {
-    alert("ÇëÏÈÊäÈë±àºÅ");
+    alert("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
     return;
   }
   const orderNo = normalizeOrderNoInput(orderNoInput);
   if (!orderNo) {
-    alert("¶©µ¥ºÅ¸ñÊ½ÎÞÐ§£¬ÇëÊäÈë 1-3 Î»Êý×Ö»òÍêÕûµ¥ºÅ£¨ZZYYMMNNN£©");
+    alert("ï¿½ï¿½ï¿½ï¿½ï¿½Å¸ï¿½Ê½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 1-3 Î»ï¿½ï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å£ï¿½ZZYYMMNNNï¿½ï¿½");
     return;
   }
   const customer = resolveCustomerByOrderNo(orderNo, "");
@@ -474,7 +474,7 @@ function render() {
     const opTd = document.createElement("td");
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
-    delBtn.textContent = "É¾³ý";
+    delBtn.textContent = "É¾ï¿½ï¿½";
     delBtn.addEventListener("click", () => {
       void removeItem(m.id);
     });
@@ -602,7 +602,7 @@ async function updateItem(id, key, value) {
 
   if (key === "orderNo") {
     if ((value || "").trim() !== "" && !normalized) {
-      alert("¶©µ¥ºÅ¸ñÊ½ÎÞÐ§£¬ÇëÊäÈë 1-3 Î»Êý×Ö»òÍêÕûµ¥ºÅ£¨ZZYYMMNNN£©");
+      alert("ï¿½ï¿½ï¿½ï¿½ï¿½Å¸ï¿½Ê½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 1-3 Î»ï¿½ï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å£ï¿½ZZYYMMNNNï¿½ï¿½");
       render();
       return;
     }
@@ -678,7 +678,7 @@ function syncQuickCustomer() {
 }
 
 async function removeItem(id) {
-  const confirmed = confirm("È·ÈÏÉ¾³ý¸ÃÎïÁÏÐÐÂð£¿");
+  const confirmed = confirm("È·ï¿½ï¿½É¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
   if (!confirmed) return;
 
   materials = materials.filter((x) => x.id !== id);
@@ -703,7 +703,7 @@ function loadLocal() {
       createdAt: x.createdAt || new Date(Date.now() + idx).toISOString(),
     }));
   } catch (e) {
-    console.warn("¶ÁÈ¡±¾µØÎïÁÏ»º´æÊ§°Ü", e);
+    console.warn("ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï»ï¿½ï¿½ï¿½Ê§ï¿½ï¿½", e);
     return [];
   }
 }
@@ -736,11 +736,11 @@ async function persist({ changed = [], deletedId = null, deletedIds = [], notify
       authSession = null;
       authWriteHintNotified = false;
       updateAuthUi();
-      setModeText(remoteOnline ? "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©" : "±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
-      alert("Ð´ÈëÊ§°Ü£ºµÇÂ¼Ì¬ÒÑÊ§Ð§£¬ÇëÖØÐÂµÇÂ¼¡£");
+      setModeText(remoteOnline ? "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½" : "ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½");
+      alert("Ð´ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½Â¼Ì¬ï¿½ï¿½Ê§Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Âµï¿½Â¼ï¿½ï¿½");
       return;
     }
-    handleRemoteError("ÎïÁÏÔÆ¶ËÍ¬²½Ê§°Ü", e);
+    handleRemoteError("ï¿½ï¿½ï¿½ï¿½ï¿½Æ¶ï¿½Í¬ï¿½ï¿½Ê§ï¿½ï¿½", e);
   } finally {
     syncing = false;
   }
@@ -769,20 +769,20 @@ async function refreshFromRemote(showAlert = false) {
     setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
-    if (showAlert) alert("ÒÑ´ÓÔÆ¶ËË¢ÐÂ×îÐÂÎïÁÏÊý¾Ý");
+    if (showAlert) alert("ï¿½Ñ´ï¿½ï¿½Æ¶ï¿½Ë¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
   } catch (e) {
     if (pageUnloading || isAbortLikeError(e)) return;
     if (isAuthError(e) && !authSession) {
       remoteOnline = true;
       remoteErrorNotified = false;
-      setModeText("ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
+      setModeText("ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½");
       materials = loadLocal();
       render();
       syncQuickCustomer();
       setLastSyncTime();
       return;
     }
-    handleRemoteError("ÎïÁÏÔÆ¶Ë¶ÁÈ¡Ê§°Ü", e);
+    handleRemoteError("ï¿½ï¿½ï¿½ï¿½ï¿½Æ¶Ë¶ï¿½È¡Ê§ï¿½ï¿½", e);
     materials = loadLocal();
     render();
     syncQuickCustomer();
@@ -829,7 +829,7 @@ async function refreshOrderCustomerMap() {
     await syncInheritedOrderRows();
     syncQuickCustomer();
   } catch (e) {
-    console.warn("¶ÁÈ¡¶©µ¥-¿Í»§Ó³ÉäÊ§°Ü£¬¸ÄÓÃ±¾µØ¶©µ¥»º´æ", e);
+    console.warn("ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½-ï¿½Í»ï¿½Ó³ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½ï¿½Ã±ï¿½ï¿½Ø¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½", e);
     loadOrderCustomerMapFromLocal();
     await syncInheritedOrderRows();
     syncQuickCustomer();
@@ -867,7 +867,7 @@ function loadOrderCustomerMapFromLocal() {
     orderCustomerMap = map;
     serialOrderNoMap = serialMap;
   } catch (e) {
-    console.warn("¶ÁÈ¡±¾µØ¶©µ¥»º´æÊ§°Ü", e);
+    console.warn("ï¿½ï¿½È¡ï¿½ï¿½ï¿½Ø¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½ï¿½", e);
   }
 }
 
@@ -972,7 +972,7 @@ function materialRowSignature(item) {
 
 async function removeDuplicateOrderRows(notify = false) {
   if (!Array.isArray(materials) || materials.length === 0) {
-    if (notify) alert("µ±Ç°Ã»ÓÐ¿ÉÇåÀíµÄÊý¾Ý¡£");
+    if (notify) alert("ï¿½ï¿½Ç°Ã»ï¿½Ð¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý¡ï¿½");
     return;
   }
 
@@ -993,7 +993,7 @@ async function removeDuplicateOrderRows(notify = false) {
   });
 
   if (deletedIds.length === 0) {
-    if (notify) alert("Ã»ÓÐ·¢ÏÖÖØ¸´¶©µ¥ÐÐ¡£");
+    if (notify) alert("Ã»ï¿½Ð·ï¿½ï¿½ï¿½ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½");
     return;
   }
 
@@ -1002,19 +1002,19 @@ async function removeDuplicateOrderRows(notify = false) {
   await persist({ deletedIds });
   render();
   syncQuickCustomer();
-  if (notify) alert(`ÒÑÉ¾³ý ${deletedIds.length} ÐÐÖØ¸´¶©µ¥¼ÇÂ¼¡£`);
+  if (notify) alert(`ï¿½ï¿½É¾ï¿½ï¿½ ${deletedIds.length} ï¿½ï¿½ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½`);
 }
 
 function handleRemoteError(prefix, err) {
   if (pageUnloading || isAbortLikeError(err)) return;
   console.error(prefix, err);
   remoteOnline = false;
-  setModeText("±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
+  setModeText("ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½");
   scheduleReconnect();
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
-    const detail = err?.message || err?.error_description || "Î´Öª´íÎó";
-    alert(`${prefix}£º${detail}\nÒÑ×Ô¶¯ÇÐ»»±¾µØÄ£Ê½¡£`);
+    const detail = err?.message || err?.error_description || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`${prefix}ï¿½ï¿½${detail}\nï¿½ï¿½ï¿½Ô¶ï¿½ï¿½Ð»ï¿½ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½`);
   }
 }
 
@@ -1046,16 +1046,16 @@ async function tryReconnectRemote(manual = false) {
     if (error) throw error;
     remoteOnline = true;
     reconnectDelayMs = 5000;
-    setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
+    setModeText(authSession ? "ï¿½Æ¶Ë¹ï¿½ï¿½ï¿½Ä£Ê½" : "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½");
     await refreshFromRemote(false);
-    if (manual) alert("ÔÆ¶ËÁ¬½ÓÒÑ»Ö¸´");
+    if (manual) alert("ï¿½Æ¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ»Ö¸ï¿½");
   } catch (e) {
     remoteOnline = false;
-    setModeText("±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
+    setModeText("ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½");
     scheduleReconnect();
     if (manual) {
-      const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
-      alert(`ÖØÁ¬Ê§°Ü£º${detail}`);
+      const detail = e?.message || e?.error_description || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+      alert(`ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
     }
   }
 }

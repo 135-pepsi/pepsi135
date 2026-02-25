@@ -1,30 +1,30 @@
-const STORAGE_KEY = "mini_mes_orders_v1";
+ï»¿const STORAGE_KEY = "mini_mes_orders_v1";
 const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
 const SHIFT_DEFAULTS_KEY = "mini_mes_shift_defaults_v1";
 const COMPACT_MODE_KEY = "mini_mes_compact_mode_v1";
 
-const STATUS = ["´ýÅÅ²ú", "ÒÑÅÅ²ú", "¼Ó¹¤ÖÐ", "Íê³É´ý¼ì", "·µ¹¤", "ÒÑ·¢»õ"];
+const STATUS = ["ï¿½ï¿½ï¿½Å²ï¿½", "ï¿½ï¿½ï¿½Å²ï¿½", "ï¿½Ó¹ï¿½ï¿½ï¿½", "ï¿½ï¿½É´ï¿½ï¿½ï¿½", "ï¿½ï¿½ï¿½ï¿½", "ï¿½Ñ·ï¿½ï¿½ï¿½"];
 const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
 const FIXED_COL_WIDTHS = {};
-const SURFACE_OPTIONS = ["", "Ñô¼«Ñõ»¯", "·¢ºÚ", "ÅçÉ°", "ÅçÆá", "µç¶Æ", "À­Ë¿", "Å×¹â", "ÈÈ´¦Àí", "¶Û»¯"];
+const SURFACE_OPTIONS = ["", "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½", "ï¿½ï¿½ï¿½ï¿½", "ï¿½ï¿½É°", "ï¿½ï¿½ï¿½ï¿½", "ï¿½ï¿½ï¿½", "ï¿½ï¿½Ë¿", "ï¿½×¹ï¿½", "ï¿½È´ï¿½ï¿½ï¿½", "ï¿½Û»ï¿½"];
 const PROCESS_OPTIONS = ["", "1", "2", "3", "4", "5", "6"];
 const XLSX_COLUMNS = [
-  { key: "orderNo", title: "¶©µ¥ºÅ" },
-  { key: "customer", title: "¿Í»§" },
-  { key: "name", title: "Ãû³Æ" },
-  { key: "drawingNo", title: "Í¼ºÅ" },
-  { key: "qty", title: "ÊýÁ¿" },
-  { key: "programNo", title: "³ÌÐòµ¥" },
-  { key: "processName", title: "¹¤Ðò" },
-  { key: "plannedHours", title: "Ô¤¼Æ¹¤Ê±(·ÖÖÓ)" },
-  { key: "machine", title: "»úÌ¨" },
-  { key: "lathe", title: "³µ´²" },
-  { key: "surface", title: "±íÃæ´¦Àí" },
+  { key: "orderNo", title: "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½" },
+  { key: "customer", title: "ï¿½Í»ï¿½" },
+  { key: "name", title: "ï¿½ï¿½ï¿½ï¿½" },
+  { key: "drawingNo", title: "Í¼ï¿½ï¿½" },
+  { key: "qty", title: "ï¿½ï¿½ï¿½ï¿½" },
+  { key: "programNo", title: "ï¿½ï¿½ï¿½ï¿½" },
+  { key: "processName", title: "ï¿½ï¿½ï¿½ï¿½" },
+  { key: "plannedHours", title: "Ô¤ï¿½Æ¹ï¿½Ê±(ï¿½ï¿½ï¿½ï¿½)" },
+  { key: "machine", title: "ï¿½ï¿½Ì¨" },
+  { key: "lathe", title: "ï¿½ï¿½ï¿½ï¿½" },
+  { key: "surface", title: "ï¿½ï¿½ï¿½æ´¦ï¿½ï¿½" },
   { key: "status", title: "×´Ì¬" },
-  { key: "startTime", title: "¿ªÊ¼Ê±¼ä" },
-  { key: "dueDate", title: "½»ÆÚ" },
-  { key: "isDelayed", title: "ÊÇ·ñÑÓÆÚ" },
-  { key: "note", title: "±¸×¢" },
+  { key: "startTime", title: "ï¿½ï¿½Ê¼Ê±ï¿½ï¿½" },
+  { key: "dueDate", title: "ï¿½ï¿½ï¿½ï¿½" },
+  { key: "isDelayed", title: "ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½" },
+  { key: "note", title: "ï¿½ï¿½×¢" },
 ];
 
 const MES_CONFIG = window.MES_CONFIG || {};
@@ -153,10 +153,10 @@ const authLoginEmailInput = document.getElementById("authLoginEmailInput");
 const authLoginCloseBtn = document.getElementById("authLoginCloseBtn");
 const authLoginCancelBtn = document.getElementById("authLoginCancelBtn");
 const authLoginSubmitBtn = document.getElementById("authLoginSubmitBtn");
-const PROCESS_TIME_TITLE_BASE = "Ô¤¼Æ¹¤Ê±ÉèÖÃ";
-const STATUS_TITLE_BASE = "×´Ì¬ÉèÖÃ";
-const DATE_TITLE_BASE = "ÈÕÆÚÉèÖÃ";
-const SURFACE_TITLE_BASE = "±íÃæ´¦ÀíÉèÖÃ";
+const PROCESS_TIME_TITLE_BASE = "Ô¤ï¿½Æ¹ï¿½Ê±ï¿½ï¿½ï¿½ï¿½";
+const STATUS_TITLE_BASE = "×´Ì¬ï¿½ï¿½ï¿½ï¿½";
+const DATE_TITLE_BASE = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½";
+const SURFACE_TITLE_BASE = "ï¿½ï¿½ï¿½æ´¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½";
 
 init();
 
@@ -167,13 +167,13 @@ async function init() {
   updatePinnedOffsets();
   if (REMOTE_ENABLED) {
     await initAuth();
-    setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
+    setModeText(authSession ? "ï¿½Æ¶Ë¹ï¿½ï¿½ï¿½Ä£Ê½" : "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½");
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) await refreshFromRemote(false);
     }, AUTO_REFRESH_MS);
   } else {
-    setModeText("±¾µØÄ£Ê½");
+    setModeText("ï¿½ï¿½ï¿½ï¿½Ä£Ê½");
     orders = loadOrdersLocal();
     render();
     setLastSyncTime();
@@ -183,8 +183,8 @@ async function init() {
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
   syncReconnectButton();
-  if (lastSyncTime && text.includes("Ê§°Ü")) lastSyncTime.classList.add("sync-warning");
-  if (lastSyncTime && !text.includes("Ê§°Ü")) lastSyncTime.classList.remove("sync-warning");
+  if (lastSyncTime && text.includes("Ê§ï¿½ï¿½")) lastSyncTime.classList.add("sync-warning");
+  if (lastSyncTime && !text.includes("Ê§ï¿½ï¿½")) lastSyncTime.classList.remove("sync-warning");
   updatePinnedOffsets();
 }
 
@@ -193,7 +193,7 @@ function setLastSyncTime() {
   if (!lastSyncTime) return;
   const d = new Date(lastSyncAt);
   const t = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-  lastSyncTime.textContent = `×î½üÍ¬²½ ${t}`;
+  lastSyncTime.textContent = `ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ ${t}`;
 }
 
 function getErrorKey(orderId, key) {
@@ -218,7 +218,7 @@ function appendDirtyCellDot(td, orderId, key) {
   if (!hasDirtyCellMark(orderId, key)) return;
   const dot = document.createElement("span");
   dot.className = "cell-dirty-dot";
-  dot.title = "ÒÑÐÞ¸ÄÎ´±£´æ";
+  dot.title = "ï¿½ï¿½ï¿½Þ¸ï¿½Î´ï¿½ï¿½ï¿½ï¿½";
   td.appendChild(dot);
 }
 
@@ -264,19 +264,19 @@ function rebuildRuleCellErrors() {
   orderNoMap.forEach((ids) => {
     if (ids.length < 2) return;
     ids.forEach((id) => {
-      next.set(getErrorKey(id, "orderNo"), "¶©µ¥ºÅÖØ¸´");
+      next.set(getErrorKey(id, "orderNo"), "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¸ï¿½");
     });
   });
 
   orders.forEach((order) => {
     const qtyRaw = String(order.qty ?? "").trim();
     if (qtyRaw !== "" && !Number.isFinite(Number(qtyRaw))) {
-      next.set(getErrorKey(order.id, "qty"), "ÊýÁ¿±ØÐëÎªÊý×Ö");
+      next.set(getErrorKey(order.id, "qty"), "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½");
     }
     const start = normalizeDateOnlyInput(order.startTime);
     const due = normalizeDateOnlyInput(order.dueDate);
     if (start && due && due < start) {
-      const msg = "½»ÆÚ²»ÄÜÔçÓÚ¿ªÊ¼Ê±¼ä";
+      const msg = "ï¿½ï¿½ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¿ï¿½Ê¼Ê±ï¿½ï¿½";
       next.set(getErrorKey(order.id, "startTime"), msg);
       next.set(getErrorKey(order.id, "dueDate"), msg);
     }
@@ -290,7 +290,7 @@ function markRowSaved(orderId) {
   rowSavedUntil.set(orderId, Date.now() + 1500);
 }
 
-function showSaveFeedback(message = "ÒÑ±£´æµ½ NAS") {
+function showSaveFeedback(message = "ï¿½Ñ±ï¿½ï¿½æµ½ NAS") {
   if (!saveFeedback) return;
   saveFeedback.textContent = message;
   saveFeedback.classList.add("is-visible");
@@ -560,7 +560,7 @@ function bindEvents() {
   if (abnormalFilterBtn) {
     abnormalFilterBtn.addEventListener("click", () => {
       abnormalOnly = !abnormalOnly;
-      abnormalFilterBtn.textContent = abnormalOnly ? "ÏÔÊ¾È«²¿" : "Ö»¿´Òì³£";
+      abnormalFilterBtn.textContent = abnormalOnly ? "ï¿½ï¿½Ê¾È«ï¿½ï¿½" : "Ö»ï¿½ï¿½ï¿½ì³£";
       render();
     });
   }
@@ -595,7 +595,7 @@ function bindEvents() {
   if (filterToggleBtn && orderFilters) {
     filterToggleBtn.addEventListener("click", () => {
       const collapsed = orderFilters.classList.toggle("collapsed");
-      filterToggleBtn.textContent = collapsed ? "Õ¹¿ªÉ¸Ñ¡" : "ÊÕÆðÉ¸Ñ¡";
+      filterToggleBtn.textContent = collapsed ? "Õ¹ï¿½ï¿½É¸Ñ¡" : "ï¿½ï¿½ï¿½ï¿½É¸Ñ¡";
       filterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
       updatePinnedOffsets();
     });
@@ -679,7 +679,7 @@ function syncFilterPanelForViewport() {
   if (!orderFilters || !filterToggleBtn) return;
   if (window.innerWidth > 780) {
     orderFilters.classList.remove("collapsed");
-    filterToggleBtn.textContent = "ÊÕÆðÉ¸Ñ¡";
+    filterToggleBtn.textContent = "ï¿½ï¿½ï¿½ï¿½É¸Ñ¡";
     filterToggleBtn.setAttribute("aria-expanded", "true");
   }
 }
@@ -691,7 +691,7 @@ async function initAuth() {
     if (error) throw error;
     authSession = data?.session || null;
   } catch (e) {
-    console.warn("¶ÁÈ¡µÇÂ¼Ì¬Ê§°Ü", e);
+    console.warn("ï¿½ï¿½È¡ï¿½ï¿½Â¼Ì¬Ê§ï¿½ï¿½", e);
     authSession = null;
   }
   updateAuthUi();
@@ -700,7 +700,7 @@ async function initAuth() {
     authWriteHintNotified = false;
     updateAuthUi();
     if (remoteOnline) {
-      setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
+      setModeText(authSession ? "ï¿½Æ¶Ë¹ï¿½ï¿½ï¿½Ä£Ê½" : "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½");
     }
     if (authSession && remoteOnline) {
       void refreshFromRemote(false);
@@ -759,11 +759,11 @@ function refreshAuthLoginSubmitUi() {
   const locked = authLoginSubmitting || remain > 0;
   authLoginSubmitBtn.disabled = locked;
   if (authLoginSubmitting) {
-    authLoginSubmitBtn.textContent = "·¢ËÍÖÐ...";
+    authLoginSubmitBtn.textContent = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½...";
   } else if (remain > 0) {
-    authLoginSubmitBtn.textContent = `Çë ${remain}s ºóÖØÊÔ`;
+    authLoginSubmitBtn.textContent = `ï¿½ï¿½ ${remain}s ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½`;
   } else {
-    authLoginSubmitBtn.textContent = "·¢ËÍµÇÂ¼ÓÊ¼þ";
+    authLoginSubmitBtn.textContent = "ï¿½ï¿½ï¿½Íµï¿½Â¼ï¿½Ê¼ï¿½";
   }
 }
 
@@ -797,12 +797,12 @@ async function submitEmailLoginFromDialog() {
   if (authLoginSubmitting) return;
   const cooldown = getAuthLoginCooldownSeconds();
   if (cooldown > 0) {
-    alert(`ÇëÇó¹ýÓÚÆµ·±£¬Çë ${cooldown} ÃëºóÖØÊÔ¡£`);
+    alert(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${cooldown} ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¡ï¿½`);
     return;
   }
   const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
-    alert("ÇëÊäÈëµÇÂ¼ÓÊÏä¡£");
+    alert("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ä¡£");
     return;
   }
   setAuthLoginSubmitting(true);
@@ -817,17 +817,17 @@ async function submitEmailLoginFromDialog() {
     if (error) throw error;
     startAuthLoginCooldown(60);
     closeAuthLoginDialog();
-    alert("µÇÂ¼ÓÊ¼þÒÑ·¢ËÍ£¬ÇëÔÚÓÊÏäÖÐµã»÷µÇÂ¼Á´½Óºó·µ»Ø±¾Ò³¡£");
+    alert("ï¿½ï¿½Â¼ï¿½Ê¼ï¿½ï¿½Ñ·ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½Óºó·µ»Ø±ï¿½Ò³ï¿½ï¿½");
   } catch (e) {
     if (isRateLimitError(e)) {
       const retry = getRetryAfterSeconds(e, 120);
       startAuthLoginCooldown(retry);
-      alert(`·¢ËÍ¹ýÓÚÆµ·±£¬Çë ${retry} ÃëºóÔÙÊÔ¡£`);
+      alert(`ï¿½ï¿½ï¿½Í¹ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${retry} ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¡ï¿½`);
       setAuthLoginSubmitting(false);
       return;
     }
-    const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
-    alert(`·¢ËÍµÇÂ¼ÓÊ¼þÊ§°Ü£º${detail}`);
+    const detail = e?.message || e?.error_description || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`ï¿½ï¿½ï¿½Íµï¿½Â¼ï¿½Ê¼ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
     setAuthLoginSubmitting(false);
   }
 }
@@ -839,16 +839,16 @@ async function logoutAuth() {
     if (error) throw error;
     authSession = null;
     updateAuthUi();
-    setModeText(remoteOnline ? "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©" : "±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
+    setModeText(remoteOnline ? "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½" : "ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½");
   } catch (e) {
-    const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
-    alert(`ÍË³öÊ§°Ü£º${detail}`);
+    const detail = e?.message || e?.error_description || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`ï¿½Ë³ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
   }
 }
 
 function updateAuthUi() {
   if (authUser) {
-    authUser.textContent = authSession?.user?.email || "Î´µÇÂ¼";
+    authUser.textContent = authSession?.user?.email || "Î´ï¿½ï¿½Â¼";
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
@@ -911,7 +911,7 @@ function saveCompactMode(enabled) {
 
 function applyCompactMode() {
   document.body.classList.toggle("compact-mode", compactMode);
-  if (compactModeBtn) compactModeBtn.textContent = `½ô´ÕÄ£Ê½: ${compactMode ? "¿ª" : "¹Ø"}`;
+  if (compactModeBtn) compactModeBtn.textContent = `ï¿½ï¿½ï¿½Ä£Ê½: ${compactMode ? "ï¿½ï¿½" : "ï¿½ï¿½"}`;
   updatePinnedOffsets();
 }
 function canWriteRemote(notify = true) {
@@ -919,7 +919,7 @@ function canWriteRemote(notify = true) {
   if (authSession) return true;
   if (notify && !authWriteHintNotified) {
     authWriteHintNotified = true;
-    alert("µ±Ç°ÎªÖ»¶ÁÄ£Ê½£¬ÇëÏÈµã»÷¡°ÓÊÏäµÇÂ¼¡±ºóÔÙÐ´ÈëÔÆ¶ËÊý¾Ý¡£");
+    alert("ï¿½ï¿½Ç°ÎªÖ»ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½Èµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½Æ¶ï¿½ï¿½ï¿½ï¿½Ý¡ï¿½");
   }
   return false;
 }
@@ -933,14 +933,14 @@ function createEmptyOrder() {
     customer: "",
     name: "",
     qty: "",
-    programNo: "Î´³ö",
+    programNo: "Î´ï¿½ï¿½",
     processName: "",
     processStepCurrent: "",
     plannedHours: "",
     machine: "",
     lathe: "",
     surface: "",
-    status: "´ýÅÅ²ú",
+    status: "ï¿½ï¿½ï¿½Å²ï¿½",
     startTime: "",
     dueDate: "",
     isDelayed: "",
@@ -954,11 +954,11 @@ async function quickAdd() {
   const customer = valueOf("qaCustomer");
 
   if (!orderNoInput) {
-    alert("ÇëÌîÐ´±àºÅ");
+    alert("ï¿½ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½");
     return;
   }
   if (!orderNo) {
-    alert("±àºÅ¸ñÊ½ÎÞÐ§£¬ÇëÊäÈë1-3Î»Êý×Ö£¨Èç 30 »ò 030£©");
+    alert("ï¿½ï¿½Å¸ï¿½Ê½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1-3Î»ï¿½ï¿½ï¿½Ö£ï¿½ï¿½ï¿½ 30 ï¿½ï¿½ 030ï¿½ï¿½");
     return;
   }
 
@@ -966,8 +966,8 @@ async function quickAdd() {
     ...createEmptyOrder(),
     orderNo,
     customer,
-    status: "´ýÅÅ²ú",
-    programNo: "Î´³ö",
+    status: "ï¿½ï¿½ï¿½Å²ï¿½",
+    programNo: "Î´ï¿½ï¿½",
     startTime: "",
   };
   order.processStepCurrent = "";
@@ -1006,7 +1006,7 @@ function render() {
     tr.dataset.id = o.id;
 
     const stateClass =
-      o.isDelayed === "ÑÓÆÚ" ? "row-delayed" : o.status === "¼Ó¹¤ÖÐ" ? "row-working" : o.status === "ÒÑ·¢»õ" ? "row-shipped" : "";
+      o.isDelayed === "ï¿½ï¿½ï¿½ï¿½" ? "row-delayed" : o.status === "ï¿½Ó¹ï¿½ï¿½ï¿½" ? "row-working" : o.status === "ï¿½Ñ·ï¿½ï¿½ï¿½" ? "row-shipped" : "";
     if (stateClass) tr.classList.add(stateClass);
     if ((rowSavedUntil.get(o.id) || 0) > now) tr.classList.add("row-saved");
 
@@ -1019,8 +1019,8 @@ function render() {
     tr.appendChild(processTimeCell(o));
     tr.appendChild(surfaceCell(o));
     tr.appendChild(statusCell(o));
-    tr.appendChild(dateCell(o, "startTime", "¿ªÊ¼Ê±¼ä"));
-    tr.appendChild(dateCell(o, "dueDate", "½»ÆÚ"));
+    tr.appendChild(dateCell(o, "startTime", "ï¿½ï¿½Ê¼Ê±ï¿½ï¿½"));
+    tr.appendChild(dateCell(o, "dueDate", "ï¿½ï¿½ï¿½ï¿½"));
     tr.appendChild(editCell(o, "note"));
 
     const opTd = document.createElement("td");
@@ -1032,7 +1032,7 @@ function render() {
     });
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
-    delBtn.textContent = "É¾³ý";
+    delBtn.textContent = "É¾ï¿½ï¿½";
     delBtn.addEventListener("click", () => {
       void removeOrder(o.id);
     });
@@ -1064,7 +1064,7 @@ function renderKanban(rows) {
   const total = rows.length;
   const totalPill = document.createElement("span");
   totalPill.className = "board-pill";
-  totalPill.textContent = `µ±Ç°¶©µ¥ ${total}`;
+  totalPill.textContent = `ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ ${total}`;
   boardSummary.appendChild(totalPill);
 
   STATUS.forEach((status) => {
@@ -1083,7 +1083,7 @@ function renderKanban(rows) {
     const title = document.createElement("strong");
     title.textContent = status;
     const count = document.createElement("span");
-    count.textContent = `${list.length} µ¥`;
+    count.textContent = `${list.length} ï¿½ï¿½`;
     head.appendChild(title);
     head.appendChild(count);
 
@@ -1093,7 +1093,7 @@ function renderKanban(rows) {
     if (list.length === 0) {
       const empty = document.createElement("div");
       empty.className = "kanban-empty";
-      empty.textContent = "ÔÝÎÞ¶©µ¥";
+      empty.textContent = "ï¿½ï¿½ï¿½Þ¶ï¿½ï¿½ï¿½";
       body.appendChild(empty);
     } else {
       list.forEach((order) => {
@@ -1117,23 +1117,23 @@ function createKanbanCard(order, displayOrderNo = "") {
   top.className = "kanban-card-top";
   const orderNo = document.createElement("span");
   orderNo.className = "kanban-order";
-  orderNo.textContent = displayOrderNo || "Î´Ìî¶©µ¥ºÅ";
+  orderNo.textContent = displayOrderNo || "Î´ï¿½î¶©ï¿½ï¿½ï¿½ï¿½";
   top.appendChild(orderNo);
 
   const name = document.createElement("div");
   name.className = "kanban-name";
-  name.textContent = order.name || order.drawingNo || "Î´ÃüÃûÁã¼þ";
+  name.textContent = order.name || order.drawingNo || "Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½";
 
   const meta = document.createElement("div");
   meta.className = "kanban-meta";
-  meta.appendChild(createKanbanTag(order.customer || "Î´Ìî¿Í»§"));
+  meta.appendChild(createKanbanTag(order.customer || "Î´ï¿½ï¿½Í»ï¿½"));
   if (order.machine) meta.appendChild(createKanbanTag(order.machine));
-  if (order.status === "¼Ó¹¤ÖÐ" && normalizeStepValue(order.processStepCurrent)) {
-    meta.appendChild(createKanbanTag(`¼Ó¹¤ÖÐµÚ${normalizeStepValue(order.processStepCurrent)}Ðò`));
+  if (order.status === "ï¿½Ó¹ï¿½ï¿½ï¿½" && normalizeStepValue(order.processStepCurrent)) {
+    meta.appendChild(createKanbanTag(`ï¿½Ó¹ï¿½ï¿½Ðµï¿½${normalizeStepValue(order.processStepCurrent)}ï¿½ï¿½`));
   }
-  if (order.dueDate) meta.appendChild(createKanbanTag(`½»ÆÚ ${toMonthDay(order.dueDate)}`));
-  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`¹¤Ê± ${order.plannedHours}·Ö`));
-  if (order.isDelayed === "ÑÓÆÚ") meta.appendChild(createKanbanTag("ÑÓÆÚ", true));
+  if (order.dueDate) meta.appendChild(createKanbanTag(`ï¿½ï¿½ï¿½ï¿½ ${toMonthDay(order.dueDate)}`));
+  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`ï¿½ï¿½Ê± ${order.plannedHours}ï¿½ï¿½`));
+  if (order.isDelayed === "ï¿½ï¿½ï¿½ï¿½") meta.appendChild(createKanbanTag("ï¿½ï¿½ï¿½ï¿½", true));
 
   card.appendChild(top);
   card.appendChild(name);
@@ -1208,7 +1208,7 @@ function previewEditCell(order, key, type = "text") {
   }
   const display = formatDisplayValue(key, rawValue);
   text.textContent = display;
-  text.title = display ? `${display}\nµã»÷Ô¤ÀÀÍ¼Ö½` : "µã»÷Ô¤ÀÀÍ¼Ö½";
+  text.title = display ? `${display}\nï¿½ï¿½ï¿½Ô¤ï¿½ï¿½Í¼Ö½` : "ï¿½ï¿½ï¿½Ô¤ï¿½ï¿½Í¼Ö½";
   text.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1223,7 +1223,7 @@ function previewEditCell(order, key, type = "text") {
   if (key === "name" && uploadedAt) {
     const timeTag = document.createElement("span");
     timeTag.className = "preview-upload-time";
-    timeTag.textContent = `ÒÑÉÏ´« ${uploadedAt}`;
+    timeTag.textContent = `ï¿½ï¿½ï¿½Ï´ï¿½ ${uploadedAt}`;
     wrap.appendChild(timeTag);
   }
   appendDirtyCellDot(td, order.id, key);
@@ -1239,7 +1239,7 @@ function processTimeCell(order) {
   td.dataset.id = order.id;
   td.className = "process-time-cell";
   td.textContent = formatProcessTimeLabel(order);
-  td.title = "µã»÷ÉèÖÃ¹¤ÐòºÍ¹¤Ê±£¨·ÖÖÓ£©";
+  td.title = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¹ï¿½ï¿½ï¿½Í¹ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½Ó£ï¿½";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1251,14 +1251,14 @@ function processTimeCell(order) {
 function formatProcessTimeLabel(order) {
   const minutes = normalizeValue("plannedHours", order.plannedHours);
   const process = String(order.processName || "").trim();
-  const processText = process ? `¹²${process}Ðò` : "";
+  const processText = process ? `ï¿½ï¿½${process}ï¿½ï¿½` : "";
   const parts = [];
-  if (order.programNo) parts.push(`³ÌÐòµ¥${order.programNo}`);
+  if (order.programNo) parts.push(`ï¿½ï¿½ï¿½ï¿½${order.programNo}`);
   if (processText) parts.push(processText);
-  if (minutes !== "") parts.push(`${minutes} ·ÖÖÓ`);
+  if (minutes !== "") parts.push(`${minutes} ï¿½ï¿½ï¿½ï¿½`);
   if (order.machine) parts.push(order.machine);
-  if (order.lathe) parts.push(`³µ´²${order.lathe}`);
-  return parts.join(" ¡¤ ");
+  if (order.lathe) parts.push(`ï¿½ï¿½ï¿½ï¿½${order.lathe}`);
+  return parts.join(" ï¿½ï¿½ ");
 }
 
 function statusCell(order) {
@@ -1281,7 +1281,7 @@ function statusCell(order) {
   const progress = buildStatusProgress(order);
   if (progress) wrap.appendChild(progress);
   td.appendChild(wrap);
-  td.title = "µã»÷ÉèÖÃ×´Ì¬";
+  td.title = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´Ì¬";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1296,7 +1296,7 @@ function dateCell(order, key, label) {
   td.dataset.id = order.id;
   td.className = "date-cell";
   td.textContent = formatDisplayValue(key, order[key] ?? "");
-  td.title = `µã»÷ÉèÖÃ${label}£¨ÔÂ/ÈÕ£©`;
+  td.title = `ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½${label}ï¿½ï¿½ï¿½ï¿½/ï¿½Õ£ï¿½`;
   appendCellError(td, order.id, key);
   td.addEventListener("click", (event) => {
     event.preventDefault();
@@ -1312,7 +1312,7 @@ function surfaceCell(order) {
   td.dataset.id = order.id;
   td.className = "surface-cell";
   td.textContent = String(order.surface || "");
-  td.title = "µã»÷ÉèÖÃ±íÃæ´¦Àí";
+  td.title = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã±ï¿½ï¿½æ´¦ï¿½ï¿½";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1322,14 +1322,14 @@ function surfaceCell(order) {
 }
 
 function formatStatusLabel(order) {
-  const base = String(order.status || "").trim() || "´ýÅÅ²ú";
-  if (base !== "¼Ó¹¤ÖÐ") return base;
+  const base = String(order.status || "").trim() || "ï¿½ï¿½ï¿½Å²ï¿½";
+  if (base !== "ï¿½Ó¹ï¿½ï¿½ï¿½") return base;
   const step = normalizeStepValue(order.processStepCurrent);
-  return step ? `¼Ó¹¤ÖÐµÚ${step}Ðò` : "¼Ó¹¤ÖÐ";
+  return step ? `ï¿½Ó¹ï¿½ï¿½Ðµï¿½${step}ï¿½ï¿½` : "ï¿½Ó¹ï¿½ï¿½ï¿½";
 }
 
 function buildStatusProgress(order) {
-  if (String(order.status || "").trim() !== "¼Ó¹¤ÖÐ") return null;
+  if (String(order.status || "").trim() !== "ï¿½Ó¹ï¿½ï¿½ï¿½") return null;
   const maxStep = Math.max(1, getMaxProcessStep(order));
   const currentRaw = Number(normalizeStepValue(order.processStepCurrent) || 0);
   const current = Math.max(0, Math.min(maxStep, currentRaw));
@@ -1353,12 +1353,12 @@ function buildStatusProgress(order) {
 
 function getStatusClassName(status) {
   const s = String(status || "").trim();
-  if (s === "´ýÅÅ²ú") return "status-pending";
-  if (s === "ÒÑÅÅ²ú") return "status-planned";
-  if (s === "¼Ó¹¤ÖÐ") return "status-working";
-  if (s === "Íê³É´ý¼ì") return "status-done";
-  if (s === "·µ¹¤") return "status-rework";
-  if (s === "ÒÑ·¢»õ") return "status-done";
+  if (s === "ï¿½ï¿½ï¿½Å²ï¿½") return "status-pending";
+  if (s === "ï¿½ï¿½ï¿½Å²ï¿½") return "status-planned";
+  if (s === "ï¿½Ó¹ï¿½ï¿½ï¿½") return "status-working";
+  if (s === "ï¿½ï¿½É´ï¿½ï¿½ï¿½") return "status-done";
+  if (s === "ï¿½ï¿½ï¿½ï¿½") return "status-rework";
+  if (s === "ï¿½Ñ·ï¿½ï¿½ï¿½") return "status-done";
   return "status-pending";
 }
 
@@ -1367,9 +1367,9 @@ function initProcessTimeOptions() {
     processProgramInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "ÇëÑ¡Ôñ";
+    blank.textContent = "ï¿½ï¿½Ñ¡ï¿½ï¿½";
     processProgramInput.appendChild(blank);
-    ["ÒÑ³ö", "Î´³ö"].forEach((name) => {
+    ["ï¿½Ñ³ï¿½", "Î´ï¿½ï¿½"].forEach((name) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = name;
@@ -1381,14 +1381,14 @@ function initProcessTimeOptions() {
   PROCESS_OPTIONS.forEach((name) => {
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name ? `¹²${name}Ðò` : "ÇëÑ¡Ôñ¹¤Ðò";
+    option.textContent = name ? `ï¿½ï¿½${name}ï¿½ï¿½` : "ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½";
     processNameInput.appendChild(option);
   });
   if (processMachineInput) {
     processMachineInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "ÇëÑ¡Ôñ»úÌ¨";
+    blank.textContent = "ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½Ì¨";
     processMachineInput.appendChild(blank);
     MACHINES.forEach((name) => {
       const option = document.createElement("option");
@@ -1401,9 +1401,9 @@ function initProcessTimeOptions() {
     processLatheInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "ÇëÑ¡Ôñ";
+    blank.textContent = "ï¿½ï¿½Ñ¡ï¿½ï¿½";
     processLatheInput.appendChild(blank);
-    ["ÊÇ", "·ñ"].forEach((name) => {
+    ["ï¿½ï¿½", "ï¿½ï¿½"].forEach((name) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = name;
@@ -1428,12 +1428,12 @@ function initDateOptions() {
   dateMonthInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "ÇëÑ¡Ôñ";
+  blank.textContent = "ï¿½ï¿½Ñ¡ï¿½ï¿½";
   dateMonthInput.appendChild(blank);
   for (let i = 1; i <= 12; i += 1) {
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = `${i}ÔÂ`;
+    opt.textContent = `${i}ï¿½ï¿½`;
     dateMonthInput.appendChild(opt);
   }
   rebuildDateDayOptions(31);
@@ -1445,7 +1445,7 @@ function initSurfaceOptions() {
   SURFACE_OPTIONS.forEach((name) => {
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name || "ÇëÑ¡Ôñ";
+    option.textContent = name || "ï¿½ï¿½Ñ¡ï¿½ï¿½";
     surfacePresetInput.appendChild(option);
   });
 }
@@ -1455,13 +1455,13 @@ function rebuildDateDayOptions(dayCount = 31) {
   dateDayInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "ÇëÑ¡Ôñ";
+  blank.textContent = "ï¿½ï¿½Ñ¡ï¿½ï¿½";
   dateDayInput.appendChild(blank);
   const max = Math.max(28, Math.min(31, Number(dayCount) || 31));
   for (let i = 1; i <= max; i += 1) {
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = `${i}ÈÕ`;
+    opt.textContent = `${i}ï¿½ï¿½`;
     dateDayInput.appendChild(opt);
   }
 }
@@ -1475,7 +1475,7 @@ function getDaysInMonthForCurrentYear(month) {
 
 function formatDialogTitle(baseTitle, orderNo = "") {
   const no = String(orderNo || "").trim();
-  return no ? `${baseTitle} ¡¤ ${no}` : baseTitle;
+  return no ? `${baseTitle} ï¿½ï¿½ ${no}` : baseTitle;
 }
 
 function openDateDialog(orderId, key, label) {
@@ -1502,11 +1502,11 @@ function openDateDialog(orderId, key, label) {
 
   if (dateSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
-    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
-    parts.push(`ÉèÖÃ${label}£¨½öÔÂ/ÈÕ£©`);
-    dateSubTitle.textContent = parts.join(" ¡¤ ");
+    if (order.orderNo) parts.push(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ï¿½ï¿½ ${order.drawingNo}`);
+    if (order.name) parts.push(`ï¿½ï¿½ï¿½ï¿½ ${order.name}`);
+    parts.push(`ï¿½ï¿½ï¿½ï¿½${label}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½/ï¿½Õ£ï¿½`);
+    dateSubTitle.textContent = parts.join(" ï¿½ï¿½ ");
   }
   dateDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1541,12 +1541,12 @@ async function saveDateDialog() {
   const month = Number(dateMonthInput?.value || 0);
   const day = Number(dateDayInput?.value || 0);
   if (!month || !day) {
-    alert("ÇëÑ¡ÔñÔÂ·ÝºÍÈÕÆÚ¡£");
+    alert("ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½Â·Ýºï¿½ï¿½ï¿½ï¿½Ú¡ï¿½");
     return;
   }
   const maxDay = getDaysInMonthForCurrentYear(month);
   if (day > maxDay) {
-    alert("ÈÕÆÚÎÞÐ§£¬ÇëÖØÐÂÑ¡Ôñ¡£");
+    alert("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½");
     return;
   }
   const year = new Date().getFullYear();
@@ -1554,7 +1554,7 @@ async function saveDateDialog() {
   const nextStart = dateEditingKey === "startTime" ? next : normalizeDateOnlyInput(order.startTime);
   const nextDue = dateEditingKey === "dueDate" ? next : normalizeDateOnlyInput(order.dueDate);
   if (nextStart && nextDue && nextDue < nextStart) {
-    const msg = "½»ÆÚ²»ÄÜÔçÓÚ¿ªÊ¼Ê±¼ä";
+    const msg = "ï¿½ï¿½ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¿ï¿½Ê¼Ê±ï¿½ï¿½";
     setTransientCellError(order.id, "startTime", msg);
     setTransientCellError(order.id, "dueDate", msg);
     render();
@@ -1609,10 +1609,10 @@ function openSurfaceDialog(orderId) {
   if (surfaceCustomInput) surfaceCustomInput.value = existsInPreset ? "" : current;
   if (surfaceSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
-    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
-    surfaceSubTitle.textContent = parts.join(" ¡¤ ") || "ÉèÖÃ±íÃæ´¦Àí";
+    if (order.orderNo) parts.push(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ï¿½ï¿½ ${order.drawingNo}`);
+    if (order.name) parts.push(`ï¿½ï¿½ï¿½ï¿½ ${order.name}`);
+    surfaceSubTitle.textContent = parts.join(" ï¿½ï¿½ ") || "ï¿½ï¿½ï¿½Ã±ï¿½ï¿½æ´¦ï¿½ï¿½";
   }
   surfaceDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1696,19 +1696,19 @@ function rebuildStatusStepOptions(maxStep = 6) {
   statusStepInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "ÇëÑ¡Ôñ";
+  blank.textContent = "ï¿½ï¿½Ñ¡ï¿½ï¿½";
   statusStepInput.appendChild(blank);
   for (let i = 1; i <= maxStep; i += 1) {
     const option = document.createElement("option");
     option.value = String(i);
-    option.textContent = `µÚ${i}Ðò`;
+    option.textContent = `ï¿½ï¿½${i}ï¿½ï¿½`;
     statusStepInput.appendChild(option);
   }
 }
 
 function syncStatusStepVisibility() {
   if (!statusInput || !statusStepWrap) return;
-  const show = statusInput.value === "¼Ó¹¤ÖÐ";
+  const show = statusInput.value === "ï¿½Ó¹ï¿½ï¿½ï¿½";
   statusStepWrap.style.display = show ? "grid" : "none";
   if (statusNextBtn) statusNextBtn.style.display = show || statusInput.value ? "inline-flex" : "none";
   syncStatusNextButtonState();
@@ -1719,7 +1719,7 @@ function openStatusDialog(orderId) {
   if (!order || !statusDialog) return;
   statusEditingOrderId = orderId;
   if (statusTitle) statusTitle.textContent = formatDialogTitle(STATUS_TITLE_BASE, order.orderNo);
-  if (statusInput) statusInput.value = order.status || "´ýÅÅ²ú";
+  if (statusInput) statusInput.value = order.status || "ï¿½ï¿½ï¿½Å²ï¿½";
   const maxStep = getMaxProcessStep(order);
   rebuildStatusStepOptions(maxStep);
   const normalizedStep = normalizeStepValue(order.processStepCurrent);
@@ -1729,11 +1729,11 @@ function openStatusDialog(orderId) {
   syncStatusStepHint();
   if (statusSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
-    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
-    parts.push(`×î¶àµÚ${maxStep}Ðò`);
-    statusSubTitle.textContent = parts.join(" ¡¤ ");
+    if (order.orderNo) parts.push(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ï¿½ï¿½ ${order.drawingNo}`);
+    if (order.name) parts.push(`ï¿½ï¿½ï¿½ï¿½ ${order.name}`);
+    parts.push(`ï¿½ï¿½ï¿½ï¿½${maxStep}ï¿½ï¿½`);
+    statusSubTitle.textContent = parts.join(" ï¿½ï¿½ ");
   }
   statusDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1744,7 +1744,7 @@ function closeStatusDialog() {
   statusDialog.hidden = true;
   statusEditingOrderId = "";
   if (statusTitle) statusTitle.textContent = STATUS_TITLE_BASE;
-  if (statusProcessContext) statusProcessContext.textContent = "µ±Ç°µÚ0Ðò / ¹²1Ðò / Ê£Óà1Ðò";
+  if (statusProcessContext) statusProcessContext.textContent = "ï¿½ï¿½Ç°ï¿½ï¿½0ï¿½ï¿½ / ï¿½ï¿½1ï¿½ï¿½ / Ê£ï¿½ï¿½1ï¿½ï¿½";
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -1763,17 +1763,17 @@ async function saveStatusDialog() {
     closeStatusDialog();
     return;
   }
-  const nextStatus = String(statusInput?.value || "´ýÅÅ²ú").trim() || "´ýÅÅ²ú";
+  const nextStatus = String(statusInput?.value || "ï¿½ï¿½ï¿½Å²ï¿½").trim() || "ï¿½ï¿½ï¿½Å²ï¿½";
   const maxStep = getMaxProcessStep(order);
   let nextStep = "";
-  if (nextStatus === "¼Ó¹¤ÖÐ") {
+  if (nextStatus === "ï¿½Ó¹ï¿½ï¿½ï¿½") {
     const rawStep = normalizeStepValue(statusStepInput?.value || "");
     if (!rawStep) {
-      alert("ÇëÑ¡Ôñ¼Ó¹¤ÐòºÅ¡£");
+      alert("ï¿½ï¿½Ñ¡ï¿½ï¿½Ó¹ï¿½ï¿½ï¿½Å¡ï¿½");
       return;
     }
     if (Number(rawStep) > maxStep) {
-      alert(`µ±Ç°¹¤Ðò×ÜÊýÎª ${maxStep}£¬¼Ó¹¤ÐòºÅ²»ÄÜ³¬¹ýµÚ${maxStep}Ðò¡£`);
+      alert(`ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îª ${maxStep}ï¿½ï¿½ï¿½Ó¹ï¿½ï¿½ï¿½Å²ï¿½ï¿½Ü³ï¿½ï¿½ï¿½ï¿½ï¿½${maxStep}ï¿½ï¿½`);
       return;
     }
     nextStep = rawStep;
@@ -1792,21 +1792,21 @@ async function saveStatusDialog() {
 
 function applyStatusNextStep() {
   if (!statusInput) return;
-  const current = String(statusInput.value || "").trim() || "´ýÅÅ²ú";
-  if (current === "´ýÅÅ²ú") {
-    statusInput.value = "ÒÑÅÅ²ú";
+  const current = String(statusInput.value || "").trim() || "ï¿½ï¿½ï¿½Å²ï¿½";
+  if (current === "ï¿½ï¿½ï¿½Å²ï¿½") {
+    statusInput.value = "ï¿½ï¿½ï¿½Å²ï¿½";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "ÒÑÅÅ²ú") {
-    statusInput.value = "¼Ó¹¤ÖÐ";
+  if (current === "ï¿½ï¿½ï¿½Å²ï¿½") {
+    statusInput.value = "ï¿½Ó¹ï¿½ï¿½ï¿½";
     if (statusStepInput && !normalizeStepValue(statusStepInput.value)) statusStepInput.value = "1";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "¼Ó¹¤ÖÐ") {
+  if (current === "ï¿½Ó¹ï¿½ï¿½ï¿½") {
     const maxStep = statusEditingOrderId ? getMaxProcessStep(orders.find((x) => x.id === statusEditingOrderId) || {}) : 1;
     const nowStep = Number(normalizeStepValue(statusStepInput?.value || "1") || 1);
     if (nowStep < maxStep) {
@@ -1814,14 +1814,14 @@ function applyStatusNextStep() {
       syncStatusStepHint();
       return;
     }
-    statusInput.value = "Íê³É´ý¼ì";
+    statusInput.value = "ï¿½ï¿½É´ï¿½ï¿½ï¿½";
     if (statusStepInput) statusStepInput.value = "";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "Íê³É´ý¼ì") {
-    statusInput.value = "ÒÑ·¢»õ";
+  if (current === "ï¿½ï¿½É´ï¿½ï¿½ï¿½") {
+    statusInput.value = "ï¿½Ñ·ï¿½ï¿½ï¿½";
     if (statusStepInput) statusStepInput.value = "";
     syncStatusStepVisibility();
     syncStatusStepHint();
@@ -1831,7 +1831,7 @@ function applyStatusNextStep() {
 
 function syncStatusStepHint() {
   if (!statusStepHint || !statusInput) return;
-  if (statusInput.value !== "¼Ó¹¤ÖÐ") {
+  if (statusInput.value !== "ï¿½Ó¹ï¿½ï¿½ï¿½") {
     statusStepHint.textContent = "";
     syncStatusProcessContext();
     return;
@@ -1840,12 +1840,12 @@ function syncStatusStepHint() {
   const maxStep = getMaxProcessStep(order || {});
   const currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
   if (!currentStep) {
-    statusStepHint.textContent = `µ±Ç°Î´Ñ¡ÔñÐòºÅ£¬¹²${maxStep}Ðò¡£`;
+    statusStepHint.textContent = `ï¿½ï¿½Ç°Î´Ñ¡ï¿½ï¿½ï¿½ï¿½Å£ï¿½ï¿½ï¿½${maxStep}ï¿½ï¿½`;
     syncStatusProcessContext();
     return;
   }
   const remain = Math.max(0, maxStep - currentStep);
-  statusStepHint.textContent = `µ±Ç°µÚ${currentStep}Ðò£¬Ê£Óà${remain}Ðò¡£`;
+  statusStepHint.textContent = `ï¿½ï¿½Ç°ï¿½ï¿½${currentStep}ï¿½ï¿½Ê£ï¿½ï¿½${remain}ï¿½ï¿½`;
   syncStatusProcessContext();
 }
 
@@ -1855,37 +1855,37 @@ function syncStatusProcessContext() {
   const maxStep = getMaxProcessStep(order);
   const status = String(statusInput?.value || order.status || "").trim();
   let currentStep = 0;
-  if (status === "¼Ó¹¤ÖÐ") {
+  if (status === "ï¿½Ó¹ï¿½ï¿½ï¿½") {
     currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
-  } else if (String(order.status || "").trim() === "¼Ó¹¤ÖÐ") {
+  } else if (String(order.status || "").trim() === "ï¿½Ó¹ï¿½ï¿½ï¿½") {
     currentStep = Number(normalizeStepValue(order.processStepCurrent) || 0);
   }
   currentStep = Math.max(0, Math.min(maxStep, currentStep));
   const remain = Math.max(0, maxStep - currentStep);
-  statusProcessContext.textContent = `µ±Ç°µÚ${currentStep}Ðò / ¹²${maxStep}Ðò / Ê£Óà${remain}Ðò`;
+  statusProcessContext.textContent = `ï¿½ï¿½Ç°ï¿½ï¿½${currentStep}ï¿½ï¿½ / ï¿½ï¿½${maxStep}ï¿½ï¿½ / Ê£ï¿½ï¿½${remain}ï¿½ï¿½`;
 }
 
 function syncStatusNextButtonState() {
   if (!statusNextBtn || !statusInput) return;
-  const current = String(statusInput.value || "").trim() || "´ýÅÅ²ú";
-  statusNextBtn.disabled = current === "ÒÑ·¢»õ";
-  if (current === "´ýÅÅ²ú") {
-    statusNextBtn.textContent = "ÏÂÒ»²½£ºÒÑÅÅ²ú";
+  const current = String(statusInput.value || "").trim() || "ï¿½ï¿½ï¿½Å²ï¿½";
+  statusNextBtn.disabled = current === "ï¿½Ñ·ï¿½ï¿½ï¿½";
+  if (current === "ï¿½ï¿½ï¿½Å²ï¿½") {
+    statusNextBtn.textContent = "ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å²ï¿½";
     return;
   }
-  if (current === "ÒÑÅÅ²ú") {
-    statusNextBtn.textContent = "ÏÂÒ»²½£º¼Ó¹¤ÖÐ";
+  if (current === "ï¿½ï¿½ï¿½Å²ï¿½") {
+    statusNextBtn.textContent = "ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½Ó¹ï¿½ï¿½ï¿½";
     return;
   }
-  if (current === "¼Ó¹¤ÖÐ") {
-    statusNextBtn.textContent = "ÏÂÒ»²½£ºÍÆ½øÐòºÅ";
+  if (current === "ï¿½Ó¹ï¿½ï¿½ï¿½") {
+    statusNextBtn.textContent = "ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½Æ½ï¿½ï¿½ï¿½ï¿½";
     return;
   }
-  if (current === "Íê³É´ý¼ì") {
-    statusNextBtn.textContent = "ÏÂÒ»²½£ºÒÑ·¢»õ";
+  if (current === "ï¿½ï¿½É´ï¿½ï¿½ï¿½") {
+    statusNextBtn.textContent = "ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½Ñ·ï¿½ï¿½ï¿½";
     return;
   }
-  statusNextBtn.textContent = "ÒÑÍê³É";
+  statusNextBtn.textContent = "ï¿½ï¿½ï¿½ï¿½ï¿½";
 }
 
 function openProcessTimeDialog(orderId) {
@@ -1894,17 +1894,17 @@ function openProcessTimeDialog(orderId) {
   const defaults = getShiftDefaults();
   processTimeEditingOrderId = orderId;
   if (processTimeTitle) processTimeTitle.textContent = formatDialogTitle(PROCESS_TIME_TITLE_BASE, order.orderNo);
-  if (processProgramInput) processProgramInput.value = order.programNo || "Î´³ö";
+  if (processProgramInput) processProgramInput.value = order.programNo || "Î´ï¿½ï¿½";
   if (processNameInput) processNameInput.value = order.processName || "";
   if (processMinutesInput) processMinutesInput.value = order.plannedHours === "" ? "" : String(order.plannedHours);
   if (processMachineInput) processMachineInput.value = order.machine || defaults.machine || "";
   if (processLatheInput) processLatheInput.value = order.lathe || defaults.lathe || "";
   if (processTimeSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
-    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
-    processTimeSubTitle.textContent = parts.join(" ¡¤ ") || "ÉèÖÃ¹¤ÐòÓë¹¤Ê±";
+    if (order.orderNo) parts.push(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ï¿½ï¿½ ${order.drawingNo}`);
+    if (order.name) parts.push(`ï¿½ï¿½ï¿½ï¿½ ${order.name}`);
+    processTimeSubTitle.textContent = parts.join(" ï¿½ï¿½ ") || "ï¿½ï¿½ï¿½Ã¹ï¿½ï¿½ï¿½ï¿½ë¹¤Ê±";
   }
   processTimeDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1939,7 +1939,7 @@ async function saveProcessTimeDialog() {
   const nextLathe = String(processLatheInput?.value || "").trim();
   const nextMinutes = normalizeValue("plannedHours", minuteRaw);
   if (minuteRaw !== "" && nextMinutes === "") {
-    alert("¹¤Ê±¸ñÊ½ÎÞÐ§£¬ÇëÊäÈëÕûÊý·ÖÖÓ¡£");
+    alert("ï¿½ï¿½Ê±ï¿½ï¿½Ê½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½");
     return;
   }
   const prevStep = String(target.processStepCurrent || "");
@@ -2082,14 +2082,14 @@ async function updateOrder(id, key, value) {
   const normalized = normalizeValue(key, value);
   if (key === "qty" && raw !== "" && !Number.isFinite(Number(raw))) {
     setDirtyCellMark(id, key, true);
-    setTransientCellError(id, "qty", "ÊýÁ¿±ØÐëÎªÊý×Ö");
+    setTransientCellError(id, "qty", "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½");
     render();
     return false;
   }
   if (key === "orderNo") {
     if (raw !== "" && normalized === "") {
       setDirtyCellMark(id, key, true);
-      setTransientCellError(id, "orderNo", "¶©µ¥ºÅ¸ñÊ½ÎÞÐ§");
+      setTransientCellError(id, "orderNo", "ï¿½ï¿½ï¿½ï¿½ï¿½Å¸ï¿½Ê½ï¿½ï¿½Ð§");
       render();
       return false;
     }
@@ -2098,14 +2098,14 @@ async function updateOrder(id, key, value) {
       : false;
     if (dup) {
       setDirtyCellMark(id, key, true);
-      setTransientCellError(id, "orderNo", "¶©µ¥ºÅÖØ¸´");
+      setTransientCellError(id, "orderNo", "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¸ï¿½");
       render();
       return false;
     }
   }
   if ((key === "dueDate" || key === "startTime") && raw !== "" && normalized === "") {
     setDirtyCellMark(id, key, true);
-    setTransientCellError(id, key, key === "dueDate" ? "½»ÆÚ¸ñÊ½ÎÞÐ§" : "¿ªÊ¼Ê±¼ä¸ñÊ½ÎÞÐ§");
+    setTransientCellError(id, key, key === "dueDate" ? "ï¿½ï¿½ï¿½Ú¸ï¿½Ê½ï¿½ï¿½Ð§" : "ï¿½ï¿½Ê¼Ê±ï¿½ï¿½ï¿½Ê½ï¿½ï¿½Ð§");
     render();
     return false;
   }
@@ -2119,7 +2119,7 @@ async function updateOrder(id, key, value) {
     const nextStart = key === "startTime" ? normalized : normalizeDateOnlyInput(target.startTime);
     const nextDue = key === "dueDate" ? normalized : normalizeDateOnlyInput(target.dueDate);
     if (nextStart && nextDue && nextDue < nextStart) {
-      const msg = "½»ÆÚ²»ÄÜÔçÓÚ¿ªÊ¼Ê±¼ä";
+      const msg = "ï¿½ï¿½ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¿ï¿½Ê¼Ê±ï¿½ï¿½";
       setDirtyCellMark(id, key, true);
       setTransientCellError(id, "startTime", msg);
       setTransientCellError(id, "dueDate", msg);
@@ -2184,9 +2184,9 @@ function toMonthDay(value) {
 }
 
 function calcDelayed(order) {
-  if (!order.dueDate || order.status === "ÒÑ·¢»õ") return "";
+  if (!order.dueDate || order.status === "ï¿½Ñ·ï¿½ï¿½ï¿½") return "";
   const due = new Date(order.dueDate + "T23:59:59");
-  return Date.now() > due.getTime() ? "ÑÓÆÚ" : "Õý³£";
+  return Date.now() > due.getTime() ? "ï¿½ï¿½ï¿½ï¿½" : "ï¿½ï¿½ï¿½ï¿½";
 }
 
 function removeOrder(id) {
@@ -2197,8 +2197,8 @@ function openDeleteConfirmDialog(id) {
   const order = orders.find((o) => o.id === id);
   if (!order || !deleteConfirmDialog) return;
   pendingDeleteOrderId = id;
-  const no = String(order.orderNo || "").trim() || "Î´ÌîÐ´";
-  if (deleteConfirmText) deleteConfirmText.textContent = `È·ÈÏÉ¾³ý¶©µ¥ºÅ ${no} Âð£¿´Ë²Ù×÷²»¿É³·Ïú¡£`;
+  const no = String(order.orderNo || "").trim() || "Î´ï¿½ï¿½Ð´";
+  if (deleteConfirmText) deleteConfirmText.textContent = `È·ï¿½ï¿½É¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${no} ï¿½ð£¿´Ë²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É³ï¿½ï¿½ï¿½ï¿½ï¿½`;
   deleteConfirmDialog.hidden = false;
   document.body.style.overflow = "hidden";
 }
@@ -2269,7 +2269,7 @@ function getMonthFromOrderNo(v) {
 
 function renderKpis(data) {
   const totalOrders = data.length;
-  const inProduction = data.filter((x) => x.status === "¼Ó¹¤ÖÐ").length;
+  const inProduction = data.filter((x) => x.status === "ï¿½Ó¹ï¿½ï¿½ï¿½").length;
   const dueToday = data.filter((x) => isDueToday(x.dueDate)).length;
   const abnormalCount = data.filter((x) => isAbnormalOrder(x)).length;
 
@@ -2280,7 +2280,7 @@ function renderKpis(data) {
 }
 
 function isAbnormalOrder(order) {
-  return order.isDelayed === "ÑÓÆÚ" || order.status === "·µ¹¤" || isDueToday(order.dueDate);
+  return order.isDelayed === "ï¿½ï¿½ï¿½ï¿½" || order.status === "ï¿½ï¿½ï¿½ï¿½" || isDueToday(order.dueDate);
 }
 
 function isDueToday(dueDate) {
@@ -2314,11 +2314,11 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
       authSession = null;
       authWriteHintNotified = false;
       updateAuthUi();
-      setModeText(remoteOnline ? "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©" : "±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
-      alert("Ð´ÈëÊ§°Ü£ºµÇÂ¼Ì¬ÒÑÊ§Ð§£¬ÇëÖØÐÂµÇÂ¼¡£");
+      setModeText(remoteOnline ? "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½" : "ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½");
+      alert("Ð´ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½Â¼Ì¬ï¿½ï¿½Ê§Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Âµï¿½Â¼ï¿½ï¿½");
       return;
     }
-    handleRemoteError("ÔÆ¶ËÍ¬²½Ê§°Ü", e);
+    handleRemoteError("ï¿½Æ¶ï¿½Í¬ï¿½ï¿½Ê§ï¿½ï¿½", e);
   } finally {
     syncing = false;
   }
@@ -2341,7 +2341,7 @@ function loadOrdersLocal() {
         }));
       }
     } catch (e) {
-      console.warn("¶ÁÈ¡±¾µØ»º´æÊ§°Ü", e);
+      console.warn("ï¿½ï¿½È¡ï¿½ï¿½ï¿½Ø»ï¿½ï¿½ï¿½Ê§ï¿½ï¿½", e);
     }
   }
   return demoData();
@@ -2366,18 +2366,18 @@ async function refreshFromRemote(showAlert = false) {
     setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
-    if (showAlert) alert("ÒÑ´ÓÔÆ¶ËË¢ÐÂ×îÐÂÊý¾Ý");
+    if (showAlert) alert("ï¿½Ñ´ï¿½ï¿½Æ¶ï¿½Ë¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
   } catch (e) {
     if (isAuthError(e) && !authSession) {
       remoteOnline = true;
       remoteErrorNotified = false;
-      setModeText("ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
+      setModeText("ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½");
       orders = loadOrdersLocal();
       render();
       setLastSyncTime();
       return;
     }
-    handleRemoteError("ÔÆ¶Ë¶ÁÈ¡Ê§°Ü", e);
+    handleRemoteError("ï¿½Æ¶Ë¶ï¿½È¡Ê§ï¿½ï¿½", e);
     orders = loadOrdersLocal();
     render();
   }
@@ -2386,12 +2386,12 @@ async function refreshFromRemote(showAlert = false) {
 function handleRemoteError(prefix, err) {
   console.error(prefix, err);
   remoteOnline = false;
-  setModeText("±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
+  setModeText("ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½");
   scheduleReconnect();
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
-    const detail = err?.message || err?.error_description || "Î´Öª´íÎó";
-    alert(`${prefix}£º${detail}\nÒÑ×Ô¶¯ÇÐ»»±¾µØÄ£Ê½¡£`);
+    const detail = err?.message || err?.error_description || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`${prefix}ï¿½ï¿½${detail}\nï¿½ï¿½ï¿½Ô¶ï¿½ï¿½Ð»ï¿½ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½`);
   }
 }
 
@@ -2417,23 +2417,23 @@ async function tryReconnectRemote(manual = false) {
     if (error) throw error;
     remoteOnline = true;
     reconnectDelayMs = 5000;
-    setModeText(authSession ? "ÔÆ¶Ë¹²ÏíÄ£Ê½" : "ÔÆ¶ËÖ»¶Á£¨Î´µÇÂ¼£©");
+    setModeText(authSession ? "ï¿½Æ¶Ë¹ï¿½ï¿½ï¿½Ä£Ê½" : "ï¿½Æ¶ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½Â¼ï¿½ï¿½");
     await refreshFromRemote(false);
-    if (manual) alert("ÔÆ¶ËÁ¬½ÓÒÑ»Ö¸´");
+    if (manual) alert("ï¿½Æ¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ»Ö¸ï¿½");
   } catch (e) {
     remoteOnline = false;
-    setModeText("±¾µØÄ£Ê½£¨ÔÆÁ¬½ÓÊ§°Ü£©");
+    setModeText("ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½");
     scheduleReconnect();
     if (manual) {
-      const detail = e?.message || e?.error_description || "Î´Öª´íÎó";
-      alert(`ÖØÁ¬Ê§°Ü£º${detail}`);
+      const detail = e?.message || e?.error_description || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+      alert(`ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
     }
   }
 }
 
 function toDbRow(order, updatedAtOverride = "") {
   const normalizedProcess = String(order.processName || "").trim();
-  const normalizedStep = order.status === "¼Ó¹¤ÖÐ" ? normalizeStepValue(order.processStepCurrent) : "";
+  const normalizedStep = order.status === "ï¿½Ó¹ï¿½ï¿½ï¿½" ? normalizeStepValue(order.processStepCurrent) : "";
   const mergedNote = mergeOrderMetaIntoNote(order.note || "", {
     processName: normalizedProcess,
     processStepCurrent: normalizedStep,
@@ -2450,7 +2450,7 @@ function toDbRow(order, updatedAtOverride = "") {
     machine: order.machine || "",
     lathe: order.lathe || "",
     surface: order.surface || "",
-    status: order.status || "´ýÅÅ²ú",
+    status: order.status || "ï¿½ï¿½ï¿½Å²ï¿½",
     start_time: toDbStartTime(order.startTime),
     due_date: toDbDueDate(order.dueDate),
     is_delayed: order.isDelayed || "",
@@ -2470,12 +2470,12 @@ function fromDbRow(row) {
   o.customer = row.customer || "";
   o.name = row.item_name || "";
   o.qty = row.qty ?? "";
-  o.programNo = row.program_no || "Î´³ö";
+  o.programNo = row.program_no || "Î´ï¿½ï¿½";
   o.plannedHours = row.planned_hours ?? "";
   o.machine = row.machine || "";
   o.lathe = row.lathe || "";
   o.surface = row.surface || "";
-  o.status = row.status || "´ýÅÅ²ú";
+  o.status = row.status || "ï¿½ï¿½ï¿½Å²ï¿½";
   o.startTime = formatStartTimeFromDb(row.start_time);
   o.dueDate = formatDueDateFromDb(row.due_date);
   o.processName = parsedNote.processName || "";
@@ -2492,49 +2492,49 @@ function demoData() {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0003",
       drawingNo: "DW-2025-003",
-      customer: "º£¶û",
-      name: "¿ÇÌåA",
+      customer: "ï¿½ï¿½ï¿½ï¿½",
+      name: "ï¿½ï¿½ï¿½ï¿½A",
       qty: 289,
-      programNo: "ÒÑ³ö",
+      programNo: "ï¿½Ñ³ï¿½",
       plannedHours: 19.1,
       machine: "CNC1",
-      lathe: "ÊÇ",
-      surface: "Ñô¼«Ñõ»¯",
-      status: "ÒÑÅÅ²ú",
+      lathe: "ï¿½ï¿½",
+      surface: "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½",
+      status: "ï¿½ï¿½ï¿½Å²ï¿½",
       startTime: "2026-02-14 08:30",
       dueDate: "2026-02-18",
-      note: "ÓÅÏÈ¶©µ¥",
+      note: "ï¿½ï¿½ï¿½È¶ï¿½ï¿½ï¿½",
     },
     {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0004",
       drawingNo: "DW-2025-003",
-      customer: "±ÈÑÇµÏ",
-      name: "Ö§¼ÜB",
+      customer: "ï¿½ï¿½ï¿½Çµï¿½",
+      name: "Ö§ï¿½ï¿½B",
       qty: 758,
-      programNo: "ÒÑ³ö",
+      programNo: "ï¿½Ñ³ï¿½",
       plannedHours: 38.5,
       machine: "CNC3",
-      lathe: "·ñ",
-      surface: "·¢ºÚ",
-      status: "¼Ó¹¤ÖÐ",
+      lathe: "ï¿½ï¿½",
+      surface: "ï¿½ï¿½ï¿½ï¿½",
+      status: "ï¿½Ó¹ï¿½ï¿½ï¿½",
       startTime: "2026-02-14 09:20",
       dueDate: "2026-02-16",
-      note: "Ò¹°à¸ú½ø",
+      note: "Ò¹ï¿½ï¿½ï¿½ï¿½ï¿½",
     },
     {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0005",
       drawingNo: "DW-2025-004",
-      customer: "ÁªÏë",
-      name: "¶Ë¸ÇC",
+      customer: "ï¿½ï¿½ï¿½ï¿½",
+      name: "ï¿½Ë¸ï¿½C",
       qty: 403,
-      programNo: "Î´³ö",
+      programNo: "Î´ï¿½ï¿½",
       plannedHours: 22.8,
       machine: "CNC5",
-      lathe: "ÊÇ",
-      surface: "ÅçÉ°",
-      status: "´ýÅÅ²ú",
+      lathe: "ï¿½ï¿½",
+      surface: "ï¿½ï¿½É°",
+      status: "ï¿½ï¿½ï¿½Å²ï¿½",
       startTime: "",
       dueDate: "2026-02-15",
       note: "",
@@ -2603,7 +2603,7 @@ async function openLinePreview(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order) return;
   if (!UPLOAD_API_BASE) {
-    alert("Î´ÅäÖÃÉÏ´«·þÎñµØÖ·£¬ÇëÏÈÉèÖÃ config.js µÄ UPLOAD_API_BASE¡£");
+    alert("Î´ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ config.js ï¿½ï¿½ UPLOAD_API_BASEï¿½ï¿½");
     return;
   }
   try {
@@ -2611,20 +2611,20 @@ async function openLinePreview(orderId) {
     const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
     setAttachmentStateFromItems(orderId, items);
     if (items.length === 0) {
-      alert("¸ÃÁã¼þÔÝÎÞÍ¼Ö½£¬ÇëÏÈÉÏ´«¡£");
+      alert("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Ö½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ï¿½ï¿½");
       await openAttachmentDialog(orderId);
       return;
     }
     const previewable = items.find((item) => isPreviewableFile(item));
     if (!previewable) {
-      alert("µ±Ç°Í¼Ö½ÀàÐÍ²»Ö§³ÖÔÚÏßÔ¤ÀÀ£¬ÇëÔÚ¸½¼þÁÐ±íÖÐÏÂÔØ²é¿´¡£");
+      alert("ï¿½ï¿½Ç°Í¼Ö½ï¿½ï¿½ï¿½Í²ï¿½Ö§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¸ï¿½ï¿½ï¿½ï¿½Ð±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø²é¿´ï¿½ï¿½");
       await openAttachmentDialog(orderId);
       return;
     }
     await previewOrderFile(previewable, order);
   } catch (e) {
-    const detail = e?.message || "Î´Öª´íÎó";
-    alert(`Ô¤ÀÀÊ§°Ü£º${detail}`);
+    const detail = e?.message || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`Ô¤ï¿½ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
   }
 }
 
@@ -2642,16 +2642,16 @@ async function openAttachmentDialog(orderId) {
 }
 
 function syncAttachmentHeader(order) {
-  if (attachmentTitle) attachmentTitle.textContent = "Áã¼þÍ¼Ö½";
+  if (attachmentTitle) attachmentTitle.textContent = "ï¿½ï¿½ï¿½Í¼Ö½";
   if (attachmentSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`¶©µ¥ºÅ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`Í¼ºÅ ${order.drawingNo}`);
-    if (order.name) parts.push(`Ãû³Æ ${order.name}`);
-    attachmentSubTitle.textContent = parts.join(" ¡¤ ") || "Î´ÌîÐ´¶©µ¥»ù´¡ÐÅÏ¢";
+    if (order.orderNo) parts.push(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`Í¼ï¿½ï¿½ ${order.drawingNo}`);
+    if (order.name) parts.push(`ï¿½ï¿½ï¿½ï¿½ ${order.name}`);
+    attachmentSubTitle.textContent = parts.join(" ï¿½ï¿½ ") || "Î´ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢";
   }
   if (attachmentHint) {
-    attachmentHint.textContent = `Ö§³ÖÀàÐÍ: ${UPLOAD_ACCEPT}£¬µ¥ÎÄ¼þÉÏÏÞ ${UPLOAD_MAX_MB}MB`;
+    attachmentHint.textContent = `Ö§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½: ${UPLOAD_ACCEPT}ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ ${UPLOAD_MAX_MB}MB`;
   }
 }
 
@@ -2662,7 +2662,7 @@ function renderAttachmentList() {
   if (!UPLOAD_API_BASE) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "Î´ÅäÖÃÉÏ´«·þÎñµØÖ·£¬ÇëÔÚ config.js ÖÐÉèÖÃ UPLOAD_API_BASE¡£";
+    empty.textContent = "Î´ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ config.js ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UPLOAD_API_BASEï¿½ï¿½";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2670,7 +2670,7 @@ function renderAttachmentList() {
   if (attachmentLoading) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "¸½¼þ¼ÓÔØÖÐ...";
+    empty.textContent = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½...";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2678,7 +2678,7 @@ function renderAttachmentList() {
   if (attachmentItems.length === 0) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "ÔÝÎÞ¸½¼þ";
+    empty.textContent = "ï¿½ï¿½ï¿½Þ¸ï¿½ï¿½ï¿½";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2694,7 +2694,7 @@ function renderAttachmentList() {
     name.textContent = getAttachmentName(item);
     const desc = document.createElement("div");
     desc.className = "attachment-desc";
-    desc.textContent = `${formatFileSize(item.size_bytes || item.size || 0)} ¡¤ ${formatDateTime(item.created_at || item.createdAt || "")}`;
+    desc.textContent = `${formatFileSize(item.size_bytes || item.size || 0)} ï¿½ï¿½ ${formatDateTime(item.created_at || item.createdAt || "")}`;
     meta.appendChild(name);
     meta.appendChild(desc);
 
@@ -2703,21 +2703,21 @@ function renderAttachmentList() {
     const previewBtn = document.createElement("button");
     previewBtn.type = "button";
     previewBtn.className = "action-btn-secondary";
-    previewBtn.textContent = "Ô¤ÀÀ";
+    previewBtn.textContent = "Ô¤ï¿½ï¿½";
     previewBtn.addEventListener("click", () => {
       void previewOrderFile(item);
     });
     const downloadBtn = document.createElement("button");
     downloadBtn.type = "button";
     downloadBtn.className = "action-btn-secondary";
-    downloadBtn.textContent = "ÏÂÔØ";
+    downloadBtn.textContent = "ï¿½ï¿½ï¿½ï¿½";
     downloadBtn.addEventListener("click", () => {
       void downloadOrderFile(item);
     });
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "action-btn";
-    deleteBtn.textContent = "É¾³ý";
+    deleteBtn.textContent = "É¾ï¿½ï¿½";
     deleteBtn.addEventListener("click", () => {
       void deleteOrderFile(item);
     });
@@ -2745,8 +2745,8 @@ async function loadOrderFiles(orderId) {
     attachmentItems = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
     setAttachmentStateFromItems(orderId, attachmentItems);
   } catch (e) {
-    const detail = e?.message || "Î´Öª´íÎó";
-    alert(`¼ÓÔØ¸½¼þÊ§°Ü£º${detail}`);
+    const detail = e?.message || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`ï¿½ï¿½ï¿½Ø¸ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
     attachmentItems = [];
   } finally {
     attachmentLoading = false;
@@ -2759,18 +2759,18 @@ async function uploadAttachmentFromInput(event) {
   event.target.value = "";
   if (!file || !attachmentPanelOrderId) return;
   if (!UPLOAD_API_BASE) {
-    alert("Î´ÅäÖÃÉÏ´«·þÎñµØÖ·£¬ÇëÏÈÉèÖÃ config.js µÄ UPLOAD_API_BASE¡£");
+    alert("Î´ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ config.js ï¿½ï¿½ UPLOAD_API_BASEï¿½ï¿½");
     return;
   }
   const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
   if (file.size > maxBytes) {
-    alert(`ÎÄ¼þ¹ý´ó£¬µ±Ç°ÏÞÖÆ ${UPLOAD_MAX_MB}MB¡£`);
+    alert(`ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ó£¬µï¿½Ç°ï¿½ï¿½ï¿½ï¿½ ${UPLOAD_MAX_MB}MBï¿½ï¿½`);
     return;
   }
   const ext = `.${(file.name.split(".").pop() || "").toLowerCase()}`;
   const allowList = UPLOAD_ACCEPT.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (allowList.length > 0 && !allowList.includes(ext)) {
-    alert(`ÎÄ¼þÀàÐÍ²»Ö§³Ö£º${ext || "Î´Öª"}¡£`);
+    alert(`ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½Í²ï¿½Ö§ï¿½Ö£ï¿½${ext || "Î´Öª"}ï¿½ï¿½`);
     return;
   }
 
@@ -2788,15 +2788,15 @@ async function uploadAttachmentFromInput(event) {
     await loadOrderFiles(attachmentPanelOrderId);
     render();
   } catch (e) {
-    const detail = e?.message || "Î´Öª´íÎó";
-    alert(`ÉÏ´«Ê§°Ü£º${detail}`);
+    const detail = e?.message || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`ï¿½Ï´ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
   }
 }
 
 async function deleteOrderFile(item) {
   const id = item?.id;
   if (!id) return;
-  if (!confirm(`È·ÈÏÉ¾³ý¸½¼þ¡°${getAttachmentName(item)}¡±Âð£¿`)) return;
+  if (!confirm(`È·ï¿½ï¿½É¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½${getAttachmentName(item)}ï¿½ï¿½ï¿½ï¿½`)) return;
   try {
     await apiFetchJson(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
     attachmentItems = attachmentItems.filter((x) => x.id !== id);
@@ -2804,8 +2804,8 @@ async function deleteOrderFile(item) {
     renderAttachmentList();
     render();
   } catch (e) {
-    const detail = e?.message || "Î´Öª´íÎó";
-    alert(`É¾³ýÊ§°Ü£º${detail}`);
+    const detail = e?.message || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`É¾ï¿½ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
   }
 }
 
@@ -2823,8 +2823,8 @@ async function downloadOrderFile(item) {
     a.remove();
     URL.revokeObjectURL(url);
   } catch (e) {
-    const detail = e?.message || "Î´Öª´íÎó";
-    alert(`ÏÂÔØÊ§°Ü£º${detail}`);
+    const detail = e?.message || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    alert(`ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½${detail}`);
   }
 }
 
@@ -2832,15 +2832,15 @@ async function previewOrderFile(item, orderOverride = null) {
   const id = item?.id;
   if (!id || !previewDialog || !previewBody) return;
   const order = orderOverride || orders.find((x) => x.id === attachmentPanelOrderId) || null;
-  if (previewTitle) previewTitle.textContent = "Í¼Ö½Ô¤ÀÀ";
+  if (previewTitle) previewTitle.textContent = "Í¼Ö½Ô¤ï¿½ï¿½";
   if (previewSubTitle) {
     const seg = [];
-    if (order?.orderNo) seg.push(`¶©µ¥ºÅ ${order.orderNo}`);
-    if (order?.drawingNo) seg.push(`Í¼ºÅ ${order.drawingNo}`);
+    if (order?.orderNo) seg.push(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${order.orderNo}`);
+    if (order?.drawingNo) seg.push(`Í¼ï¿½ï¿½ ${order.drawingNo}`);
     seg.push(getAttachmentName(item));
-    previewSubTitle.textContent = seg.join(" ¡¤ ");
+    previewSubTitle.textContent = seg.join(" ï¿½ï¿½ ");
   }
-  previewBody.innerHTML = `<div class="preview-empty">¼ÓÔØÖÐ...</div>`;
+  previewBody.innerHTML = `<div class="preview-empty">ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½...</div>`;
   previewDialog.hidden = false;
   document.body.style.overflow = "hidden";
 
@@ -2869,15 +2869,15 @@ async function previewOrderFile(item, orderOverride = null) {
       previewBody.appendChild(frame);
       return;
     }
-    previewBody.innerHTML = `<div class="preview-empty">¸ÃÎÄ¼þÀàÐÍÔÝ²»Ö§³ÖÔÚÏßÔ¤ÀÀ£¬ÇëÏÂÔØ²é¿´¡£</div>`;
+    previewBody.innerHTML = `<div class="preview-empty">ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý²ï¿½Ö§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø²é¿´ï¿½ï¿½</div>`;
   } catch (e) {
-    const detail = e?.message || "Î´Öª´íÎó";
-    previewBody.innerHTML = `<div class="preview-empty">Ô¤ÀÀÊ§°Ü£º${detail}</div>`;
+    const detail = e?.message || "Î´Öªï¿½ï¿½ï¿½ï¿½";
+    previewBody.innerHTML = `<div class="preview-empty">Ô¤ï¿½ï¿½Ê§ï¿½Ü£ï¿½${detail}</div>`;
   }
 }
 
 function getAttachmentName(item) {
-  return item?.file_name || item?.name || item?.filename || "Î´ÃüÃû¸½¼þ";
+  return item?.file_name || item?.name || item?.filename || "Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½";
 }
 
 function setAttachmentState(orderId, hasFiles) {
@@ -2929,7 +2929,7 @@ function syncPreviewUploadedTime(orderId, uploadedAt = "") {
       node.className = "preview-upload-time";
       wrap.appendChild(node);
     }
-    node.textContent = `ÒÑÉÏ´« ${uploadedAt}`;
+    node.textContent = `ï¿½ï¿½ï¿½Ï´ï¿½ ${uploadedAt}`;
   });
 }
 
@@ -2982,7 +2982,7 @@ function formatFileSize(bytes) {
 }
 
 function formatDateTime(value) {
-  if (!value) return "Ê±¼äÎ´Öª";
+  if (!value) return "Ê±ï¿½ï¿½Î´Öª";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   const yyyy = d.getFullYear();
@@ -3046,7 +3046,7 @@ async function parseHttpError(resp) {
 
 function exportXlsx() {
   if (!window.XLSX) {
-    alert("Excel×é¼þ¼ÓÔØÊ§°Ü£¬ÇëË¢ÐÂÒ³ÃæºóÖØÊÔ");
+    alert("Excelï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½Ë¢ï¿½ï¿½Ò³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
     return;
   }
   const rows = orders.map((o) => {
@@ -3058,7 +3058,7 @@ function exportXlsx() {
   });
   const ws = XLSX.utils.json_to_sheet(rows, { header: XLSX_COLUMNS.map((x) => x.title) });
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Éú²úÊý¾Ý");
+  XLSX.utils.book_append_sheet(wb, ws, "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
   XLSX.writeFile(wb, `mes_orders_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.xlsx`);
 }
 
@@ -3066,7 +3066,7 @@ async function importXlsx(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (!window.XLSX) {
-    alert("Excel×é¼þ¼ÓÔØÊ§°Ü£¬ÇëË¢ÐÂÒ³ÃæºóÖØÊÔ");
+    alert("Excelï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½Ë¢ï¿½ï¿½Ò³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
     event.target.value = "";
     return;
   }
@@ -3079,7 +3079,7 @@ async function importXlsx(event) {
       const firstSheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
       const titleToKey = Object.fromEntries(XLSX_COLUMNS.map((x) => [x.title, x.key]));
-      titleToKey["Ô¤¼Æ¹¤Ê±"] = "plannedHours";
+      titleToKey["Ô¤ï¿½Æ¹ï¿½Ê±"] = "plannedHours";
       const existingIdByKey = new Map();
       const usedIds = new Set();
       orders.forEach((item) => {
@@ -3133,20 +3133,20 @@ async function importXlsx(event) {
       });
       const untouched = Math.max(0, previousCount - updateCount);
       const confirmed = confirm(
-        `µ¼ÈëÔ¤ÀÀ£º\nÐÂÔö ${insertCount} Ìõ\n¸²¸Ç ${updateCount} Ìõ\n±£ÁôÀúÊ· ${untouched} Ìõ\n\nÈ·ÈÏ¼ÌÐøµ¼ÈëÂð£¿`
+        `ï¿½ï¿½ï¿½ï¿½Ô¤ï¿½ï¿½ï¿½ï¿½\nï¿½ï¿½ï¿½ï¿½ ${insertCount} ï¿½ï¿½\nï¿½ï¿½ï¿½ï¿½ ${updateCount} ï¿½ï¿½\nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê· ${untouched} ï¿½ï¿½\n\nÈ·ï¿½Ï¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½`
       );
       if (!confirmed) return;
       orders = merged;
       await persistOrders({ changed: imported });
       render();
-      alert("µ¼Èë³É¹¦£ºÒÑ¸²¸ÇÍ¬¼ü¶©µ¥²¢ÐÂÔöÐÂ¶©µ¥£¬Î´É¾³ýÎ´°üº¬ÔÚExcelÖÐµÄÀúÊ·¶©µ¥¡£");
+      alert("ï¿½ï¿½ï¿½ï¿½É¹ï¿½ï¿½ï¿½ï¿½Ñ¸ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¶ï¿½ï¿½ï¿½ï¿½ï¿½Î´É¾ï¿½ï¿½Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Excelï¿½Ðµï¿½ï¿½ï¿½Ê·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
     } catch (e) {
       console.error(e);
       const msg = (e && e.message) ? e.message : "";
       if (msg.includes("item_name")) {
-        alert("µ¼ÈëÊ§°Ü£ºÔÆ¶Ë±íÈ±ÉÙ item_name ×Ö¶Î£¬ÇëÔÚ Supabase Ö´ÐÐ×îÐÂ supabase_schema.sql ºóÖØÊÔ¡£");
+        alert("ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½Æ¶Ë±ï¿½È±ï¿½ï¿½ item_name ï¿½Ö¶Î£ï¿½ï¿½ï¿½ï¿½ï¿½ Supabase Ö´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ supabase_schema.sql ï¿½ï¿½ï¿½ï¿½ï¿½Ô¡ï¿½");
       } else {
-        alert("µ¼ÈëÊ§°Ü£ºÇëÊ¹ÓÃÏµÍ³µ¼³öµÄ Excel »ò°üº¬±ê×¼ÁÐÃûµÄ Excel");
+        alert("ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ÏµÍ³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Excel ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Excel");
       }
     }
   };
