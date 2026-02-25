@@ -3224,6 +3224,7 @@ function getColumnWidth(colIndex) {
 }
 
 function saveColumnWidths() {
+  columnWidths = sanitizeColumnWidths(columnWidths);
   localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(columnWidths));
 }
 
@@ -3231,10 +3232,28 @@ function loadColumnWidths() {
   try {
     const raw = localStorage.getItem(COL_WIDTH_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
+    const sanitized = sanitizeColumnWidths(parsed);
+    if (raw && JSON.stringify(parsed) !== JSON.stringify(sanitized)) {
+      localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(sanitized));
+    }
+    return sanitized;
   } catch {
     return {};
   }
+}
+
+function sanitizeColumnWidths(input) {
+  if (!input || typeof input !== "object") return {};
+  const next = {};
+  Object.keys(input).forEach((k) => {
+    const col = Number(k);
+    const px = Number(input[k]);
+    if (!Number.isFinite(col) || !Number.isFinite(px)) return;
+    if (isFixedWidthColumn(col)) return;
+    if (px < 48 || px > 1200) return;
+    next[String(col)] = Math.round(px);
+  });
+  return next;
 }
 
 
