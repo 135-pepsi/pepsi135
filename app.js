@@ -1059,7 +1059,7 @@ function previewEditCell(order, key, type = "text") {
   });
   wrap.appendChild(text);
   const uploadedAt = attachmentLatestTimeByLineId.get(order.id) || "";
-  if (uploadedAt) {
+  if (key === "name" && uploadedAt) {
     const timeTag = document.createElement("span");
     timeTag.className = "preview-upload-time";
     timeTag.textContent = `已上传 ${uploadedAt}`;
@@ -2717,7 +2717,7 @@ function syncPreviewCellState(orderId, hasFiles) {
 }
 
 function syncPreviewUploadedTime(orderId, uploadedAt = "") {
-  const cells = document.querySelectorAll(`td[data-id="${orderId}"][data-key="name"], td[data-id="${orderId}"][data-key="drawingNo"]`);
+  const cells = document.querySelectorAll(`td[data-id="${orderId}"][data-key="name"]`);
   cells.forEach((cell) => {
     const wrap = cell.querySelector(".cell-with-action");
     if (!wrap) return;
