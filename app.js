@@ -156,6 +156,11 @@ const authLoginCloseBtn = document.getElementById("authLoginCloseBtn");
 const authLoginCancelBtn = document.getElementById("authLoginCancelBtn");
 const authPasswordLoginBtn = document.getElementById("authPasswordLoginBtn");
 const authLoginSubmitBtn = document.getElementById("authLoginSubmitBtn");
+const infoDialog = document.getElementById("infoDialog");
+const infoDialogTitle = document.getElementById("infoDialogTitle");
+const infoDialogText = document.getElementById("infoDialogText");
+const infoDialogCloseBtn = document.getElementById("infoDialogCloseBtn");
+const infoDialogOkBtn = document.getElementById("infoDialogOkBtn");
 const PROCESS_TIME_TITLE_BASE = "预计工时设置";
 const STATUS_TITLE_BASE = "状态设置";
 const DATE_TITLE_BASE = "日期设置";
@@ -553,6 +558,17 @@ function bindEvents() {
       if (event.target === authLoginDialog) closeAuthLoginDialog();
     });
   }
+  if (infoDialogCloseBtn) {
+    infoDialogCloseBtn.addEventListener("click", closeInfoDialog);
+  }
+  if (infoDialogOkBtn) {
+    infoDialogOkBtn.addEventListener("click", closeInfoDialog);
+  }
+  if (infoDialog) {
+    infoDialog.addEventListener("click", (event) => {
+      if (event.target === infoDialog) closeInfoDialog();
+    });
+  }
   bindDialogEnterSave(surfaceDialog, saveSurfaceDialog);
   if (processMinutesInput) {
     processMinutesInput.addEventListener("keydown", (event) => {
@@ -669,6 +685,11 @@ function bindEvents() {
       closeAuthLoginDialog();
       return;
     }
+    if (e.key === "Escape" && infoDialog && !infoDialog.hidden) {
+      e.preventDefault();
+      closeInfoDialog();
+      return;
+    }
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
       e.preventDefault();
       void addBlankRow();
@@ -759,6 +780,41 @@ function closeAuthLoginDialog() {
   } else if (surfaceDialog && !surfaceDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (deleteConfirmDialog && !deleteConfirmDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+function showInfoDialog(message, title = "提示") {
+  if (!infoDialog || !infoDialogText) {
+    alert(message);
+    return;
+  }
+  if (infoDialogTitle) infoDialogTitle.textContent = title;
+  infoDialogText.textContent = String(message || "");
+  infoDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeInfoDialog() {
+  if (!infoDialog) return;
+  infoDialog.hidden = true;
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (previewDialog && !previewDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (processTimeDialog && !processTimeDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (statusDialog && !statusDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (dateDialog && !dateDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (surfaceDialog && !surfaceDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (deleteConfirmDialog && !deleteConfirmDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (authLoginDialog && !authLoginDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else {
     document.body.style.overflow = "";
@@ -877,7 +933,7 @@ async function submitPasswordLoginFromDialog() {
     const { error } = await db.auth.signInWithPassword({ email, password });
     if (error) throw error;
     closeAuthLoginDialog();
-    alert("登录成功。");
+    showInfoDialog("登录成功。", "登录成功");
   } catch (e) {
     const detail = e?.message || e?.error_description || "未知错误";
     alert(`密码登录失败：${detail}`);
@@ -972,7 +1028,7 @@ function canWriteRemote(notify = true) {
   if (authSession) return true;
   if (notify && !authWriteHintNotified) {
     authWriteHintNotified = true;
-    alert("当前为只读模式，请先点击“邮箱登录”后再写入云端数据。");
+    showInfoDialog("当前为只读模式，请先点击“邮箱登录”后再写入云端数据。", "写入受限");
   }
   return false;
 }
