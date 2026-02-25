@@ -3,28 +3,28 @@ const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
 const SHIFT_DEFAULTS_KEY = "mini_mes_shift_defaults_v1";
 const COMPACT_MODE_KEY = "mini_mes_compact_mode_v1";
 
-const STATUS = ["���Ų�", "���Ų�", "�ӹ���", "��ɴ���", "����", "�ѷ���"];
+const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "已发货"];
 const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
 const FIXED_COL_WIDTHS = {};
-const SURFACE_OPTIONS = ["", "�������", "����", "��ɰ", "����", "���", "��˿", "�׹�", "�ȴ���", "�ۻ�"];
+const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
 const PROCESS_OPTIONS = ["", "1", "2", "3", "4", "5", "6"];
 const XLSX_COLUMNS = [
-  { key: "orderNo", title: "������" },
-  { key: "customer", title: "�ͻ�" },
-  { key: "name", title: "����" },
-  { key: "drawingNo", title: "ͼ��" },
-  { key: "qty", title: "����" },
-  { key: "programNo", title: "����" },
-  { key: "processName", title: "����" },
-  { key: "plannedHours", title: "Ԥ�ƹ�ʱ(����)" },
-  { key: "machine", title: "��̨" },
-  { key: "lathe", title: "����" },
-  { key: "surface", title: "���洦��" },
-  { key: "status", title: "״̬" },
-  { key: "startTime", title: "��ʼʱ��" },
-  { key: "dueDate", title: "����" },
-  { key: "isDelayed", title: "�Ƿ�����" },
-  { key: "note", title: "��ע" },
+  { key: "orderNo", title: "订单号" },
+  { key: "customer", title: "客户" },
+  { key: "name", title: "名称" },
+  { key: "drawingNo", title: "图号" },
+  { key: "qty", title: "数量" },
+  { key: "programNo", title: "程序单" },
+  { key: "processName", title: "工序" },
+  { key: "plannedHours", title: "预计工时(分钟)" },
+  { key: "machine", title: "机台" },
+  { key: "lathe", title: "车床" },
+  { key: "surface", title: "表面处理" },
+  { key: "status", title: "状态" },
+  { key: "startTime", title: "开始时间" },
+  { key: "dueDate", title: "交期" },
+  { key: "isDelayed", title: "是否延期" },
+  { key: "note", title: "备注" },
 ];
 
 const MES_CONFIG = window.MES_CONFIG || {};
@@ -153,10 +153,10 @@ const authLoginEmailInput = document.getElementById("authLoginEmailInput");
 const authLoginCloseBtn = document.getElementById("authLoginCloseBtn");
 const authLoginCancelBtn = document.getElementById("authLoginCancelBtn");
 const authLoginSubmitBtn = document.getElementById("authLoginSubmitBtn");
-const PROCESS_TIME_TITLE_BASE = "Ԥ�ƹ�ʱ����";
-const STATUS_TITLE_BASE = "״̬����";
-const DATE_TITLE_BASE = "��������";
-const SURFACE_TITLE_BASE = "���洦������";
+const PROCESS_TIME_TITLE_BASE = "预计工时设置";
+const STATUS_TITLE_BASE = "状态设置";
+const DATE_TITLE_BASE = "日期设置";
+const SURFACE_TITLE_BASE = "表面处理设置";
 
 init();
 
@@ -167,13 +167,13 @@ async function init() {
   updatePinnedOffsets();
   if (REMOTE_ENABLED) {
     await initAuth();
-    setModeText(authSession ? "�ƶ˹���ģʽ" : "�ƶ�ֻ����δ��¼��");
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) await refreshFromRemote(false);
     }, AUTO_REFRESH_MS);
   } else {
-    setModeText("����ģʽ");
+    setModeText("本地模式");
     orders = loadOrdersLocal();
     render();
     setLastSyncTime();
@@ -183,8 +183,8 @@ async function init() {
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
   syncReconnectButton();
-  if (lastSyncTime && text.includes("ʧ��")) lastSyncTime.classList.add("sync-warning");
-  if (lastSyncTime && !text.includes("ʧ��")) lastSyncTime.classList.remove("sync-warning");
+  if (lastSyncTime && text.includes("失败")) lastSyncTime.classList.add("sync-warning");
+  if (lastSyncTime && !text.includes("失败")) lastSyncTime.classList.remove("sync-warning");
   updatePinnedOffsets();
 }
 
@@ -193,7 +193,7 @@ function setLastSyncTime() {
   if (!lastSyncTime) return;
   const d = new Date(lastSyncAt);
   const t = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-  lastSyncTime.textContent = `���ͬ�� ${t}`;
+  lastSyncTime.textContent = `最近同步 ${t}`;
 }
 
 function getErrorKey(orderId, key) {
@@ -218,7 +218,7 @@ function appendDirtyCellDot(td, orderId, key) {
   if (!hasDirtyCellMark(orderId, key)) return;
   const dot = document.createElement("span");
   dot.className = "cell-dirty-dot";
-  dot.title = "���޸�δ����";
+  dot.title = "已修改未保存";
   td.appendChild(dot);
 }
 
@@ -264,19 +264,19 @@ function rebuildRuleCellErrors() {
   orderNoMap.forEach((ids) => {
     if (ids.length < 2) return;
     ids.forEach((id) => {
-      next.set(getErrorKey(id, "orderNo"), "�������ظ�");
+      next.set(getErrorKey(id, "orderNo"), "订单号重复");
     });
   });
 
   orders.forEach((order) => {
     const qtyRaw = String(order.qty ?? "").trim();
     if (qtyRaw !== "" && !Number.isFinite(Number(qtyRaw))) {
-      next.set(getErrorKey(order.id, "qty"), "��������Ϊ����");
+      next.set(getErrorKey(order.id, "qty"), "数量必须为数字");
     }
     const start = normalizeDateOnlyInput(order.startTime);
     const due = normalizeDateOnlyInput(order.dueDate);
     if (start && due && due < start) {
-      const msg = "���ڲ������ڿ�ʼʱ��";
+      const msg = "交期不能早于开始时间";
       next.set(getErrorKey(order.id, "startTime"), msg);
       next.set(getErrorKey(order.id, "dueDate"), msg);
     }
@@ -290,7 +290,7 @@ function markRowSaved(orderId) {
   rowSavedUntil.set(orderId, Date.now() + 1500);
 }
 
-function showSaveFeedback(message = "�ѱ��浽 NAS") {
+function showSaveFeedback(message = "已保存到 NAS") {
   if (!saveFeedback) return;
   saveFeedback.textContent = message;
   saveFeedback.classList.add("is-visible");
@@ -560,7 +560,7 @@ function bindEvents() {
   if (abnormalFilterBtn) {
     abnormalFilterBtn.addEventListener("click", () => {
       abnormalOnly = !abnormalOnly;
-      abnormalFilterBtn.textContent = abnormalOnly ? "��ʾȫ��" : "ֻ���쳣";
+      abnormalFilterBtn.textContent = abnormalOnly ? "显示全部" : "只看异常";
       render();
     });
   }
@@ -595,7 +595,7 @@ function bindEvents() {
   if (filterToggleBtn && orderFilters) {
     filterToggleBtn.addEventListener("click", () => {
       const collapsed = orderFilters.classList.toggle("collapsed");
-      filterToggleBtn.textContent = collapsed ? "չ��ɸѡ" : "����ɸѡ";
+      filterToggleBtn.textContent = collapsed ? "展开筛选" : "收起筛选";
       filterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
       updatePinnedOffsets();
     });
@@ -679,7 +679,7 @@ function syncFilterPanelForViewport() {
   if (!orderFilters || !filterToggleBtn) return;
   if (window.innerWidth > 780) {
     orderFilters.classList.remove("collapsed");
-    filterToggleBtn.textContent = "����ɸѡ";
+    filterToggleBtn.textContent = "收起筛选";
     filterToggleBtn.setAttribute("aria-expanded", "true");
   }
 }
@@ -691,7 +691,7 @@ async function initAuth() {
     if (error) throw error;
     authSession = data?.session || null;
   } catch (e) {
-    console.warn("��ȡ��¼̬ʧ��", e);
+    console.warn("读取登录态失败", e);
     authSession = null;
   }
   updateAuthUi();
@@ -700,7 +700,7 @@ async function initAuth() {
     authWriteHintNotified = false;
     updateAuthUi();
     if (remoteOnline) {
-      setModeText(authSession ? "�ƶ˹���ģʽ" : "�ƶ�ֻ����δ��¼��");
+      setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     }
     if (authSession && remoteOnline) {
       void refreshFromRemote(false);
@@ -759,11 +759,11 @@ function refreshAuthLoginSubmitUi() {
   const locked = authLoginSubmitting || remain > 0;
   authLoginSubmitBtn.disabled = locked;
   if (authLoginSubmitting) {
-    authLoginSubmitBtn.textContent = "������...";
+    authLoginSubmitBtn.textContent = "发送中...";
   } else if (remain > 0) {
-    authLoginSubmitBtn.textContent = `�� ${remain}s ������`;
+    authLoginSubmitBtn.textContent = `请 ${remain}s 后重试`;
   } else {
-    authLoginSubmitBtn.textContent = "���͵�¼�ʼ�";
+    authLoginSubmitBtn.textContent = "发送登录邮件";
   }
 }
 
@@ -797,12 +797,12 @@ async function submitEmailLoginFromDialog() {
   if (authLoginSubmitting) return;
   const cooldown = getAuthLoginCooldownSeconds();
   if (cooldown > 0) {
-    alert(`�������Ƶ������ ${cooldown} ������ԡ�`);
+    alert(`请求过于频繁，请 ${cooldown} 秒后重试。`);
     return;
   }
   const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
-    alert("�������¼���䡣");
+    alert("请输入登录邮箱。");
     return;
   }
   setAuthLoginSubmitting(true);
@@ -817,17 +817,17 @@ async function submitEmailLoginFromDialog() {
     if (error) throw error;
     startAuthLoginCooldown(60);
     closeAuthLoginDialog();
-    alert("��¼�ʼ��ѷ��ͣ����������е����¼���Ӻ󷵻ر�ҳ��");
+    alert("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
   } catch (e) {
     if (isRateLimitError(e)) {
       const retry = getRetryAfterSeconds(e, 120);
       startAuthLoginCooldown(retry);
-      alert(`���͹���Ƶ������ ${retry} ������ԡ�`);
+      alert(`发送过于频繁，请 ${retry} 秒后再试。`);
       setAuthLoginSubmitting(false);
       return;
     }
-    const detail = e?.message || e?.error_description || "δ֪����";
-    alert(`���͵�¼�ʼ�ʧ�ܣ�${detail}`);
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`发送登录邮件失败：${detail}`);
     setAuthLoginSubmitting(false);
   }
 }
@@ -839,16 +839,16 @@ async function logoutAuth() {
     if (error) throw error;
     authSession = null;
     updateAuthUi();
-    setModeText(remoteOnline ? "�ƶ�ֻ����δ��¼��" : "����ģʽ��������ʧ�ܣ�");
+    setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
   } catch (e) {
-    const detail = e?.message || e?.error_description || "δ֪����";
-    alert(`�˳�ʧ�ܣ�${detail}`);
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`退出失败：${detail}`);
   }
 }
 
 function updateAuthUi() {
   if (authUser) {
-    authUser.textContent = authSession?.user?.email || "δ��¼";
+    authUser.textContent = authSession?.user?.email || "未登录";
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
@@ -911,7 +911,7 @@ function saveCompactMode(enabled) {
 
 function applyCompactMode() {
   document.body.classList.toggle("compact-mode", compactMode);
-  if (compactModeBtn) compactModeBtn.textContent = `���ģʽ: ${compactMode ? "��" : "��"}`;
+  if (compactModeBtn) compactModeBtn.textContent = `紧凑模式: ${compactMode ? "开" : "关"}`;
   updatePinnedOffsets();
 }
 function canWriteRemote(notify = true) {
@@ -919,7 +919,7 @@ function canWriteRemote(notify = true) {
   if (authSession) return true;
   if (notify && !authWriteHintNotified) {
     authWriteHintNotified = true;
-    alert("��ǰΪֻ��ģʽ�����ȵ���������¼������д���ƶ����ݡ�");
+    alert("当前为只读模式，请先点击“邮箱登录”后再写入云端数据。");
   }
   return false;
 }
@@ -933,14 +933,14 @@ function createEmptyOrder() {
     customer: "",
     name: "",
     qty: "",
-    programNo: "δ��",
+    programNo: "未出",
     processName: "",
     processStepCurrent: "",
     plannedHours: "",
     machine: "",
     lathe: "",
     surface: "",
-    status: "���Ų�",
+    status: "待排产",
     startTime: "",
     dueDate: "",
     isDelayed: "",
@@ -954,11 +954,11 @@ async function quickAdd() {
   const customer = valueOf("qaCustomer");
 
   if (!orderNoInput) {
-    alert("����д���");
+    alert("请填写编号");
     return;
   }
   if (!orderNo) {
-    alert("��Ÿ�ʽ��Ч��������1-3λ���֣��� 30 �� 030��");
+    alert("编号格式无效，请输入1-3位数字（如 30 或 030）");
     return;
   }
 
@@ -966,8 +966,8 @@ async function quickAdd() {
     ...createEmptyOrder(),
     orderNo,
     customer,
-    status: "���Ų�",
-    programNo: "δ��",
+    status: "待排产",
+    programNo: "未出",
     startTime: "",
   };
   order.processStepCurrent = "";
@@ -1006,7 +1006,7 @@ function render() {
     tr.dataset.id = o.id;
 
     const stateClass =
-      o.isDelayed === "����" ? "row-delayed" : o.status === "�ӹ���" ? "row-working" : o.status === "�ѷ���" ? "row-shipped" : "";
+      o.isDelayed === "延期" ? "row-delayed" : o.status === "加工中" ? "row-working" : o.status === "已发货" ? "row-shipped" : "";
     if (stateClass) tr.classList.add(stateClass);
     if ((rowSavedUntil.get(o.id) || 0) > now) tr.classList.add("row-saved");
 
@@ -1019,20 +1019,20 @@ function render() {
     tr.appendChild(processTimeCell(o));
     tr.appendChild(surfaceCell(o));
     tr.appendChild(statusCell(o));
-    tr.appendChild(dateCell(o, "startTime", "��ʼʱ��"));
-    tr.appendChild(dateCell(o, "dueDate", "����"));
+    tr.appendChild(dateCell(o, "startTime", "开始时间"));
+    tr.appendChild(dateCell(o, "dueDate", "交期"));
     tr.appendChild(editCell(o, "note"));
 
     const opTd = document.createElement("td");
     const fileBtn = document.createElement("button");
     fileBtn.className = "action-btn-secondary";
-    fileBtn.textContent = "ͼֽ";
+    fileBtn.textContent = "图纸";
     fileBtn.addEventListener("click", () => {
       void openAttachmentDialog(o.id);
     });
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
-    delBtn.textContent = "ɾ��";
+    delBtn.textContent = "删除";
     delBtn.addEventListener("click", () => {
       void removeOrder(o.id);
     });
@@ -1064,7 +1064,7 @@ function renderKanban(rows) {
   const total = rows.length;
   const totalPill = document.createElement("span");
   totalPill.className = "board-pill";
-  totalPill.textContent = `��ǰ���� ${total}`;
+  totalPill.textContent = `当前订单 ${total}`;
   boardSummary.appendChild(totalPill);
 
   STATUS.forEach((status) => {
@@ -1083,7 +1083,7 @@ function renderKanban(rows) {
     const title = document.createElement("strong");
     title.textContent = status;
     const count = document.createElement("span");
-    count.textContent = `${list.length} ��`;
+    count.textContent = `${list.length} 单`;
     head.appendChild(title);
     head.appendChild(count);
 
@@ -1093,7 +1093,7 @@ function renderKanban(rows) {
     if (list.length === 0) {
       const empty = document.createElement("div");
       empty.className = "kanban-empty";
-      empty.textContent = "���޶���";
+      empty.textContent = "暂无订单";
       body.appendChild(empty);
     } else {
       list.forEach((order) => {
@@ -1117,23 +1117,23 @@ function createKanbanCard(order, displayOrderNo = "") {
   top.className = "kanban-card-top";
   const orderNo = document.createElement("span");
   orderNo.className = "kanban-order";
-  orderNo.textContent = displayOrderNo || "δ�����";
+  orderNo.textContent = displayOrderNo || "未填订单号";
   top.appendChild(orderNo);
 
   const name = document.createElement("div");
   name.className = "kanban-name";
-  name.textContent = order.name || order.drawingNo || "δ�������";
+  name.textContent = order.name || order.drawingNo || "未命名零件";
 
   const meta = document.createElement("div");
   meta.className = "kanban-meta";
-  meta.appendChild(createKanbanTag(order.customer || "δ��ͻ�"));
+  meta.appendChild(createKanbanTag(order.customer || "未填客户"));
   if (order.machine) meta.appendChild(createKanbanTag(order.machine));
-  if (order.status === "�ӹ���" && normalizeStepValue(order.processStepCurrent)) {
-    meta.appendChild(createKanbanTag(`�ӹ��е�${normalizeStepValue(order.processStepCurrent)}��`));
+  if (order.status === "加工中" && normalizeStepValue(order.processStepCurrent)) {
+    meta.appendChild(createKanbanTag(`加工中第${normalizeStepValue(order.processStepCurrent)}序`));
   }
-  if (order.dueDate) meta.appendChild(createKanbanTag(`���� ${toMonthDay(order.dueDate)}`));
-  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`��ʱ ${order.plannedHours}��`));
-  if (order.isDelayed === "����") meta.appendChild(createKanbanTag("����", true));
+  if (order.dueDate) meta.appendChild(createKanbanTag(`交期 ${toMonthDay(order.dueDate)}`));
+  if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`工时 ${order.plannedHours}分`));
+  if (order.isDelayed === "延期") meta.appendChild(createKanbanTag("延期", true));
 
   card.appendChild(top);
   card.appendChild(name);
@@ -1208,7 +1208,7 @@ function previewEditCell(order, key, type = "text") {
   }
   const display = formatDisplayValue(key, rawValue);
   text.textContent = display;
-  text.title = display ? `${display}\n���Ԥ��ͼֽ` : "���Ԥ��ͼֽ";
+  text.title = display ? `${display}\n点击预览图纸` : "点击预览图纸";
   text.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1223,7 +1223,7 @@ function previewEditCell(order, key, type = "text") {
   if (key === "name" && uploadedAt) {
     const timeTag = document.createElement("span");
     timeTag.className = "preview-upload-time";
-    timeTag.textContent = `���ϴ� ${uploadedAt}`;
+    timeTag.textContent = `已上传 ${uploadedAt}`;
     wrap.appendChild(timeTag);
   }
   appendDirtyCellDot(td, order.id, key);
@@ -1239,7 +1239,7 @@ function processTimeCell(order) {
   td.dataset.id = order.id;
   td.className = "process-time-cell";
   td.textContent = formatProcessTimeLabel(order);
-  td.title = "������ù���͹�ʱ�����ӣ�";
+  td.title = "点击设置工序和工时（分钟）";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1251,14 +1251,14 @@ function processTimeCell(order) {
 function formatProcessTimeLabel(order) {
   const minutes = normalizeValue("plannedHours", order.plannedHours);
   const process = String(order.processName || "").trim();
-  const processText = process ? `��${process}��` : "";
+  const processText = process ? `共${process}序` : "";
   const parts = [];
-  if (order.programNo) parts.push(`����${order.programNo}`);
+  if (order.programNo) parts.push(`程序单${order.programNo}`);
   if (processText) parts.push(processText);
-  if (minutes !== "") parts.push(`${minutes} ����`);
+  if (minutes !== "") parts.push(`${minutes} 分钟`);
   if (order.machine) parts.push(order.machine);
-  if (order.lathe) parts.push(`����${order.lathe}`);
-  return parts.join(" �� ");
+  if (order.lathe) parts.push(`车床${order.lathe}`);
+  return parts.join(" · ");
 }
 
 function statusCell(order) {
@@ -1281,7 +1281,7 @@ function statusCell(order) {
   const progress = buildStatusProgress(order);
   if (progress) wrap.appendChild(progress);
   td.appendChild(wrap);
-  td.title = "�������״̬";
+  td.title = "点击设置状态";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1296,7 +1296,7 @@ function dateCell(order, key, label) {
   td.dataset.id = order.id;
   td.className = "date-cell";
   td.textContent = formatDisplayValue(key, order[key] ?? "");
-  td.title = `�������${label}����/�գ�`;
+  td.title = `点击设置${label}（月/日）`;
   appendCellError(td, order.id, key);
   td.addEventListener("click", (event) => {
     event.preventDefault();
@@ -1312,7 +1312,7 @@ function surfaceCell(order) {
   td.dataset.id = order.id;
   td.className = "surface-cell";
   td.textContent = String(order.surface || "");
-  td.title = "������ñ��洦��";
+  td.title = "点击设置表面处理";
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1322,14 +1322,14 @@ function surfaceCell(order) {
 }
 
 function formatStatusLabel(order) {
-  const base = String(order.status || "").trim() || "���Ų�";
-  if (base !== "�ӹ���") return base;
+  const base = String(order.status || "").trim() || "待排产";
+  if (base !== "加工中") return base;
   const step = normalizeStepValue(order.processStepCurrent);
-  return step ? `�ӹ��е�${step}��` : "�ӹ���";
+  return step ? `加工中第${step}序` : "加工中";
 }
 
 function buildStatusProgress(order) {
-  if (String(order.status || "").trim() !== "�ӹ���") return null;
+  if (String(order.status || "").trim() !== "加工中") return null;
   const maxStep = Math.max(1, getMaxProcessStep(order));
   const currentRaw = Number(normalizeStepValue(order.processStepCurrent) || 0);
   const current = Math.max(0, Math.min(maxStep, currentRaw));
@@ -1353,12 +1353,12 @@ function buildStatusProgress(order) {
 
 function getStatusClassName(status) {
   const s = String(status || "").trim();
-  if (s === "���Ų�") return "status-pending";
-  if (s === "���Ų�") return "status-planned";
-  if (s === "�ӹ���") return "status-working";
-  if (s === "��ɴ���") return "status-done";
-  if (s === "����") return "status-rework";
-  if (s === "�ѷ���") return "status-done";
+  if (s === "待排产") return "status-pending";
+  if (s === "已排产") return "status-planned";
+  if (s === "加工中") return "status-working";
+  if (s === "完成待检") return "status-done";
+  if (s === "返工") return "status-rework";
+  if (s === "已发货") return "status-done";
   return "status-pending";
 }
 
@@ -1367,9 +1367,9 @@ function initProcessTimeOptions() {
     processProgramInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "��ѡ��";
+    blank.textContent = "请选择";
     processProgramInput.appendChild(blank);
-    ["�ѳ�", "δ��"].forEach((name) => {
+    ["已出", "未出"].forEach((name) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = name;
@@ -1381,14 +1381,14 @@ function initProcessTimeOptions() {
   PROCESS_OPTIONS.forEach((name) => {
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name ? `��${name}��` : "��ѡ����";
+    option.textContent = name ? `共${name}序` : "请选择工序";
     processNameInput.appendChild(option);
   });
   if (processMachineInput) {
     processMachineInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "��ѡ���̨";
+    blank.textContent = "请选择机台";
     processMachineInput.appendChild(blank);
     MACHINES.forEach((name) => {
       const option = document.createElement("option");
@@ -1401,9 +1401,9 @@ function initProcessTimeOptions() {
     processLatheInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
-    blank.textContent = "��ѡ��";
+    blank.textContent = "请选择";
     processLatheInput.appendChild(blank);
-    ["��", "��"].forEach((name) => {
+    ["是", "否"].forEach((name) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = name;
@@ -1428,12 +1428,12 @@ function initDateOptions() {
   dateMonthInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "��ѡ��";
+  blank.textContent = "请选择";
   dateMonthInput.appendChild(blank);
   for (let i = 1; i <= 12; i += 1) {
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = `${i}��`;
+    opt.textContent = `${i}月`;
     dateMonthInput.appendChild(opt);
   }
   rebuildDateDayOptions(31);
@@ -1445,7 +1445,7 @@ function initSurfaceOptions() {
   SURFACE_OPTIONS.forEach((name) => {
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name || "��ѡ��";
+    option.textContent = name || "请选择";
     surfacePresetInput.appendChild(option);
   });
 }
@@ -1455,13 +1455,13 @@ function rebuildDateDayOptions(dayCount = 31) {
   dateDayInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "��ѡ��";
+  blank.textContent = "请选择";
   dateDayInput.appendChild(blank);
   const max = Math.max(28, Math.min(31, Number(dayCount) || 31));
   for (let i = 1; i <= max; i += 1) {
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = `${i}��`;
+    opt.textContent = `${i}日`;
     dateDayInput.appendChild(opt);
   }
 }
@@ -1475,7 +1475,7 @@ function getDaysInMonthForCurrentYear(month) {
 
 function formatDialogTitle(baseTitle, orderNo = "") {
   const no = String(orderNo || "").trim();
-  return no ? `${baseTitle} �� ${no}` : baseTitle;
+  return no ? `${baseTitle} · ${no}` : baseTitle;
 }
 
 function openDateDialog(orderId, key, label) {
@@ -1502,11 +1502,11 @@ function openDateDialog(orderId, key, label) {
 
   if (dateSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`������ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`ͼ�� ${order.drawingNo}`);
-    if (order.name) parts.push(`���� ${order.name}`);
-    parts.push(`����${label}������/�գ�`);
-    dateSubTitle.textContent = parts.join(" �� ");
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    parts.push(`设置${label}（仅月/日）`);
+    dateSubTitle.textContent = parts.join(" · ");
   }
   dateDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1541,12 +1541,12 @@ async function saveDateDialog() {
   const month = Number(dateMonthInput?.value || 0);
   const day = Number(dateDayInput?.value || 0);
   if (!month || !day) {
-    alert("��ѡ���·ݺ����ڡ�");
+    alert("请选择月份和日期。");
     return;
   }
   const maxDay = getDaysInMonthForCurrentYear(month);
   if (day > maxDay) {
-    alert("������Ч��������ѡ��");
+    alert("日期无效，请重新选择。");
     return;
   }
   const year = new Date().getFullYear();
@@ -1554,7 +1554,7 @@ async function saveDateDialog() {
   const nextStart = dateEditingKey === "startTime" ? next : normalizeDateOnlyInput(order.startTime);
   const nextDue = dateEditingKey === "dueDate" ? next : normalizeDateOnlyInput(order.dueDate);
   if (nextStart && nextDue && nextDue < nextStart) {
-    const msg = "���ڲ������ڿ�ʼʱ��";
+    const msg = "交期不能早于开始时间";
     setTransientCellError(order.id, "startTime", msg);
     setTransientCellError(order.id, "dueDate", msg);
     render();
@@ -1609,10 +1609,10 @@ function openSurfaceDialog(orderId) {
   if (surfaceCustomInput) surfaceCustomInput.value = existsInPreset ? "" : current;
   if (surfaceSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`������ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`ͼ�� ${order.drawingNo}`);
-    if (order.name) parts.push(`���� ${order.name}`);
-    surfaceSubTitle.textContent = parts.join(" �� ") || "���ñ��洦��";
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    surfaceSubTitle.textContent = parts.join(" · ") || "设置表面处理";
   }
   surfaceDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1696,19 +1696,19 @@ function rebuildStatusStepOptions(maxStep = 6) {
   statusStepInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = "��ѡ��";
+  blank.textContent = "请选择";
   statusStepInput.appendChild(blank);
   for (let i = 1; i <= maxStep; i += 1) {
     const option = document.createElement("option");
     option.value = String(i);
-    option.textContent = `��${i}��`;
+    option.textContent = `第${i}序`;
     statusStepInput.appendChild(option);
   }
 }
 
 function syncStatusStepVisibility() {
   if (!statusInput || !statusStepWrap) return;
-  const show = statusInput.value === "�ӹ���";
+  const show = statusInput.value === "加工中";
   statusStepWrap.style.display = show ? "grid" : "none";
   if (statusNextBtn) statusNextBtn.style.display = show || statusInput.value ? "inline-flex" : "none";
   syncStatusNextButtonState();
@@ -1719,7 +1719,7 @@ function openStatusDialog(orderId) {
   if (!order || !statusDialog) return;
   statusEditingOrderId = orderId;
   if (statusTitle) statusTitle.textContent = formatDialogTitle(STATUS_TITLE_BASE, order.orderNo);
-  if (statusInput) statusInput.value = order.status || "���Ų�";
+  if (statusInput) statusInput.value = order.status || "待排产";
   const maxStep = getMaxProcessStep(order);
   rebuildStatusStepOptions(maxStep);
   const normalizedStep = normalizeStepValue(order.processStepCurrent);
@@ -1729,11 +1729,11 @@ function openStatusDialog(orderId) {
   syncStatusStepHint();
   if (statusSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`������ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`ͼ�� ${order.drawingNo}`);
-    if (order.name) parts.push(`���� ${order.name}`);
-    parts.push(`����${maxStep}��`);
-    statusSubTitle.textContent = parts.join(" �� ");
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    parts.push(`最多第${maxStep}序`);
+    statusSubTitle.textContent = parts.join(" · ");
   }
   statusDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1744,7 +1744,7 @@ function closeStatusDialog() {
   statusDialog.hidden = true;
   statusEditingOrderId = "";
   if (statusTitle) statusTitle.textContent = STATUS_TITLE_BASE;
-  if (statusProcessContext) statusProcessContext.textContent = "��ǰ��0�� / ��1�� / ʣ��1��";
+  if (statusProcessContext) statusProcessContext.textContent = "当前第0序 / 共1序 / 剩余1序";
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -1763,17 +1763,17 @@ async function saveStatusDialog() {
     closeStatusDialog();
     return;
   }
-  const nextStatus = String(statusInput?.value || "���Ų�").trim() || "���Ų�";
+  const nextStatus = String(statusInput?.value || "待排产").trim() || "待排产";
   const maxStep = getMaxProcessStep(order);
   let nextStep = "";
-  if (nextStatus === "�ӹ���") {
+  if (nextStatus === "加工中") {
     const rawStep = normalizeStepValue(statusStepInput?.value || "");
     if (!rawStep) {
-      alert("��ѡ��ӹ���š�");
+      alert("请选择加工序号。");
       return;
     }
     if (Number(rawStep) > maxStep) {
-      alert(`��ǰ��������Ϊ ${maxStep}���ӹ���Ų��ܳ�����${maxStep}��`);
+      alert(`当前工序总数为 ${maxStep}，加工序号不能超过第${maxStep}序。`);
       return;
     }
     nextStep = rawStep;
@@ -1792,21 +1792,21 @@ async function saveStatusDialog() {
 
 function applyStatusNextStep() {
   if (!statusInput) return;
-  const current = String(statusInput.value || "").trim() || "���Ų�";
-  if (current === "���Ų�") {
-    statusInput.value = "���Ų�";
+  const current = String(statusInput.value || "").trim() || "待排产";
+  if (current === "待排产") {
+    statusInput.value = "已排产";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "���Ų�") {
-    statusInput.value = "�ӹ���";
+  if (current === "已排产") {
+    statusInput.value = "加工中";
     if (statusStepInput && !normalizeStepValue(statusStepInput.value)) statusStepInput.value = "1";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "�ӹ���") {
+  if (current === "加工中") {
     const maxStep = statusEditingOrderId ? getMaxProcessStep(orders.find((x) => x.id === statusEditingOrderId) || {}) : 1;
     const nowStep = Number(normalizeStepValue(statusStepInput?.value || "1") || 1);
     if (nowStep < maxStep) {
@@ -1814,14 +1814,14 @@ function applyStatusNextStep() {
       syncStatusStepHint();
       return;
     }
-    statusInput.value = "��ɴ���";
+    statusInput.value = "完成待检";
     if (statusStepInput) statusStepInput.value = "";
     syncStatusStepVisibility();
     syncStatusStepHint();
     return;
   }
-  if (current === "��ɴ���") {
-    statusInput.value = "�ѷ���";
+  if (current === "完成待检") {
+    statusInput.value = "已发货";
     if (statusStepInput) statusStepInput.value = "";
     syncStatusStepVisibility();
     syncStatusStepHint();
@@ -1831,7 +1831,7 @@ function applyStatusNextStep() {
 
 function syncStatusStepHint() {
   if (!statusStepHint || !statusInput) return;
-  if (statusInput.value !== "�ӹ���") {
+  if (statusInput.value !== "加工中") {
     statusStepHint.textContent = "";
     syncStatusProcessContext();
     return;
@@ -1840,12 +1840,12 @@ function syncStatusStepHint() {
   const maxStep = getMaxProcessStep(order || {});
   const currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
   if (!currentStep) {
-    statusStepHint.textContent = `��ǰδѡ����ţ���${maxStep}��`;
+    statusStepHint.textContent = `当前未选择序号，共${maxStep}序。`;
     syncStatusProcessContext();
     return;
   }
   const remain = Math.max(0, maxStep - currentStep);
-  statusStepHint.textContent = `��ǰ��${currentStep}��ʣ��${remain}��`;
+  statusStepHint.textContent = `当前第${currentStep}序，剩余${remain}序。`;
   syncStatusProcessContext();
 }
 
@@ -1855,37 +1855,37 @@ function syncStatusProcessContext() {
   const maxStep = getMaxProcessStep(order);
   const status = String(statusInput?.value || order.status || "").trim();
   let currentStep = 0;
-  if (status === "�ӹ���") {
+  if (status === "加工中") {
     currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
-  } else if (String(order.status || "").trim() === "�ӹ���") {
+  } else if (String(order.status || "").trim() === "加工中") {
     currentStep = Number(normalizeStepValue(order.processStepCurrent) || 0);
   }
   currentStep = Math.max(0, Math.min(maxStep, currentStep));
   const remain = Math.max(0, maxStep - currentStep);
-  statusProcessContext.textContent = `��ǰ��${currentStep}�� / ��${maxStep}�� / ʣ��${remain}��`;
+  statusProcessContext.textContent = `当前第${currentStep}序 / 共${maxStep}序 / 剩余${remain}序`;
 }
 
 function syncStatusNextButtonState() {
   if (!statusNextBtn || !statusInput) return;
-  const current = String(statusInput.value || "").trim() || "���Ų�";
-  statusNextBtn.disabled = current === "�ѷ���";
-  if (current === "���Ų�") {
-    statusNextBtn.textContent = "��һ�������Ų�";
+  const current = String(statusInput.value || "").trim() || "待排产";
+  statusNextBtn.disabled = current === "已发货";
+  if (current === "待排产") {
+    statusNextBtn.textContent = "下一步：已排产";
     return;
   }
-  if (current === "���Ų�") {
-    statusNextBtn.textContent = "��һ�����ӹ���";
+  if (current === "已排产") {
+    statusNextBtn.textContent = "下一步：加工中";
     return;
   }
-  if (current === "�ӹ���") {
-    statusNextBtn.textContent = "��һ�����ƽ����";
+  if (current === "加工中") {
+    statusNextBtn.textContent = "下一步：推进序号";
     return;
   }
-  if (current === "��ɴ���") {
-    statusNextBtn.textContent = "��һ�����ѷ���";
+  if (current === "完成待检") {
+    statusNextBtn.textContent = "下一步：已发货";
     return;
   }
-  statusNextBtn.textContent = "�����";
+  statusNextBtn.textContent = "已完成";
 }
 
 function openProcessTimeDialog(orderId) {
@@ -1894,17 +1894,17 @@ function openProcessTimeDialog(orderId) {
   const defaults = getShiftDefaults();
   processTimeEditingOrderId = orderId;
   if (processTimeTitle) processTimeTitle.textContent = formatDialogTitle(PROCESS_TIME_TITLE_BASE, order.orderNo);
-  if (processProgramInput) processProgramInput.value = order.programNo || "δ��";
+  if (processProgramInput) processProgramInput.value = order.programNo || "未出";
   if (processNameInput) processNameInput.value = order.processName || "";
   if (processMinutesInput) processMinutesInput.value = order.plannedHours === "" ? "" : String(order.plannedHours);
   if (processMachineInput) processMachineInput.value = order.machine || defaults.machine || "";
   if (processLatheInput) processLatheInput.value = order.lathe || defaults.lathe || "";
   if (processTimeSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`������ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`ͼ�� ${order.drawingNo}`);
-    if (order.name) parts.push(`���� ${order.name}`);
-    processTimeSubTitle.textContent = parts.join(" �� ") || "���ù����빤ʱ";
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    processTimeSubTitle.textContent = parts.join(" · ") || "设置工序与工时";
   }
   processTimeDialog.hidden = false;
   document.body.style.overflow = "hidden";
@@ -1939,7 +1939,7 @@ async function saveProcessTimeDialog() {
   const nextLathe = String(processLatheInput?.value || "").trim();
   const nextMinutes = normalizeValue("plannedHours", minuteRaw);
   if (minuteRaw !== "" && nextMinutes === "") {
-    alert("��ʱ��ʽ��Ч���������������ӡ�");
+    alert("工时格式无效，请输入整数分钟。");
     return;
   }
   const prevStep = String(target.processStepCurrent || "");
@@ -2082,14 +2082,14 @@ async function updateOrder(id, key, value) {
   const normalized = normalizeValue(key, value);
   if (key === "qty" && raw !== "" && !Number.isFinite(Number(raw))) {
     setDirtyCellMark(id, key, true);
-    setTransientCellError(id, "qty", "��������Ϊ����");
+    setTransientCellError(id, "qty", "数量必须为数字");
     render();
     return false;
   }
   if (key === "orderNo") {
     if (raw !== "" && normalized === "") {
       setDirtyCellMark(id, key, true);
-      setTransientCellError(id, "orderNo", "�����Ÿ�ʽ��Ч");
+      setTransientCellError(id, "orderNo", "订单号格式无效");
       render();
       return false;
     }
@@ -2098,14 +2098,14 @@ async function updateOrder(id, key, value) {
       : false;
     if (dup) {
       setDirtyCellMark(id, key, true);
-      setTransientCellError(id, "orderNo", "�������ظ�");
+      setTransientCellError(id, "orderNo", "订单号重复");
       render();
       return false;
     }
   }
   if ((key === "dueDate" || key === "startTime") && raw !== "" && normalized === "") {
     setDirtyCellMark(id, key, true);
-    setTransientCellError(id, key, key === "dueDate" ? "���ڸ�ʽ��Ч" : "��ʼʱ���ʽ��Ч");
+    setTransientCellError(id, key, key === "dueDate" ? "交期格式无效" : "开始时间格式无效");
     render();
     return false;
   }
@@ -2119,7 +2119,7 @@ async function updateOrder(id, key, value) {
     const nextStart = key === "startTime" ? normalized : normalizeDateOnlyInput(target.startTime);
     const nextDue = key === "dueDate" ? normalized : normalizeDateOnlyInput(target.dueDate);
     if (nextStart && nextDue && nextDue < nextStart) {
-      const msg = "���ڲ������ڿ�ʼʱ��";
+      const msg = "交期不能早于开始时间";
       setDirtyCellMark(id, key, true);
       setTransientCellError(id, "startTime", msg);
       setTransientCellError(id, "dueDate", msg);
@@ -2184,9 +2184,9 @@ function toMonthDay(value) {
 }
 
 function calcDelayed(order) {
-  if (!order.dueDate || order.status === "�ѷ���") return "";
+  if (!order.dueDate || order.status === "已发货") return "";
   const due = new Date(order.dueDate + "T23:59:59");
-  return Date.now() > due.getTime() ? "����" : "����";
+  return Date.now() > due.getTime() ? "延期" : "正常";
 }
 
 function removeOrder(id) {
@@ -2197,8 +2197,8 @@ function openDeleteConfirmDialog(id) {
   const order = orders.find((o) => o.id === id);
   if (!order || !deleteConfirmDialog) return;
   pendingDeleteOrderId = id;
-  const no = String(order.orderNo || "").trim() || "δ��д";
-  if (deleteConfirmText) deleteConfirmText.textContent = `ȷ��ɾ�������� ${no} �𣿴˲������ɳ�����`;
+  const no = String(order.orderNo || "").trim() || "未填写";
+  if (deleteConfirmText) deleteConfirmText.textContent = `确认删除订单号 ${no} 吗？此操作不可撤销。`;
   deleteConfirmDialog.hidden = false;
   document.body.style.overflow = "hidden";
 }
@@ -2269,7 +2269,7 @@ function getMonthFromOrderNo(v) {
 
 function renderKpis(data) {
   const totalOrders = data.length;
-  const inProduction = data.filter((x) => x.status === "�ӹ���").length;
+  const inProduction = data.filter((x) => x.status === "加工中").length;
   const dueToday = data.filter((x) => isDueToday(x.dueDate)).length;
   const abnormalCount = data.filter((x) => isAbnormalOrder(x)).length;
 
@@ -2280,7 +2280,7 @@ function renderKpis(data) {
 }
 
 function isAbnormalOrder(order) {
-  return order.isDelayed === "����" || order.status === "����" || isDueToday(order.dueDate);
+  return order.isDelayed === "延期" || order.status === "返工" || isDueToday(order.dueDate);
 }
 
 function isDueToday(dueDate) {
@@ -2314,11 +2314,11 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
       authSession = null;
       authWriteHintNotified = false;
       updateAuthUi();
-      setModeText(remoteOnline ? "�ƶ�ֻ����δ��¼��" : "����ģʽ��������ʧ�ܣ�");
-      alert("д��ʧ�ܣ���¼̬��ʧЧ�������µ�¼��");
+      setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
+      alert("写入失败：登录态已失效，请重新登录。");
       return;
     }
-    handleRemoteError("�ƶ�ͬ��ʧ��", e);
+    handleRemoteError("云端同步失败", e);
   } finally {
     syncing = false;
   }
@@ -2341,7 +2341,7 @@ function loadOrdersLocal() {
         }));
       }
     } catch (e) {
-      console.warn("��ȡ���ػ���ʧ��", e);
+      console.warn("读取本地缓存失败", e);
     }
   }
   return demoData();
@@ -2366,18 +2366,18 @@ async function refreshFromRemote(showAlert = false) {
     setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
-    if (showAlert) alert("�Ѵ��ƶ�ˢ����������");
+    if (showAlert) alert("已从云端刷新最新数据");
   } catch (e) {
     if (isAuthError(e) && !authSession) {
       remoteOnline = true;
       remoteErrorNotified = false;
-      setModeText("�ƶ�ֻ����δ��¼��");
+      setModeText("云端只读（未登录）");
       orders = loadOrdersLocal();
       render();
       setLastSyncTime();
       return;
     }
-    handleRemoteError("�ƶ˶�ȡʧ��", e);
+    handleRemoteError("云端读取失败", e);
     orders = loadOrdersLocal();
     render();
   }
@@ -2386,12 +2386,12 @@ async function refreshFromRemote(showAlert = false) {
 function handleRemoteError(prefix, err) {
   console.error(prefix, err);
   remoteOnline = false;
-  setModeText("����ģʽ��������ʧ�ܣ�");
+  setModeText("本地模式（云连接失败）");
   scheduleReconnect();
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
-    const detail = err?.message || err?.error_description || "δ֪����";
-    alert(`${prefix}��${detail}\n���Զ��л�����ģʽ��`);
+    const detail = err?.message || err?.error_description || "未知错误";
+    alert(`${prefix}：${detail}\n已自动切换本地模式。`);
   }
 }
 
@@ -2417,23 +2417,23 @@ async function tryReconnectRemote(manual = false) {
     if (error) throw error;
     remoteOnline = true;
     reconnectDelayMs = 5000;
-    setModeText(authSession ? "�ƶ˹���ģʽ" : "�ƶ�ֻ����δ��¼��");
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemote(false);
-    if (manual) alert("�ƶ������ѻָ�");
+    if (manual) alert("云端连接已恢复");
   } catch (e) {
     remoteOnline = false;
-    setModeText("����ģʽ��������ʧ�ܣ�");
+    setModeText("本地模式（云连接失败）");
     scheduleReconnect();
     if (manual) {
-      const detail = e?.message || e?.error_description || "δ֪����";
-      alert(`����ʧ�ܣ�${detail}`);
+      const detail = e?.message || e?.error_description || "未知错误";
+      alert(`重连失败：${detail}`);
     }
   }
 }
 
 function toDbRow(order, updatedAtOverride = "") {
   const normalizedProcess = String(order.processName || "").trim();
-  const normalizedStep = order.status === "�ӹ���" ? normalizeStepValue(order.processStepCurrent) : "";
+  const normalizedStep = order.status === "加工中" ? normalizeStepValue(order.processStepCurrent) : "";
   const mergedNote = mergeOrderMetaIntoNote(order.note || "", {
     processName: normalizedProcess,
     processStepCurrent: normalizedStep,
@@ -2450,7 +2450,7 @@ function toDbRow(order, updatedAtOverride = "") {
     machine: order.machine || "",
     lathe: order.lathe || "",
     surface: order.surface || "",
-    status: order.status || "���Ų�",
+    status: order.status || "待排产",
     start_time: toDbStartTime(order.startTime),
     due_date: toDbDueDate(order.dueDate),
     is_delayed: order.isDelayed || "",
@@ -2470,12 +2470,12 @@ function fromDbRow(row) {
   o.customer = row.customer || "";
   o.name = row.item_name || "";
   o.qty = row.qty ?? "";
-  o.programNo = row.program_no || "δ��";
+  o.programNo = row.program_no || "未出";
   o.plannedHours = row.planned_hours ?? "";
   o.machine = row.machine || "";
   o.lathe = row.lathe || "";
   o.surface = row.surface || "";
-  o.status = row.status || "���Ų�";
+  o.status = row.status || "待排产";
   o.startTime = formatStartTimeFromDb(row.start_time);
   o.dueDate = formatDueDateFromDb(row.due_date);
   o.processName = parsedNote.processName || "";
@@ -2492,49 +2492,49 @@ function demoData() {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0003",
       drawingNo: "DW-2025-003",
-      customer: "����",
-      name: "����A",
+      customer: "海尔",
+      name: "壳体A",
       qty: 289,
-      programNo: "�ѳ�",
+      programNo: "已出",
       plannedHours: 19.1,
       machine: "CNC1",
-      lathe: "��",
-      surface: "�������",
-      status: "���Ų�",
+      lathe: "是",
+      surface: "阳极氧化",
+      status: "已排产",
       startTime: "2026-02-14 08:30",
       dueDate: "2026-02-18",
-      note: "���ȶ���",
+      note: "优先订单",
     },
     {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0004",
       drawingNo: "DW-2025-003",
-      customer: "���ǵ�",
-      name: "֧��B",
+      customer: "比亚迪",
+      name: "支架B",
       qty: 758,
-      programNo: "�ѳ�",
+      programNo: "已出",
       plannedHours: 38.5,
       machine: "CNC3",
-      lathe: "��",
-      surface: "����",
-      status: "�ӹ���",
+      lathe: "否",
+      surface: "发黑",
+      status: "加工中",
       startTime: "2026-02-14 09:20",
       dueDate: "2026-02-16",
-      note: "ҹ�����",
+      note: "夜班跟进",
     },
     {
       ...createEmptyOrder(),
       orderNo: "ORD-2025-0005",
       drawingNo: "DW-2025-004",
-      customer: "����",
-      name: "�˸�C",
+      customer: "联想",
+      name: "端盖C",
       qty: 403,
-      programNo: "δ��",
+      programNo: "未出",
       plannedHours: 22.8,
       machine: "CNC5",
-      lathe: "��",
-      surface: "��ɰ",
-      status: "���Ų�",
+      lathe: "是",
+      surface: "喷砂",
+      status: "待排产",
       startTime: "",
       dueDate: "2026-02-15",
       note: "",
@@ -2603,7 +2603,7 @@ async function openLinePreview(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order) return;
   if (!UPLOAD_API_BASE) {
-    alert("δ�����ϴ������ַ���������� config.js �� UPLOAD_API_BASE��");
+    alert("未配置上传服务地址，请先设置 config.js 的 UPLOAD_API_BASE。");
     return;
   }
   try {
@@ -2611,20 +2611,20 @@ async function openLinePreview(orderId) {
     const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
     setAttachmentStateFromItems(orderId, items);
     if (items.length === 0) {
-      alert("���������ͼֽ�������ϴ���");
+      alert("该零件暂无图纸，请先上传。");
       await openAttachmentDialog(orderId);
       return;
     }
     const previewable = items.find((item) => isPreviewableFile(item));
     if (!previewable) {
-      alert("��ǰͼֽ���Ͳ�֧������Ԥ�������ڸ����б������ز鿴��");
+      alert("当前图纸类型不支持在线预览，请在附件列表中下载查看。");
       await openAttachmentDialog(orderId);
       return;
     }
     await previewOrderFile(previewable, order);
   } catch (e) {
-    const detail = e?.message || "δ֪����";
-    alert(`Ԥ��ʧ�ܣ�${detail}`);
+    const detail = e?.message || "未知错误";
+    alert(`预览失败：${detail}`);
   }
 }
 
@@ -2642,16 +2642,16 @@ async function openAttachmentDialog(orderId) {
 }
 
 function syncAttachmentHeader(order) {
-  if (attachmentTitle) attachmentTitle.textContent = "���ͼֽ";
+  if (attachmentTitle) attachmentTitle.textContent = "零件图纸";
   if (attachmentSubTitle) {
     const parts = [];
-    if (order.orderNo) parts.push(`������ ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`ͼ�� ${order.drawingNo}`);
-    if (order.name) parts.push(`���� ${order.name}`);
-    attachmentSubTitle.textContent = parts.join(" �� ") || "δ��д����������Ϣ";
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    attachmentSubTitle.textContent = parts.join(" · ") || "未填写订单基础信息";
   }
   if (attachmentHint) {
-    attachmentHint.textContent = `֧������: ${UPLOAD_ACCEPT}�����ļ����� ${UPLOAD_MAX_MB}MB`;
+    attachmentHint.textContent = `支持类型: ${UPLOAD_ACCEPT}，单文件上限 ${UPLOAD_MAX_MB}MB`;
   }
 }
 
@@ -2662,7 +2662,7 @@ function renderAttachmentList() {
   if (!UPLOAD_API_BASE) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "δ�����ϴ������ַ������ config.js ������ UPLOAD_API_BASE��";
+    empty.textContent = "未配置上传服务地址，请在 config.js 中设置 UPLOAD_API_BASE。";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2670,7 +2670,7 @@ function renderAttachmentList() {
   if (attachmentLoading) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "����������...";
+    empty.textContent = "附件加载中...";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2678,7 +2678,7 @@ function renderAttachmentList() {
   if (attachmentItems.length === 0) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "���޸���";
+    empty.textContent = "暂无附件";
     attachmentList.appendChild(empty);
     return;
   }
@@ -2694,7 +2694,7 @@ function renderAttachmentList() {
     name.textContent = getAttachmentName(item);
     const desc = document.createElement("div");
     desc.className = "attachment-desc";
-    desc.textContent = `${formatFileSize(item.size_bytes || item.size || 0)} �� ${formatDateTime(item.created_at || item.createdAt || "")}`;
+    desc.textContent = `${formatFileSize(item.size_bytes || item.size || 0)} · ${formatDateTime(item.created_at || item.createdAt || "")}`;
     meta.appendChild(name);
     meta.appendChild(desc);
 
@@ -2703,21 +2703,21 @@ function renderAttachmentList() {
     const previewBtn = document.createElement("button");
     previewBtn.type = "button";
     previewBtn.className = "action-btn-secondary";
-    previewBtn.textContent = "Ԥ��";
+    previewBtn.textContent = "预览";
     previewBtn.addEventListener("click", () => {
       void previewOrderFile(item);
     });
     const downloadBtn = document.createElement("button");
     downloadBtn.type = "button";
     downloadBtn.className = "action-btn-secondary";
-    downloadBtn.textContent = "����";
+    downloadBtn.textContent = "下载";
     downloadBtn.addEventListener("click", () => {
       void downloadOrderFile(item);
     });
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "action-btn";
-    deleteBtn.textContent = "ɾ��";
+    deleteBtn.textContent = "删除";
     deleteBtn.addEventListener("click", () => {
       void deleteOrderFile(item);
     });
@@ -2745,8 +2745,8 @@ async function loadOrderFiles(orderId) {
     attachmentItems = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
     setAttachmentStateFromItems(orderId, attachmentItems);
   } catch (e) {
-    const detail = e?.message || "δ֪����";
-    alert(`���ظ���ʧ�ܣ�${detail}`);
+    const detail = e?.message || "未知错误";
+    alert(`加载附件失败：${detail}`);
     attachmentItems = [];
   } finally {
     attachmentLoading = false;
@@ -2759,18 +2759,18 @@ async function uploadAttachmentFromInput(event) {
   event.target.value = "";
   if (!file || !attachmentPanelOrderId) return;
   if (!UPLOAD_API_BASE) {
-    alert("δ�����ϴ������ַ���������� config.js �� UPLOAD_API_BASE��");
+    alert("未配置上传服务地址，请先设置 config.js 的 UPLOAD_API_BASE。");
     return;
   }
   const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
   if (file.size > maxBytes) {
-    alert(`�ļ����󣬵�ǰ���� ${UPLOAD_MAX_MB}MB��`);
+    alert(`文件过大，当前限制 ${UPLOAD_MAX_MB}MB。`);
     return;
   }
   const ext = `.${(file.name.split(".").pop() || "").toLowerCase()}`;
   const allowList = UPLOAD_ACCEPT.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (allowList.length > 0 && !allowList.includes(ext)) {
-    alert(`�ļ����Ͳ�֧�֣�${ext || "δ֪"}��`);
+    alert(`文件类型不支持：${ext || "未知"}。`);
     return;
   }
 
@@ -2788,15 +2788,15 @@ async function uploadAttachmentFromInput(event) {
     await loadOrderFiles(attachmentPanelOrderId);
     render();
   } catch (e) {
-    const detail = e?.message || "δ֪����";
-    alert(`�ϴ�ʧ�ܣ�${detail}`);
+    const detail = e?.message || "未知错误";
+    alert(`上传失败：${detail}`);
   }
 }
 
 async function deleteOrderFile(item) {
   const id = item?.id;
   if (!id) return;
-  if (!confirm(`ȷ��ɾ��������${getAttachmentName(item)}����`)) return;
+  if (!confirm(`确认删除附件“${getAttachmentName(item)}”吗？`)) return;
   try {
     await apiFetchJson(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
     attachmentItems = attachmentItems.filter((x) => x.id !== id);
@@ -2804,8 +2804,8 @@ async function deleteOrderFile(item) {
     renderAttachmentList();
     render();
   } catch (e) {
-    const detail = e?.message || "δ֪����";
-    alert(`ɾ��ʧ�ܣ�${detail}`);
+    const detail = e?.message || "未知错误";
+    alert(`删除失败：${detail}`);
   }
 }
 
@@ -2823,8 +2823,8 @@ async function downloadOrderFile(item) {
     a.remove();
     URL.revokeObjectURL(url);
   } catch (e) {
-    const detail = e?.message || "δ֪����";
-    alert(`����ʧ�ܣ�${detail}`);
+    const detail = e?.message || "未知错误";
+    alert(`下载失败：${detail}`);
   }
 }
 
@@ -2832,15 +2832,15 @@ async function previewOrderFile(item, orderOverride = null) {
   const id = item?.id;
   if (!id || !previewDialog || !previewBody) return;
   const order = orderOverride || orders.find((x) => x.id === attachmentPanelOrderId) || null;
-  if (previewTitle) previewTitle.textContent = "ͼֽԤ��";
+  if (previewTitle) previewTitle.textContent = "图纸预览";
   if (previewSubTitle) {
     const seg = [];
-    if (order?.orderNo) seg.push(`������ ${order.orderNo}`);
-    if (order?.drawingNo) seg.push(`ͼ�� ${order.drawingNo}`);
+    if (order?.orderNo) seg.push(`订单号 ${order.orderNo}`);
+    if (order?.drawingNo) seg.push(`图号 ${order.drawingNo}`);
     seg.push(getAttachmentName(item));
-    previewSubTitle.textContent = seg.join(" �� ");
+    previewSubTitle.textContent = seg.join(" · ");
   }
-  previewBody.innerHTML = `<div class="preview-empty">������...</div>`;
+  previewBody.innerHTML = `<div class="preview-empty">加载中...</div>`;
   previewDialog.hidden = false;
   document.body.style.overflow = "hidden";
 
@@ -2869,15 +2869,15 @@ async function previewOrderFile(item, orderOverride = null) {
       previewBody.appendChild(frame);
       return;
     }
-    previewBody.innerHTML = `<div class="preview-empty">���ļ������ݲ�֧������Ԥ���������ز鿴��</div>`;
+    previewBody.innerHTML = `<div class="preview-empty">该文件类型暂不支持在线预览，请下载查看。</div>`;
   } catch (e) {
-    const detail = e?.message || "δ֪����";
-    previewBody.innerHTML = `<div class="preview-empty">Ԥ��ʧ�ܣ�${detail}</div>`;
+    const detail = e?.message || "未知错误";
+    previewBody.innerHTML = `<div class="preview-empty">预览失败：${detail}</div>`;
   }
 }
 
 function getAttachmentName(item) {
-  return item?.file_name || item?.name || item?.filename || "δ��������";
+  return item?.file_name || item?.name || item?.filename || "未命名附件";
 }
 
 function setAttachmentState(orderId, hasFiles) {
@@ -2929,7 +2929,7 @@ function syncPreviewUploadedTime(orderId, uploadedAt = "") {
       node.className = "preview-upload-time";
       wrap.appendChild(node);
     }
-    node.textContent = `���ϴ� ${uploadedAt}`;
+    node.textContent = `已上传 ${uploadedAt}`;
   });
 }
 
@@ -2982,7 +2982,7 @@ function formatFileSize(bytes) {
 }
 
 function formatDateTime(value) {
-  if (!value) return "ʱ��δ֪";
+  if (!value) return "时间未知";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   const yyyy = d.getFullYear();
@@ -3046,7 +3046,7 @@ async function parseHttpError(resp) {
 
 function exportXlsx() {
   if (!window.XLSX) {
-    alert("Excel�������ʧ�ܣ���ˢ��ҳ�������");
+    alert("Excel组件加载失败，请刷新页面后重试");
     return;
   }
   const rows = orders.map((o) => {
@@ -3058,7 +3058,7 @@ function exportXlsx() {
   });
   const ws = XLSX.utils.json_to_sheet(rows, { header: XLSX_COLUMNS.map((x) => x.title) });
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "��������");
+  XLSX.utils.book_append_sheet(wb, ws, "生产数据");
   XLSX.writeFile(wb, `mes_orders_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.xlsx`);
 }
 
@@ -3066,7 +3066,7 @@ async function importXlsx(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (!window.XLSX) {
-    alert("Excel�������ʧ�ܣ���ˢ��ҳ�������");
+    alert("Excel组件加载失败，请刷新页面后重试");
     event.target.value = "";
     return;
   }
@@ -3079,7 +3079,7 @@ async function importXlsx(event) {
       const firstSheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
       const titleToKey = Object.fromEntries(XLSX_COLUMNS.map((x) => [x.title, x.key]));
-      titleToKey["Ԥ�ƹ�ʱ"] = "plannedHours";
+      titleToKey["预计工时"] = "plannedHours";
       const existingIdByKey = new Map();
       const usedIds = new Set();
       orders.forEach((item) => {
@@ -3133,20 +3133,20 @@ async function importXlsx(event) {
       });
       const untouched = Math.max(0, previousCount - updateCount);
       const confirmed = confirm(
-        `����Ԥ����\n���� ${insertCount} ��\n���� ${updateCount} ��\n������ʷ ${untouched} ��\n\nȷ�ϼ���������`
+        `导入预览：\n新增 ${insertCount} 条\n覆盖 ${updateCount} 条\n保留历史 ${untouched} 条\n\n确认继续导入吗？`
       );
       if (!confirmed) return;
       orders = merged;
       await persistOrders({ changed: imported });
       render();
-      alert("����ɹ����Ѹ���ͬ�������������¶�����δɾ��δ������Excel�е���ʷ������");
+      alert("导入成功：已覆盖同键订单并新增新订单，未删除未包含在Excel中的历史订单。");
     } catch (e) {
       console.error(e);
       const msg = (e && e.message) ? e.message : "";
       if (msg.includes("item_name")) {
-        alert("����ʧ�ܣ��ƶ˱�ȱ�� item_name �ֶΣ����� Supabase ִ������ supabase_schema.sql �����ԡ�");
+        alert("导入失败：云端表缺少 item_name 字段，请在 Supabase 执行最新 supabase_schema.sql 后重试。");
       } else {
-        alert("����ʧ�ܣ���ʹ��ϵͳ������ Excel �������׼������ Excel");
+        alert("导入失败：请使用系统导出的 Excel 或包含标准列名的 Excel");
       }
     }
   };

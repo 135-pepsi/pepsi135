@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>元源紫泽 生产管理系统</title>
-  <link rel="stylesheet" href="styles.css?v=20260225f" />
+  <link rel="stylesheet" href="styles.css?v=20260225g" />
 </head>
 <body>
   <header class="topbar">
@@ -294,20 +294,20 @@
 
   <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
 
-  <script src="xlsx.full.min.js?v=20260225f"></script>
-  <script src="supabase.min.js?v=20260225f"></script>
-  <script src="config.prod.js?v=20260225f"></script>
+  <script src="xlsx.full.min.js?v=20260225g"></script>
+  <script src="supabase.min.js?v=20260225g"></script>
+  <script src="config.prod.js?v=20260225g"></script>
   <script>
     (function () {
       var h = location.hostname;
       var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
       if (!isLocal) return;
       var s = document.createElement("script");
-      s.src = "config.js?v=20260225f";
+      s.src = "config.js?v=20260225g";
       document.head.appendChild(s);
     })();
   </script>
-  <script src="app.js?v=20260225f"></script>
+  <script src="app.js?v=20260225g"></script>
 </body>
 </html>
 

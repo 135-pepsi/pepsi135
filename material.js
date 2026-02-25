@@ -3,7 +3,7 @@ const COL_WIDTH_KEY = "mini_mes_materials_col_widths_v1";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
 const ORDER_SYNC_ENABLED = false;
 
-const READY_OPTIONS = ["��", "��"];
+const READY_OPTIONS = ["是", "否"];
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
@@ -53,7 +53,7 @@ async function init() {
   updateLayoutMetrics();
   if (REMOTE_ENABLED) {
     await initAuth();
-    setModeText(authSession ? "�ƶ˹���ģʽ" : "�ƶ�ֻ����δ��¼��");
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) {
@@ -61,7 +61,7 @@ async function init() {
       }
     }, AUTO_REFRESH_MS);
   } else {
-    setModeText("����ģʽ");
+    setModeText("本地模式");
     materials = loadLocal();
     render();
     syncQuickCustomer();
@@ -71,8 +71,8 @@ async function init() {
 
 function setModeText(text) {
   if (systemMode) systemMode.textContent = text;
-  if (lastSyncTime && text.includes("ʧ��")) lastSyncTime.classList.add("sync-warning");
-  if (lastSyncTime && !text.includes("ʧ��")) lastSyncTime.classList.remove("sync-warning");
+  if (lastSyncTime && text.includes("失败")) lastSyncTime.classList.add("sync-warning");
+  if (lastSyncTime && !text.includes("失败")) lastSyncTime.classList.remove("sync-warning");
   syncReconnectButton();
 }
 
@@ -80,7 +80,7 @@ function setLastSyncTime() {
   if (!lastSyncTime) return;
   const now = new Date();
   const t = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-  lastSyncTime.textContent = `���ͬ�� ${t}`;
+  lastSyncTime.textContent = `最近同步 ${t}`;
 }
 
 function bindEvents() {
@@ -141,7 +141,7 @@ function bindEvents() {
   if (materialFilterToggleBtn && materialFilters) {
     materialFilterToggleBtn.addEventListener("click", () => {
       const collapsed = materialFilters.classList.toggle("collapsed");
-      materialFilterToggleBtn.textContent = collapsed ? "չ������" : "��������";
+      materialFilterToggleBtn.textContent = collapsed ? "展开搜索" : "收起搜索";
       materialFilterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
       updateLayoutMetrics();
     });
@@ -192,7 +192,7 @@ function syncFilterPanelForViewport() {
   if (!materialFilters || !materialFilterToggleBtn) return;
   if (window.innerWidth > 780) {
     materialFilters.classList.remove("collapsed");
-    materialFilterToggleBtn.textContent = "��������";
+    materialFilterToggleBtn.textContent = "收起搜索";
     materialFilterToggleBtn.setAttribute("aria-expanded", "true");
   }
   updateLayoutMetrics();
@@ -214,7 +214,7 @@ async function initAuth() {
     if (error) throw error;
     authSession = data?.session || null;
   } catch (e) {
-    console.warn("��ȡ��¼̬ʧ��", e);
+    console.warn("读取登录态失败", e);
     authSession = null;
   }
   updateAuthUi();
@@ -223,7 +223,7 @@ async function initAuth() {
     authWriteHintNotified = false;
     updateAuthUi();
     if (remoteOnline) {
-      setModeText(authSession ? "�ƶ˹���ģʽ" : "�ƶ�ֻ����δ��¼��");
+      setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     }
     if (authSession && remoteOnline) {
       void refreshFromRemote(false);
@@ -266,11 +266,11 @@ function refreshAuthLoginSubmitUi() {
   const locked = authLoginSubmitting || remain > 0;
   authLoginSubmitBtn.disabled = locked;
   if (authLoginSubmitting) {
-    authLoginSubmitBtn.textContent = "������...";
+    authLoginSubmitBtn.textContent = "发送中...";
   } else if (remain > 0) {
-    authLoginSubmitBtn.textContent = `�� ${remain}s ������`;
+    authLoginSubmitBtn.textContent = `请 ${remain}s 后重试`;
   } else {
-    authLoginSubmitBtn.textContent = "���͵�¼�ʼ�";
+    authLoginSubmitBtn.textContent = "发送登录邮件";
   }
 }
 
@@ -299,18 +299,17 @@ function getRetryAfterSeconds(err, fallback = 60) {
   return fallback;
 }
 
-
 async function submitEmailLoginFromDialog() {
   if (!REMOTE_ENABLED || !db?.auth) return;
   if (authLoginSubmitting) return;
   const cooldown = getAuthLoginCooldownSeconds();
   if (cooldown > 0) {
-    alert(`�������Ƶ������ ${cooldown} ������ԡ�`);
+    alert(`请求过于频繁，请 ${cooldown} 秒后重试。`);
     return;
   }
   const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
-    alert("�������¼���䡣");
+    alert("请输入登录邮箱。");
     return;
   }
   setAuthLoginSubmitting(true);
@@ -325,17 +324,17 @@ async function submitEmailLoginFromDialog() {
     if (error) throw error;
     startAuthLoginCooldown(60);
     closeAuthLoginDialog();
-    alert("��¼�ʼ��ѷ��ͣ����������е����¼���Ӻ󷵻ر�ҳ��");
+    alert("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
   } catch (e) {
     if (isRateLimitError(e)) {
       const retry = getRetryAfterSeconds(e, 120);
       startAuthLoginCooldown(retry);
-      alert(`���͹���Ƶ������ ${retry} ������ԡ�`);
+      alert(`发送过于频繁，请 ${retry} 秒后再试。`);
       setAuthLoginSubmitting(false);
       return;
     }
-    const detail = e?.message || e?.error_description || "δ֪����";
-    alert(`���͵�¼�ʼ�ʧ�ܣ�${detail}`);
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`发送登录邮件失败：${detail}`);
     setAuthLoginSubmitting(false);
   }
 }
@@ -347,16 +346,16 @@ async function logoutAuth() {
     if (error) throw error;
     authSession = null;
     updateAuthUi();
-    setModeText(remoteOnline ? "�ƶ�ֻ����δ��¼��" : "����ģʽ��������ʧ�ܣ�");
+    setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
   } catch (e) {
-    const detail = e?.message || e?.error_description || "δ֪����";
-    alert(`�˳�ʧ�ܣ�${detail}`);
+    const detail = e?.message || e?.error_description || "未知错误";
+    alert(`退出失败：${detail}`);
   }
 }
 
 function updateAuthUi() {
   if (authUser) {
-    authUser.textContent = authSession?.user?.email || "δ��¼";
+    authUser.textContent = authSession?.user?.email || "未登录";
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
@@ -367,7 +366,7 @@ function canWriteRemote(notify = true) {
   if (authSession) return true;
   if (notify && !authWriteHintNotified) {
     authWriteHintNotified = true;
-    alert("��ǰΪֻ��ģʽ�����ȵ���������¼������д���ƶ����ݡ�");
+    alert("当前为只读模式，请先点击“邮箱登录”后再写入云端数据。");
   }
   return false;
 }
@@ -414,12 +413,12 @@ function clearQuickAdd() {
 async function quickAdd() {
   const orderNoInput = valueOf("qaOrderNo");
   if (!orderNoInput) {
-    alert("����������");
+    alert("请先输入编号");
     return;
   }
   const orderNo = normalizeOrderNoInput(orderNoInput);
   if (!orderNo) {
-    alert("�����Ÿ�ʽ��Ч�������� 1-3 λ���ֻ��������ţ�ZZYYMMNNN��");
+    alert("订单号格式无效，请输入 1-3 位数字或完整单号（ZZYYMMNNN）");
     return;
   }
   const customer = resolveCustomerByOrderNo(orderNo, "");
@@ -474,7 +473,7 @@ function render() {
     const opTd = document.createElement("td");
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
-    delBtn.textContent = "ɾ��";
+    delBtn.textContent = "删除";
     delBtn.addEventListener("click", () => {
       void removeItem(m.id);
     });
@@ -602,7 +601,7 @@ async function updateItem(id, key, value) {
 
   if (key === "orderNo") {
     if ((value || "").trim() !== "" && !normalized) {
-      alert("�����Ÿ�ʽ��Ч�������� 1-3 λ���ֻ��������ţ�ZZYYMMNNN��");
+      alert("订单号格式无效，请输入 1-3 位数字或完整单号（ZZYYMMNNN）");
       render();
       return;
     }
@@ -678,7 +677,7 @@ function syncQuickCustomer() {
 }
 
 async function removeItem(id) {
-  const confirmed = confirm("ȷ��ɾ������������");
+  const confirmed = confirm("确认删除该物料行吗？");
   if (!confirmed) return;
 
   materials = materials.filter((x) => x.id !== id);
@@ -703,7 +702,7 @@ function loadLocal() {
       createdAt: x.createdAt || new Date(Date.now() + idx).toISOString(),
     }));
   } catch (e) {
-    console.warn("��ȡ�������ϻ���ʧ��", e);
+    console.warn("读取本地物料缓存失败", e);
     return [];
   }
 }
@@ -736,11 +735,11 @@ async function persist({ changed = [], deletedId = null, deletedIds = [], notify
       authSession = null;
       authWriteHintNotified = false;
       updateAuthUi();
-      setModeText(remoteOnline ? "�ƶ�ֻ����δ��¼��" : "����ģʽ��������ʧ�ܣ�");
-      alert("д��ʧ�ܣ���¼̬��ʧЧ�������µ�¼��");
+      setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
+      alert("写入失败：登录态已失效，请重新登录。");
       return;
     }
-    handleRemoteError("�����ƶ�ͬ��ʧ��", e);
+    handleRemoteError("物料云端同步失败", e);
   } finally {
     syncing = false;
   }
@@ -769,20 +768,20 @@ async function refreshFromRemote(showAlert = false) {
     setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
-    if (showAlert) alert("�Ѵ��ƶ�ˢ��������������");
+    if (showAlert) alert("已从云端刷新最新物料数据");
   } catch (e) {
     if (pageUnloading || isAbortLikeError(e)) return;
     if (isAuthError(e) && !authSession) {
       remoteOnline = true;
       remoteErrorNotified = false;
-      setModeText("�ƶ�ֻ����δ��¼��");
+      setModeText("云端只读（未登录）");
       materials = loadLocal();
       render();
       syncQuickCustomer();
       setLastSyncTime();
       return;
     }
-    handleRemoteError("�����ƶ˶�ȡʧ��", e);
+    handleRemoteError("物料云端读取失败", e);
     materials = loadLocal();
     render();
     syncQuickCustomer();
@@ -829,7 +828,7 @@ async function refreshOrderCustomerMap() {
     await syncInheritedOrderRows();
     syncQuickCustomer();
   } catch (e) {
-    console.warn("��ȡ����-�ͻ�ӳ��ʧ�ܣ����ñ��ض�������", e);
+    console.warn("读取订单-客户映射失败，改用本地订单缓存", e);
     loadOrderCustomerMapFromLocal();
     await syncInheritedOrderRows();
     syncQuickCustomer();
@@ -867,7 +866,7 @@ function loadOrderCustomerMapFromLocal() {
     orderCustomerMap = map;
     serialOrderNoMap = serialMap;
   } catch (e) {
-    console.warn("��ȡ���ض�������ʧ��", e);
+    console.warn("读取本地订单缓存失败", e);
   }
 }
 
@@ -972,7 +971,7 @@ function materialRowSignature(item) {
 
 async function removeDuplicateOrderRows(notify = false) {
   if (!Array.isArray(materials) || materials.length === 0) {
-    if (notify) alert("��ǰû�п���������ݡ�");
+    if (notify) alert("当前没有可清理的数据。");
     return;
   }
 
@@ -993,7 +992,7 @@ async function removeDuplicateOrderRows(notify = false) {
   });
 
   if (deletedIds.length === 0) {
-    if (notify) alert("û�з����ظ������С�");
+    if (notify) alert("没有发现重复订单行。");
     return;
   }
 
@@ -1002,19 +1001,19 @@ async function removeDuplicateOrderRows(notify = false) {
   await persist({ deletedIds });
   render();
   syncQuickCustomer();
-  if (notify) alert(`��ɾ�� ${deletedIds.length} ���ظ�������¼��`);
+  if (notify) alert(`已删除 ${deletedIds.length} 行重复订单记录。`);
 }
 
 function handleRemoteError(prefix, err) {
   if (pageUnloading || isAbortLikeError(err)) return;
   console.error(prefix, err);
   remoteOnline = false;
-  setModeText("����ģʽ��������ʧ�ܣ�");
+  setModeText("本地模式（云连接失败）");
   scheduleReconnect();
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
-    const detail = err?.message || err?.error_description || "δ֪����";
-    alert(`${prefix}��${detail}\n���Զ��л�����ģʽ��`);
+    const detail = err?.message || err?.error_description || "未知错误";
+    alert(`${prefix}：${detail}\n已自动切换本地模式。`);
   }
 }
 
@@ -1046,16 +1045,16 @@ async function tryReconnectRemote(manual = false) {
     if (error) throw error;
     remoteOnline = true;
     reconnectDelayMs = 5000;
-    setModeText(authSession ? "�ƶ˹���ģʽ" : "�ƶ�ֻ����δ��¼��");
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemote(false);
-    if (manual) alert("�ƶ������ѻָ�");
+    if (manual) alert("云端连接已恢复");
   } catch (e) {
     remoteOnline = false;
-    setModeText("����ģʽ��������ʧ�ܣ�");
+    setModeText("本地模式（云连接失败）");
     scheduleReconnect();
     if (manual) {
-      const detail = e?.message || e?.error_description || "δ֪����";
-      alert(`����ʧ�ܣ�${detail}`);
+      const detail = e?.message || e?.error_description || "未知错误";
+      alert(`重连失败：${detail}`);
     }
   }
 }
