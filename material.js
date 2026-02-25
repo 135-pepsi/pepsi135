@@ -18,6 +18,7 @@ let reconnectTimer = null;
 let reconnectDelayMs = 5000;
 let authSession = null;
 let authWriteHintNotified = false;
+let authLoginSubmitting = false;
 let stickyOffsetRaf = 0;
 let pageUnloading = false;
 let orderCustomerMap = new Map();
@@ -243,16 +244,27 @@ function openAuthLoginDialog() {
 function closeAuthLoginDialog() {
   if (!authLoginDialog) return;
   authLoginDialog.hidden = true;
+  setAuthLoginSubmitting(false);
   document.body.style.overflow = "";
+}
+
+function setAuthLoginSubmitting(submitting) {
+  authLoginSubmitting = Boolean(submitting);
+  if (authLoginSubmitBtn) {
+    authLoginSubmitBtn.disabled = authLoginSubmitting;
+    authLoginSubmitBtn.textContent = authLoginSubmitting ? "发送中..." : "发送登录邮件";
+  }
 }
 
 async function submitEmailLoginFromDialog() {
   if (!REMOTE_ENABLED || !db?.auth) return;
-  const email = String(authLoginEmailInput?.value || "").trim();
+  if (authLoginSubmitting) return;
+  const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
     alert("请输入登录邮箱。");
     return;
   }
+  setAuthLoginSubmitting(true);
   try {
     const { error } = await db.auth.signInWithOtp({
       email,
@@ -267,6 +279,7 @@ async function submitEmailLoginFromDialog() {
   } catch (e) {
     const detail = e?.message || e?.error_description || "未知错误";
     alert(`发送登录邮件失败：${detail}`);
+    setAuthLoginSubmitting(false);
   }
 }
 

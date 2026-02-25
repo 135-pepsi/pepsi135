@@ -68,6 +68,7 @@ let saveFeedbackTimer = 0;
 let attachmentLatestTimeByLineId = new Map();
 let dirtyCellMarks = new Set();
 let pendingDeleteOrderId = "";
+let authLoginSubmitting = false;
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -720,6 +721,7 @@ function openAuthLoginDialog() {
 function closeAuthLoginDialog() {
   if (!authLoginDialog) return;
   authLoginDialog.hidden = true;
+  setAuthLoginSubmitting(false);
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -739,13 +741,23 @@ function closeAuthLoginDialog() {
   }
 }
 
+function setAuthLoginSubmitting(submitting) {
+  authLoginSubmitting = Boolean(submitting);
+  if (authLoginSubmitBtn) {
+    authLoginSubmitBtn.disabled = authLoginSubmitting;
+    authLoginSubmitBtn.textContent = authLoginSubmitting ? "发送中..." : "发送登录邮件";
+  }
+}
+
 async function submitEmailLoginFromDialog() {
   if (!REMOTE_ENABLED || !db?.auth) return;
-  const email = String(authLoginEmailInput?.value || "").trim();
+  if (authLoginSubmitting) return;
+  const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
     alert("请输入登录邮箱。");
     return;
   }
+  setAuthLoginSubmitting(true);
   try {
     const { error } = await db.auth.signInWithOtp({
       email,
@@ -760,6 +772,7 @@ async function submitEmailLoginFromDialog() {
   } catch (e) {
     const detail = e?.message || e?.error_description || "未知错误";
     alert(`发送登录邮件失败：${detail}`);
+    setAuthLoginSubmitting(false);
   }
 }
 
