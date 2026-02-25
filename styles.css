@@ -654,9 +654,7 @@ body:not(.material-page) #orderTable th:nth-child(11) { background: linear-gradi
   position: sticky;
   left: var(--sticky-left-1, 0px);
   z-index: 2;
-  width: 40px;
   min-width: 40px;
-  max-width: 40px;
 }
 #orderTable th:nth-child(2),
 #orderTable td:nth-child(2) {
@@ -708,9 +706,7 @@ body:not(.material-page) #orderTable th:last-child,
 body:not(.material-page) #orderTable td:last-child {
   position: sticky;
   right: 0;
-  width: 90px;
   min-width: 90px;
-  max-width: 90px;
   padding: 4px 6px;
   text-align: center;
   box-shadow: -1px 0 0 #2b4d79;
@@ -739,16 +735,12 @@ body:not(.material-page) #orderTable tbody tr.row-shipped > td:last-child {
 
 #orderTable th:nth-child(2),
 #orderTable td:nth-child(2) {
-  width: 80px;
   min-width: 80px;
-  max-width: 80px;
 }
 
 #orderTable th:nth-child(3),
 #orderTable td:nth-child(3) {
-  width: 60px;
   min-width: 60px;
-  max-width: 60px;
 }
 
 #orderTable th:nth-child(4),
@@ -765,9 +757,7 @@ body:not(.material-page) #orderTable tbody tr.row-shipped > td:last-child {
 
 #orderTable th:nth-child(9),
 #orderTable td:nth-child(9) {
-  width: 120px;
   min-width: 120px;
-  max-width: 120px;
 }
 
 #orderTable th:nth-child(7),
@@ -784,9 +774,7 @@ body:not(.material-page) #orderTable tbody tr.row-shipped > td:last-child {
 
 #orderTable th:nth-child(11),
 #orderTable td:nth-child(11) {
-  width: 88px;
   min-width: 88px;
-  max-width: 88px;
 }
 
 #orderTable th:nth-child(12),

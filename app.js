@@ -5,14 +5,7 @@ const COMPACT_MODE_KEY = "mini_mes_compact_mode_v1";
 
 const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "已发货"];
 const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
-const FIXED_COL_WIDTHS = {
-  1: 40, // 序号
-  2: 80, // 订单号
-  3: 60, // 客户
-  9: 120, // 状态
-  11: 88, // 交期
-  13: 90, // 操作
-};
+const FIXED_COL_WIDTHS = {};
 const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
 const PROCESS_OPTIONS = ["", "1", "2", "3", "4", "5", "6"];
 const XLSX_COLUMNS = [
@@ -3224,22 +3217,11 @@ function getColumnWidth(colIndex) {
 }
 
 function saveColumnWidths() {
-  columnWidths = sanitizeColumnWidths(columnWidths);
-  localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(columnWidths));
+  // Disabled persistence to avoid env-specific width divergence
 }
 
 function loadColumnWidths() {
-  try {
-    const raw = localStorage.getItem(COL_WIDTH_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    const sanitized = sanitizeColumnWidths(parsed);
-    if (raw && JSON.stringify(parsed) !== JSON.stringify(sanitized)) {
-      localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(sanitized));
-    }
-    return sanitized;
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 function sanitizeColumnWidths(input) {
