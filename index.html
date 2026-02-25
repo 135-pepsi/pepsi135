@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>元源紫泽 生产管理系统</title>
-  <link rel="stylesheet" href="styles.css?v=20260225b" />
+  <link rel="stylesheet" href="styles.css?v=20260225c" />
 </head>
 <body>
   <header class="topbar">
@@ -272,12 +272,32 @@
     </section>
   </div>
 
+  <div id="authLoginDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel auth-login-panel" role="dialog" aria-modal="true" aria-labelledby="authLoginTitle">
+      <header class="dialog-head">
+        <h3 id="authLoginTitle">邮箱登录</h3>
+        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p class="dialog-subtitle">请输入登录邮箱，系统会发送登录链接。</p>
+      <div class="auth-login-form">
+        <label class="auth-login-field" for="authLoginEmailInput">
+          <span>邮箱</span>
+          <input id="authLoginEmailInput" type="email" autocomplete="email" placeholder="name@example.com" />
+        </label>
+      </div>
+      <div class="auth-login-actions">
+        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="authLoginSubmitBtn" class="btn btn-primary" type="button">发送登录邮件</button>
+      </div>
+    </section>
+  </div>
+
   <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
 
-  <script src="xlsx.full.min.js?v=20260225b"></script>
-  <script src="supabase.min.js?v=20260225b"></script>
-  <script src="config.prod.js?v=20260225b"></script>
-  <script src="config.js?v=20260225b"></script>
-  <script src="app.js?v=20260225b"></script>
+  <script src="xlsx.full.min.js?v=20260225c"></script>
+  <script src="supabase.min.js?v=20260225c"></script>
+  <script src="config.prod.js?v=20260225c"></script>
+  <script src="config.js?v=20260225c"></script>
+  <script src="app.js?v=20260225c"></script>
 </body>
 </html>

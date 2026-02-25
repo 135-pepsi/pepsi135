@@ -32,6 +32,11 @@ const reconnectBtn = document.getElementById("reconnectBtn");
 const authUser = document.getElementById("authUser");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const authLoginDialog = document.getElementById("authLoginDialog");
+const authLoginEmailInput = document.getElementById("authLoginEmailInput");
+const authLoginCloseBtn = document.getElementById("authLoginCloseBtn");
+const authLoginCancelBtn = document.getElementById("authLoginCancelBtn");
+const authLoginSubmitBtn = document.getElementById("authLoginSubmitBtn");
 const lastSyncTime = document.getElementById("lastSyncTime");
 const materialFilters = document.getElementById("materialFilters");
 const materialFilterToggleBtn = document.getElementById("materialFilterToggleBtn");
@@ -101,6 +106,30 @@ function bindEvents() {
       void logoutAuth();
     });
   }
+  if (authLoginCloseBtn) {
+    authLoginCloseBtn.addEventListener("click", closeAuthLoginDialog);
+  }
+  if (authLoginCancelBtn) {
+    authLoginCancelBtn.addEventListener("click", closeAuthLoginDialog);
+  }
+  if (authLoginSubmitBtn) {
+    authLoginSubmitBtn.addEventListener("click", () => {
+      void submitEmailLoginFromDialog();
+    });
+  }
+  if (authLoginEmailInput) {
+    authLoginEmailInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submitEmailLoginFromDialog();
+      }
+    });
+  }
+  if (authLoginDialog) {
+    authLoginDialog.addEventListener("click", (event) => {
+      if (event.target === authLoginDialog) closeAuthLoginDialog();
+    });
+  }
   document.getElementById("qaOrderNo").addEventListener("input", syncQuickCustomer);
   document.getElementById("searchInput").addEventListener("input", (e) => {
     filterText = String(e.target.value || "").trim().toLowerCase();
@@ -144,6 +173,11 @@ function bindEvents() {
   syncFilterPanelForViewport();
 
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && authLoginDialog && !authLoginDialog.hidden) {
+      e.preventDefault();
+      closeAuthLoginDialog();
+      return;
+    }
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
       e.preventDefault();
       void addBlankRow();
@@ -195,9 +229,30 @@ async function initAuth() {
 }
 
 async function beginEmailLogin() {
+  openAuthLoginDialog();
+}
+
+function openAuthLoginDialog() {
+  if (!REMOTE_ENABLED || !db?.auth || !authLoginDialog) return;
+  if (authLoginEmailInput) authLoginEmailInput.value = "";
+  authLoginDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+  if (authLoginEmailInput) authLoginEmailInput.focus();
+}
+
+function closeAuthLoginDialog() {
+  if (!authLoginDialog) return;
+  authLoginDialog.hidden = true;
+  document.body.style.overflow = "";
+}
+
+async function submitEmailLoginFromDialog() {
   if (!REMOTE_ENABLED || !db?.auth) return;
-  const email = (prompt("请输入登录邮箱（将发送登录链接）") || "").trim();
-  if (!email) return;
+  const email = String(authLoginEmailInput?.value || "").trim();
+  if (!email) {
+    alert("请输入登录邮箱。");
+    return;
+  }
   try {
     const { error } = await db.auth.signInWithOtp({
       email,
@@ -207,6 +262,7 @@ async function beginEmailLogin() {
       },
     });
     if (error) throw error;
+    closeAuthLoginDialog();
     alert("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
   } catch (e) {
     const detail = e?.message || e?.error_description || "未知错误";

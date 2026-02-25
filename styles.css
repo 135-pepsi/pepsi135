@@ -964,6 +964,33 @@ body.compact-mode {
   gap: 8px;
 }
 
+.auth-login-panel {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.auth-login-form {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.auth-login-field {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-login-field > span {
+  color: #b5d1ef;
+  font-size: 13px;
+}
+
+.auth-login-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .dialog-head {
   display: flex;
   align-items: center;

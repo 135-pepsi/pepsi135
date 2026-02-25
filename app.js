@@ -145,6 +145,11 @@ const deleteConfirmText = document.getElementById("deleteConfirmText");
 const deleteConfirmCloseBtn = document.getElementById("deleteConfirmCloseBtn");
 const deleteConfirmCancelBtn = document.getElementById("deleteConfirmCancelBtn");
 const deleteConfirmOkBtn = document.getElementById("deleteConfirmOkBtn");
+const authLoginDialog = document.getElementById("authLoginDialog");
+const authLoginEmailInput = document.getElementById("authLoginEmailInput");
+const authLoginCloseBtn = document.getElementById("authLoginCloseBtn");
+const authLoginCancelBtn = document.getElementById("authLoginCancelBtn");
+const authLoginSubmitBtn = document.getElementById("authLoginSubmitBtn");
 const PROCESS_TIME_TITLE_BASE = "预计工时设置";
 const STATUS_TITLE_BASE = "状态设置";
 const DATE_TITLE_BASE = "日期设置";
@@ -501,6 +506,30 @@ function bindEvents() {
       if (event.target === deleteConfirmDialog) closeDeleteConfirmDialog();
     });
   }
+  if (authLoginCloseBtn) {
+    authLoginCloseBtn.addEventListener("click", closeAuthLoginDialog);
+  }
+  if (authLoginCancelBtn) {
+    authLoginCancelBtn.addEventListener("click", closeAuthLoginDialog);
+  }
+  if (authLoginSubmitBtn) {
+    authLoginSubmitBtn.addEventListener("click", () => {
+      void submitEmailLoginFromDialog();
+    });
+  }
+  if (authLoginEmailInput) {
+    authLoginEmailInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submitEmailLoginFromDialog();
+      }
+    });
+  }
+  if (authLoginDialog) {
+    authLoginDialog.addEventListener("click", (event) => {
+      if (event.target === authLoginDialog) closeAuthLoginDialog();
+    });
+  }
   bindDialogEnterSave(surfaceDialog, saveSurfaceDialog);
   if (processMinutesInput) {
     processMinutesInput.addEventListener("keydown", (event) => {
@@ -612,6 +641,11 @@ function bindEvents() {
       closeDeleteConfirmDialog();
       return;
     }
+    if (e.key === "Escape" && authLoginDialog && !authLoginDialog.hidden) {
+      e.preventDefault();
+      closeAuthLoginDialog();
+      return;
+    }
     if (e.ctrlKey && e.key.toLowerCase() === "n") {
       e.preventDefault();
       void addBlankRow();
@@ -672,9 +706,46 @@ async function initAuth() {
 }
 
 async function beginEmailLogin() {
+  openAuthLoginDialog();
+}
+
+function openAuthLoginDialog() {
+  if (!REMOTE_ENABLED || !db?.auth || !authLoginDialog) return;
+  if (authLoginEmailInput) authLoginEmailInput.value = "";
+  authLoginDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+  if (authLoginEmailInput) authLoginEmailInput.focus();
+}
+
+function closeAuthLoginDialog() {
+  if (!authLoginDialog) return;
+  authLoginDialog.hidden = true;
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (previewDialog && !previewDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (processTimeDialog && !processTimeDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (statusDialog && !statusDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (dateDialog && !dateDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (surfaceDialog && !surfaceDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (deleteConfirmDialog && !deleteConfirmDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+async function submitEmailLoginFromDialog() {
   if (!REMOTE_ENABLED || !db?.auth) return;
-  const email = (prompt("请输入登录邮箱（将发送登录链接）") || "").trim();
-  if (!email) return;
+  const email = String(authLoginEmailInput?.value || "").trim();
+  if (!email) {
+    alert("请输入登录邮箱。");
+    return;
+  }
   try {
     const { error } = await db.auth.signInWithOtp({
       email,
@@ -684,6 +755,7 @@ async function beginEmailLogin() {
       },
     });
     if (error) throw error;
+    closeAuthLoginDialog();
     alert("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
   } catch (e) {
     const detail = e?.message || e?.error_description || "未知错误";
