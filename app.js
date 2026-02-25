@@ -1,8 +1,18 @@
 ﻿const STORAGE_KEY = "mini_mes_orders_v1";
 const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
+const SHIFT_DEFAULTS_KEY = "mini_mes_shift_defaults_v1";
+const COMPACT_MODE_KEY = "mini_mes_compact_mode_v1";
 
 const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "已发货"];
 const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
+const FIXED_COL_WIDTHS = {
+  1: 30, // 序号
+  2: 80, // 订单号
+  3: 60, // 客户
+  9: 120, // 状态
+  11: 88, // 交期
+  13: 90, // 操作
+};
 const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
 const PROCESS_OPTIONS = ["", "1", "2", "3", "4", "5", "6"];
 const XLSX_COLUMNS = [
@@ -45,6 +55,8 @@ let abnormalOnly = false;
 let lastSyncAt = "";
 let stickyOffsetRaf = 0;
 let columnWidths = loadColumnWidths();
+let shiftDefaults = loadShiftDefaults();
+let compactMode = loadCompactMode();
 let attachmentPanelOrderId = "";
 let attachmentItems = [];
 let attachmentLoading = false;
@@ -56,6 +68,12 @@ let statusEditingOrderId = "";
 let dateEditingOrderId = "";
 let dateEditingKey = "";
 let surfaceEditingOrderId = "";
+let transientCellErrors = new Map();
+let ruleCellErrors = new Map();
+let rowSavedUntil = new Map();
+let saveFeedbackTimer = 0;
+let attachmentLatestTimeByLineId = new Map();
+let dirtyCellMarks = new Set();
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -85,7 +103,9 @@ const previewTitle = document.getElementById("previewTitle");
 const previewSubTitle = document.getElementById("previewSubTitle");
 const previewBody = document.getElementById("previewBody");
 const processTimeDialog = document.getElementById("processTimeDialog");
+const processTimeTitle = document.getElementById("processTimeTitle");
 const processTimeCloseBtn = document.getElementById("processTimeCloseBtn");
+const processTimeCancelBtn = document.getElementById("processTimeCancelBtn");
 const processTimeSaveBtn = document.getElementById("processTimeSaveBtn");
 const processTimeClearBtn = document.getElementById("processTimeClearBtn");
 const processTimeSubTitle = document.getElementById("processTimeSubTitle");
@@ -95,33 +115,48 @@ const processMinutesInput = document.getElementById("processMinutesInput");
 const processMachineInput = document.getElementById("processMachineInput");
 const processLatheInput = document.getElementById("processLatheInput");
 const statusDialog = document.getElementById("statusDialog");
+const statusTitle = document.getElementById("statusTitle");
 const statusCloseBtn = document.getElementById("statusCloseBtn");
+const statusCancelBtn = document.getElementById("statusCancelBtn");
+const statusNextBtn = document.getElementById("statusNextBtn");
 const statusSaveBtn = document.getElementById("statusSaveBtn");
 const statusSubTitle = document.getElementById("statusSubTitle");
 const statusInput = document.getElementById("statusInput");
 const statusStepWrap = document.getElementById("statusStepWrap");
 const statusStepInput = document.getElementById("statusStepInput");
+const statusStepHint = document.getElementById("statusStepHint");
+const statusProcessContext = document.getElementById("statusProcessContext");
 const dateDialog = document.getElementById("dateDialog");
+const dateTitle = document.getElementById("dateTitle");
 const dateCloseBtn = document.getElementById("dateCloseBtn");
+const dateCancelBtn = document.getElementById("dateCancelBtn");
 const dateSaveBtn = document.getElementById("dateSaveBtn");
 const dateClearBtn = document.getElementById("dateClearBtn");
 const dateSubTitle = document.getElementById("dateSubTitle");
 const dateMonthInput = document.getElementById("dateMonthInput");
 const dateDayInput = document.getElementById("dateDayInput");
 const surfaceDialog = document.getElementById("surfaceDialog");
+const surfaceTitle = document.getElementById("surfaceTitle");
 const surfaceCloseBtn = document.getElementById("surfaceCloseBtn");
+const surfaceCancelBtn = document.getElementById("surfaceCancelBtn");
 const surfaceSaveBtn = document.getElementById("surfaceSaveBtn");
 const surfaceClearBtn = document.getElementById("surfaceClearBtn");
 const surfaceSubTitle = document.getElementById("surfaceSubTitle");
 const surfacePresetInput = document.getElementById("surfacePresetInput");
 const surfaceCustomInput = document.getElementById("surfaceCustomInput");
+const compactModeBtn = document.getElementById("compactModeBtn");
+const saveFeedback = document.getElementById("saveFeedback");
+const PROCESS_TIME_TITLE_BASE = "预计工时设置";
+const STATUS_TITLE_BASE = "状态设置";
+const DATE_TITLE_BASE = "日期设置";
+const SURFACE_TITLE_BASE = "表面处理设置";
 
 init();
 
 async function init() {
   bindEvents();
+  applyCompactMode();
   setupColumnResizers();
-  startKpiClock();
   updatePinnedOffsets();
   if (REMOTE_ENABLED) {
     await initAuth();
@@ -154,11 +189,139 @@ function setLastSyncTime() {
   lastSyncTime.textContent = `最近同步 ${t}`;
 }
 
+function getErrorKey(orderId, key) {
+  return `${orderId || ""}:${key || ""}`;
+}
+
+function getDirtyCellKey(orderId, key) {
+  return `${orderId || ""}:${key || ""}`;
+}
+
+function setDirtyCellMark(orderId, key, dirty) {
+  const k = getDirtyCellKey(orderId, key);
+  if (dirty) dirtyCellMarks.add(k);
+  else dirtyCellMarks.delete(k);
+}
+
+function hasDirtyCellMark(orderId, key) {
+  return dirtyCellMarks.has(getDirtyCellKey(orderId, key));
+}
+
+function appendDirtyCellDot(td, orderId, key) {
+  if (!hasDirtyCellMark(orderId, key)) return;
+  const dot = document.createElement("span");
+  dot.className = "cell-dirty-dot";
+  dot.title = "已修改未保存";
+  td.appendChild(dot);
+}
+
+function setTransientCellError(orderId, key, message) {
+  if (!orderId || !key) return;
+  const k = getErrorKey(orderId, key);
+  if (!message) transientCellErrors.delete(k);
+  else transientCellErrors.set(k, String(message));
+}
+
+function clearTransientCellError(orderId, key) {
+  if (!orderId || !key) return;
+  transientCellErrors.delete(getErrorKey(orderId, key));
+}
+
+function getCellError(orderId, key) {
+  const k = getErrorKey(orderId, key);
+  if (transientCellErrors.has(k)) return transientCellErrors.get(k) || "";
+  return ruleCellErrors.get(k) || "";
+}
+
+function appendCellError(td, orderId, key) {
+  const msg = getCellError(orderId, key);
+  if (!msg) return;
+  td.classList.add("cell-has-error");
+  const error = document.createElement("div");
+  error.className = "cell-error";
+  error.textContent = msg;
+  td.appendChild(error);
+}
+
+function rebuildRuleCellErrors() {
+  const next = new Map();
+  const orderNoMap = new Map();
+
+  orders.forEach((order) => {
+    const no = String(order.orderNo || "").trim();
+    if (!no) return;
+    if (!orderNoMap.has(no)) orderNoMap.set(no, []);
+    orderNoMap.get(no).push(order.id);
+  });
+
+  orderNoMap.forEach((ids) => {
+    if (ids.length < 2) return;
+    ids.forEach((id) => {
+      next.set(getErrorKey(id, "orderNo"), "订单号重复");
+    });
+  });
+
+  orders.forEach((order) => {
+    const qtyRaw = String(order.qty ?? "").trim();
+    if (qtyRaw !== "" && !Number.isFinite(Number(qtyRaw))) {
+      next.set(getErrorKey(order.id, "qty"), "数量必须为数字");
+    }
+    const start = normalizeDateOnlyInput(order.startTime);
+    const due = normalizeDateOnlyInput(order.dueDate);
+    if (start && due && due < start) {
+      const msg = "交期不能早于开始时间";
+      next.set(getErrorKey(order.id, "startTime"), msg);
+      next.set(getErrorKey(order.id, "dueDate"), msg);
+    }
+  });
+
+  ruleCellErrors = next;
+}
+
+function markRowSaved(orderId) {
+  if (!orderId) return;
+  rowSavedUntil.set(orderId, Date.now() + 1500);
+}
+
+function showSaveFeedback(message = "已保存到 NAS") {
+  if (!saveFeedback) return;
+  saveFeedback.textContent = message;
+  saveFeedback.classList.add("is-visible");
+  if (saveFeedbackTimer) clearTimeout(saveFeedbackTimer);
+  saveFeedbackTimer = setTimeout(() => {
+    saveFeedback.classList.remove("is-visible");
+  }, 1500);
+}
+
+function bindDialogEnterSave(dialogEl, saveFn) {
+  if (!dialogEl) return;
+  dialogEl.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const tag = String(event.target?.tagName || "").toUpperCase();
+    if (tag === "TEXTAREA") return;
+    event.preventDefault();
+    void saveFn();
+  });
+}
+
 function bindEvents() {
-  document.getElementById("quickAddBtn").addEventListener("click", quickAdd);
-  document.getElementById("addRowBtn").addEventListener("click", addBlankRow);
-  document.getElementById("saveBtn").addEventListener("click", exportXlsx);
-  document.getElementById("importInput").addEventListener("change", importXlsx);
+  const quickAddBtn = document.getElementById("quickAddBtn");
+  if (quickAddBtn) quickAddBtn.addEventListener("click", quickAdd);
+  if (compactModeBtn) {
+    compactModeBtn.addEventListener("click", () => {
+      compactMode = !compactMode;
+      saveCompactMode(compactMode);
+      applyCompactMode();
+    });
+  }
+  const addRowBtn = document.getElementById("addRowBtn");
+  if (addRowBtn) addRowBtn.addEventListener("click", addBlankRow);
+  const addBlankBottomBtn = document.getElementById("addBlankBottomBtn");
+  if (addBlankBottomBtn) addBlankBottomBtn.addEventListener("click", addBlankRow);
+  const saveBtn = document.getElementById("saveBtn");
+  if (saveBtn) saveBtn.addEventListener("click", exportXlsx);
+  const importInput = document.getElementById("importInput");
+  if (importInput) importInput.addEventListener("change", importXlsx);
   backTopBtn.addEventListener("click", scrollToTopRow);
   if (attachmentUploadInput) {
     attachmentUploadInput.accept = UPLOAD_ACCEPT;
@@ -186,6 +349,9 @@ function bindEvents() {
   if (processTimeCloseBtn) {
     processTimeCloseBtn.addEventListener("click", closeProcessTimeDialog);
   }
+  if (processTimeCancelBtn) {
+    processTimeCancelBtn.addEventListener("click", closeProcessTimeDialog);
+  }
   if (processTimeSaveBtn) {
     processTimeSaveBtn.addEventListener("click", () => {
       void saveProcessTimeDialog();
@@ -205,26 +371,49 @@ function bindEvents() {
       if (event.target === processTimeDialog) closeProcessTimeDialog();
     });
   }
+  bindDialogEnterSave(processTimeDialog, saveProcessTimeDialog);
   initStatusOptions();
   if (statusCloseBtn) {
     statusCloseBtn.addEventListener("click", closeStatusDialog);
+  }
+  if (statusCancelBtn) {
+    statusCancelBtn.addEventListener("click", closeStatusDialog);
   }
   if (statusSaveBtn) {
     statusSaveBtn.addEventListener("click", () => {
       void saveStatusDialog();
     });
   }
+  if (statusNextBtn) {
+    statusNextBtn.addEventListener("click", () => {
+      applyStatusNextStep();
+    });
+  }
   if (statusInput) {
-    statusInput.addEventListener("change", syncStatusStepVisibility);
+    statusInput.addEventListener("change", () => {
+      syncStatusStepVisibility();
+      syncStatusStepHint();
+      syncStatusNextButtonState();
+    });
+  }
+  if (statusStepInput) {
+    statusStepInput.addEventListener("change", () => {
+      syncStatusStepHint();
+      syncStatusNextButtonState();
+    });
   }
   if (statusDialog) {
     statusDialog.addEventListener("click", (event) => {
       if (event.target === statusDialog) closeStatusDialog();
     });
   }
+  bindDialogEnterSave(statusDialog, saveStatusDialog);
   initDateOptions();
   if (dateCloseBtn) {
     dateCloseBtn.addEventListener("click", closeDateDialog);
+  }
+  if (dateCancelBtn) {
+    dateCancelBtn.addEventListener("click", closeDateDialog);
   }
   if (dateSaveBtn) {
     dateSaveBtn.addEventListener("click", () => {
@@ -258,9 +447,13 @@ function bindEvents() {
       if (event.target === dateDialog) closeDateDialog();
     });
   }
+  bindDialogEnterSave(dateDialog, saveDateDialog);
   initSurfaceOptions();
   if (surfaceCloseBtn) {
     surfaceCloseBtn.addEventListener("click", closeSurfaceDialog);
+  }
+  if (surfaceCancelBtn) {
+    surfaceCancelBtn.addEventListener("click", closeSurfaceDialog);
   }
   if (surfaceSaveBtn) {
     surfaceSaveBtn.addEventListener("click", () => {
@@ -293,6 +486,7 @@ function bindEvents() {
       if (event.target === surfaceDialog) closeSurfaceDialog();
     });
   }
+  bindDialogEnterSave(surfaceDialog, saveSurfaceDialog);
   if (processMinutesInput) {
     processMinutesInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -323,23 +517,34 @@ function bindEvents() {
       render();
     });
   }
-
-  document.getElementById("searchInput").addEventListener("input", (e) => {
-    filters.q = e.target.value.trim().toLowerCase();
-    render();
-  });
-  document.getElementById("filterMonth").addEventListener("change", (e) => {
-    filters.month = e.target.value;
-    render();
-  });
-  document.getElementById("filterMachine").addEventListener("change", (e) => {
-    filters.machine = e.target.value;
-    render();
-  });
-  document.getElementById("filterStatus").addEventListener("change", (e) => {
-    filters.status = e.target.value;
-    render();
-  });
+  const searchInput = document.getElementById("searchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      filters.q = e.target.value.trim().toLowerCase();
+      render();
+    });
+  }
+  const filterMonth = document.getElementById("filterMonth");
+  if (filterMonth) {
+    filterMonth.addEventListener("change", (e) => {
+      filters.month = e.target.value;
+      render();
+    });
+  }
+  const filterMachine = document.getElementById("filterMachine");
+  if (filterMachine) {
+    filterMachine.addEventListener("change", (e) => {
+      filters.machine = e.target.value;
+      render();
+    });
+  }
+  const filterStatus = document.getElementById("filterStatus");
+  if (filterStatus) {
+    filterStatus.addEventListener("change", (e) => {
+      filters.status = e.target.value;
+      render();
+    });
+  }
   if (filterToggleBtn && orderFilters) {
     filterToggleBtn.addEventListener("click", () => {
       const collapsed = orderFilters.classList.toggle("collapsed");
@@ -489,6 +694,65 @@ function updateAuthUi() {
   updatePinnedOffsets();
 }
 
+function loadShiftDefaults() {
+  try {
+    const raw = localStorage.getItem(SHIFT_DEFAULTS_KEY);
+    if (!raw) return { day: {}, night: {} };
+    const parsed = JSON.parse(raw);
+    return {
+      day: parsed?.day || {},
+      night: parsed?.night || {},
+    };
+  } catch (_e) {
+    return { day: {}, night: {} };
+  }
+}
+
+function getShiftTag() {
+  const h = new Date().getHours();
+  return h >= 8 && h < 20 ? "day" : "night";
+}
+
+function getShiftDefaults() {
+  const tag = getShiftTag();
+  return shiftDefaults?.[tag] || {};
+}
+
+function saveShiftDefaultsPatch(patch = {}) {
+  const tag = getShiftTag();
+  const next = {
+    day: { ...(shiftDefaults?.day || {}) },
+    night: { ...(shiftDefaults?.night || {}) },
+  };
+  next[tag] = { ...next[tag], ...patch };
+  shiftDefaults = next;
+  try {
+    localStorage.setItem(SHIFT_DEFAULTS_KEY, JSON.stringify(next));
+  } catch (_e) {
+    // ignore write failure
+  }
+}
+function loadCompactMode() {
+  try {
+    return localStorage.getItem(COMPACT_MODE_KEY) === "1";
+  } catch (_e) {
+    return false;
+  }
+}
+
+function saveCompactMode(enabled) {
+  try {
+    localStorage.setItem(COMPACT_MODE_KEY, enabled ? "1" : "0");
+  } catch (_e) {
+    // ignore write failure
+  }
+}
+
+function applyCompactMode() {
+  document.body.classList.toggle("compact-mode", compactMode);
+  if (compactModeBtn) compactModeBtn.textContent = `紧凑模式: ${compactMode ? "开" : "关"}`;
+  updatePinnedOffsets();
+}
 function canWriteRemote(notify = true) {
   if (!REMOTE_ENABLED) return false;
   if (authSession) return true;
@@ -526,16 +790,10 @@ function createEmptyOrder() {
 async function quickAdd() {
   const orderNoInput = valueOf("qaOrderNo");
   const orderNo = normalizeOrderNoInput(orderNoInput);
-  const drawingNo = valueOf("qaDrawingNo");
   const customer = valueOf("qaCustomer");
-  const name = valueOf("qaName");
-  const qty = valueOf("qaQty");
-  const plannedHours = valueOf("qaHours");
-  const machine = valueOf("qaMachine");
-  const dueDate = valueOf("qaDueDate");
 
-  if (!orderNoInput || !drawingNo) {
-    alert("请至少填写编号和图号");
+  if (!orderNoInput) {
+    alert("请填写编号");
     return;
   }
   if (!orderNo) {
@@ -546,16 +804,10 @@ async function quickAdd() {
   const order = {
     ...createEmptyOrder(),
     orderNo,
-    drawingNo,
     customer,
-    name,
-    qty: normalizeValue("qty", qty),
-    plannedHours: normalizeValue("plannedHours", plannedHours),
-    machine,
-    dueDate,
     status: "待排产",
     programNo: "未出",
-    startTime: new Date().toISOString().slice(0, 10),
+    startTime: "",
   };
   order.processStepCurrent = "";
   order.isDelayed = calcDelayed(order);
@@ -564,6 +816,11 @@ async function quickAdd() {
   await persistOrders({ changed: [order] });
   clearQuickAdd();
   render();
+  focusOrderRow(order.id);
+  setTimeout(() => {
+    const targetCell = tableBody.querySelector(`td[data-id="${order.id}"][data-key="name"]`);
+    if (targetCell) beginEdit(targetCell);
+  }, 0);
 }
 
 async function addBlankRow() {
@@ -571,16 +828,17 @@ async function addBlankRow() {
   orders.push(order);
   await persistOrders({ changed: [order] });
   render();
-  const rows = tableBody.querySelectorAll("tr");
-  const lastRow = rows[rows.length - 1];
-  const firstEditable = lastRow ? lastRow.querySelector("td[data-key='orderNo']") : null;
+  focusOrderRow(order.id);
+  const firstEditable = tableBody.querySelector(`td[data-id="${order.id}"][data-key='orderNo']`);
   if (firstEditable) beginEdit(firstEditable);
 }
 
 function render() {
   ensureTableColGroup();
+  rebuildRuleCellErrors();
   const rows = getFilteredOrders();
   tableBody.innerHTML = "";
+  const now = Date.now();
 
   rows.forEach((o, idx) => {
     const tr = document.createElement("tr");
@@ -589,6 +847,7 @@ function render() {
     const stateClass =
       o.isDelayed === "延期" ? "row-delayed" : o.status === "加工中" ? "row-working" : o.status === "已发货" ? "row-shipped" : "";
     if (stateClass) tr.classList.add(stateClass);
+    if ((rowSavedUntil.get(o.id) || 0) > now) tr.classList.add("row-saved");
 
     tr.appendChild(textCell(idx + 1));
     tr.appendChild(editCell(o, "orderNo"));
@@ -621,6 +880,10 @@ function render() {
     tr.appendChild(opTd);
 
     tableBody.appendChild(tr);
+  });
+
+  rowSavedUntil.forEach((until, id) => {
+    if (until <= now) rowSavedUntil.delete(id);
   });
 
   applyColumnWidths();
@@ -758,7 +1021,11 @@ function editCell(order, key, type = "text") {
   td.dataset.id = order.id;
   const rawValue = order[key] ?? "";
   td.dataset.raw = String(rawValue);
-  td.textContent = formatDisplayValue(key, rawValue);
+  const display = formatDisplayValue(key, rawValue);
+  td.textContent = display;
+  if (key === "note") td.title = String(display || "");
+  appendDirtyCellDot(td, order.id, key);
+  appendCellError(td, order.id, key);
   td.addEventListener("dblclick", () => beginEdit(td, type));
   return td;
 }
@@ -778,8 +1045,9 @@ function previewEditCell(order, key, type = "text") {
   if (attachmentStateByLineId.get(order.id) === true) {
     text.classList.add("preview-text-has-file");
   }
-  text.textContent = formatDisplayValue(key, rawValue);
-  text.title = "点击预览图纸";
+  const display = formatDisplayValue(key, rawValue);
+  text.textContent = display;
+  text.title = display ? `${display}\n点击预览图纸` : "点击预览图纸";
   text.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -790,6 +1058,14 @@ function previewEditCell(order, key, type = "text") {
     event.stopPropagation();
   });
   wrap.appendChild(text);
+  const uploadedAt = attachmentLatestTimeByLineId.get(order.id) || "";
+  if (uploadedAt) {
+    const timeTag = document.createElement("span");
+    timeTag.className = "preview-upload-time";
+    timeTag.textContent = `已上传 ${uploadedAt}`;
+    wrap.appendChild(timeTag);
+  }
+  appendDirtyCellDot(td, order.id, key);
   td.appendChild(wrap);
 
   td.addEventListener("dblclick", () => beginEdit(td, type));
@@ -829,7 +1105,21 @@ function statusCell(order) {
   td.dataset.key = "status";
   td.dataset.id = order.id;
   td.className = "status-cell";
-  td.textContent = formatStatusLabel(order);
+  const wrap = document.createElement("div");
+  wrap.className = "status-pill-wrap";
+  const badge = document.createElement("span");
+  const label = formatStatusLabel(order);
+  badge.className = `status-pill ${getStatusClassName(order.status || "")}`;
+  const dot = document.createElement("span");
+  dot.className = "status-dot";
+  const text = document.createElement("span");
+  text.textContent = label;
+  badge.appendChild(dot);
+  badge.appendChild(text);
+  wrap.appendChild(badge);
+  const progress = buildStatusProgress(order);
+  if (progress) wrap.appendChild(progress);
+  td.appendChild(wrap);
   td.title = "点击设置状态";
   td.addEventListener("click", (event) => {
     event.preventDefault();
@@ -846,6 +1136,7 @@ function dateCell(order, key, label) {
   td.className = "date-cell";
   td.textContent = formatDisplayValue(key, order[key] ?? "");
   td.title = `点击设置${label}（月/日）`;
+  appendCellError(td, order.id, key);
   td.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -874,6 +1165,40 @@ function formatStatusLabel(order) {
   if (base !== "加工中") return base;
   const step = normalizeStepValue(order.processStepCurrent);
   return step ? `加工中第${step}序` : "加工中";
+}
+
+function buildStatusProgress(order) {
+  if (String(order.status || "").trim() !== "加工中") return null;
+  const maxStep = Math.max(1, getMaxProcessStep(order));
+  const currentRaw = Number(normalizeStepValue(order.processStepCurrent) || 0);
+  const current = Math.max(0, Math.min(maxStep, currentRaw));
+  const percent = Math.round((current / maxStep) * 100);
+
+  const progress = document.createElement("div");
+  progress.className = "status-progress";
+  const track = document.createElement("div");
+  track.className = "status-progress-track";
+  const fill = document.createElement("div");
+  fill.className = "status-progress-fill";
+  fill.style.width = `${percent}%`;
+  track.appendChild(fill);
+  const text = document.createElement("span");
+  text.className = "status-progress-text";
+  text.textContent = `${current}/${maxStep}`;
+  progress.appendChild(track);
+  progress.appendChild(text);
+  return progress;
+}
+
+function getStatusClassName(status) {
+  const s = String(status || "").trim();
+  if (s === "待排产") return "status-pending";
+  if (s === "已排产") return "status-planned";
+  if (s === "加工中") return "status-working";
+  if (s === "完成待检") return "status-done";
+  if (s === "返工") return "status-rework";
+  if (s === "已发货") return "status-done";
+  return "status-pending";
 }
 
 function initProcessTimeOptions() {
@@ -987,11 +1312,17 @@ function getDaysInMonthForCurrentYear(month) {
   return new Date(y, m, 0).getDate();
 }
 
+function formatDialogTitle(baseTitle, orderNo = "") {
+  const no = String(orderNo || "").trim();
+  return no ? `${baseTitle} · ${no}` : baseTitle;
+}
+
 function openDateDialog(orderId, key, label) {
   const order = orders.find((x) => x.id === orderId);
   if (!order || !dateDialog) return;
   dateEditingOrderId = orderId;
   dateEditingKey = key;
+  if (dateTitle) dateTitle.textContent = formatDialogTitle(DATE_TITLE_BASE, order.orderNo);
 
   const normalized = normalizeDateOnlyInput(order[key] || "");
   let month = "";
@@ -1025,6 +1356,7 @@ function closeDateDialog() {
   dateDialog.hidden = true;
   dateEditingOrderId = "";
   dateEditingKey = "";
+  if (dateTitle) dateTitle.textContent = DATE_TITLE_BASE;
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -1058,12 +1390,25 @@ async function saveDateDialog() {
   }
   const year = new Date().getFullYear();
   const next = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const nextStart = dateEditingKey === "startTime" ? next : normalizeDateOnlyInput(order.startTime);
+  const nextDue = dateEditingKey === "dueDate" ? next : normalizeDateOnlyInput(order.dueDate);
+  if (nextStart && nextDue && nextDue < nextStart) {
+    const msg = "交期不能早于开始时间";
+    setTransientCellError(order.id, "startTime", msg);
+    setTransientCellError(order.id, "dueDate", msg);
+    render();
+    return;
+  }
+  clearTransientCellError(order.id, "startTime");
+  clearTransientCellError(order.id, "dueDate");
   if (order[dateEditingKey] !== next) {
     order[dateEditingKey] = next;
     if (dateEditingKey === "dueDate") {
       order.isDelayed = calcDelayed(order);
     }
     await persistOrders({ changed: [order] });
+    markRowSaved(order.id);
+    showSaveFeedback();
     render();
   }
   closeDateDialog();
@@ -1078,10 +1423,14 @@ async function clearDateDialogValue() {
   }
   if (order[dateEditingKey] !== "") {
     order[dateEditingKey] = "";
+    clearTransientCellError(order.id, "startTime");
+    clearTransientCellError(order.id, "dueDate");
     if (dateEditingKey === "dueDate") {
       order.isDelayed = calcDelayed(order);
     }
     await persistOrders({ changed: [order] });
+    markRowSaved(order.id);
+    showSaveFeedback();
     render();
   }
   closeDateDialog();
@@ -1091,7 +1440,9 @@ function openSurfaceDialog(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order || !surfaceDialog) return;
   surfaceEditingOrderId = orderId;
-  const current = String(order.surface || "").trim();
+  if (surfaceTitle) surfaceTitle.textContent = formatDialogTitle(SURFACE_TITLE_BASE, order.orderNo);
+  const defaults = getShiftDefaults();
+  const current = String(order.surface || defaults.surface || "").trim();
   const existsInPreset = SURFACE_OPTIONS.includes(current);
   if (surfacePresetInput) surfacePresetInput.value = existsInPreset ? current : "";
   if (surfaceCustomInput) surfaceCustomInput.value = existsInPreset ? "" : current;
@@ -1111,6 +1462,7 @@ function closeSurfaceDialog() {
   if (!surfaceDialog) return;
   surfaceDialog.hidden = true;
   surfaceEditingOrderId = "";
+  if (surfaceTitle) surfaceTitle.textContent = SURFACE_TITLE_BASE;
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -1139,8 +1491,11 @@ async function saveSurfaceDialog() {
   if (String(order.surface || "") !== next) {
     order.surface = next;
     await persistOrders({ changed: [order] });
+    markRowSaved(order.id);
+    showSaveFeedback();
     render();
   }
+  if (next) saveShiftDefaultsPatch({ surface: next });
   closeSurfaceDialog();
 }
 
@@ -1154,6 +1509,8 @@ async function clearSurfaceDialogValue() {
   if (String(order.surface || "") !== "") {
     order.surface = "";
     await persistOrders({ changed: [order] });
+    markRowSaved(order.id);
+    showSaveFeedback();
     render();
   }
   closeSurfaceDialog();
@@ -1162,7 +1519,7 @@ async function clearSurfaceDialogValue() {
 function getMaxProcessStep(order) {
   const max = Number(String(order?.processName || "").trim());
   if (Number.isFinite(max) && max >= 1) return Math.min(6, Math.floor(max));
-  return 6;
+  return 1;
 }
 
 function normalizeStepValue(value) {
@@ -1192,12 +1549,15 @@ function syncStatusStepVisibility() {
   if (!statusInput || !statusStepWrap) return;
   const show = statusInput.value === "加工中";
   statusStepWrap.style.display = show ? "grid" : "none";
+  if (statusNextBtn) statusNextBtn.style.display = show || statusInput.value ? "inline-flex" : "none";
+  syncStatusNextButtonState();
 }
 
 function openStatusDialog(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order || !statusDialog) return;
   statusEditingOrderId = orderId;
+  if (statusTitle) statusTitle.textContent = formatDialogTitle(STATUS_TITLE_BASE, order.orderNo);
   if (statusInput) statusInput.value = order.status || "待排产";
   const maxStep = getMaxProcessStep(order);
   rebuildStatusStepOptions(maxStep);
@@ -1205,6 +1565,7 @@ function openStatusDialog(orderId) {
   const clampedStep = normalizedStep && Number(normalizedStep) <= maxStep ? normalizedStep : "";
   if (statusStepInput) statusStepInput.value = clampedStep;
   syncStatusStepVisibility();
+  syncStatusStepHint();
   if (statusSubTitle) {
     const parts = [];
     if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
@@ -1221,6 +1582,8 @@ function closeStatusDialog() {
   if (!statusDialog) return;
   statusDialog.hidden = true;
   statusEditingOrderId = "";
+  if (statusTitle) statusTitle.textContent = STATUS_TITLE_BASE;
+  if (statusProcessContext) statusProcessContext.textContent = "当前第0序 / 共1序 / 剩余1序";
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -1259,20 +1622,122 @@ async function saveStatusDialog() {
   order.processStepCurrent = nextStep;
   if (changed) {
     await persistOrders({ changed: [order] });
+    markRowSaved(order.id);
+    showSaveFeedback();
     render();
   }
   closeStatusDialog();
 }
 
+function applyStatusNextStep() {
+  if (!statusInput) return;
+  const current = String(statusInput.value || "").trim() || "待排产";
+  if (current === "待排产") {
+    statusInput.value = "已排产";
+    syncStatusStepVisibility();
+    syncStatusStepHint();
+    return;
+  }
+  if (current === "已排产") {
+    statusInput.value = "加工中";
+    if (statusStepInput && !normalizeStepValue(statusStepInput.value)) statusStepInput.value = "1";
+    syncStatusStepVisibility();
+    syncStatusStepHint();
+    return;
+  }
+  if (current === "加工中") {
+    const maxStep = statusEditingOrderId ? getMaxProcessStep(orders.find((x) => x.id === statusEditingOrderId) || {}) : 1;
+    const nowStep = Number(normalizeStepValue(statusStepInput?.value || "1") || 1);
+    if (nowStep < maxStep) {
+      if (statusStepInput) statusStepInput.value = String(nowStep + 1);
+      syncStatusStepHint();
+      return;
+    }
+    statusInput.value = "完成待检";
+    if (statusStepInput) statusStepInput.value = "";
+    syncStatusStepVisibility();
+    syncStatusStepHint();
+    return;
+  }
+  if (current === "完成待检") {
+    statusInput.value = "已发货";
+    if (statusStepInput) statusStepInput.value = "";
+    syncStatusStepVisibility();
+    syncStatusStepHint();
+    return;
+  }
+}
+
+function syncStatusStepHint() {
+  if (!statusStepHint || !statusInput) return;
+  if (statusInput.value !== "加工中") {
+    statusStepHint.textContent = "";
+    syncStatusProcessContext();
+    return;
+  }
+  const order = orders.find((x) => x.id === statusEditingOrderId);
+  const maxStep = getMaxProcessStep(order || {});
+  const currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
+  if (!currentStep) {
+    statusStepHint.textContent = `当前未选择序号，共${maxStep}序。`;
+    syncStatusProcessContext();
+    return;
+  }
+  const remain = Math.max(0, maxStep - currentStep);
+  statusStepHint.textContent = `当前第${currentStep}序，剩余${remain}序。`;
+  syncStatusProcessContext();
+}
+
+function syncStatusProcessContext() {
+  if (!statusProcessContext) return;
+  const order = orders.find((x) => x.id === statusEditingOrderId) || {};
+  const maxStep = getMaxProcessStep(order);
+  const status = String(statusInput?.value || order.status || "").trim();
+  let currentStep = 0;
+  if (status === "加工中") {
+    currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
+  } else if (String(order.status || "").trim() === "加工中") {
+    currentStep = Number(normalizeStepValue(order.processStepCurrent) || 0);
+  }
+  currentStep = Math.max(0, Math.min(maxStep, currentStep));
+  const remain = Math.max(0, maxStep - currentStep);
+  statusProcessContext.textContent = `当前第${currentStep}序 / 共${maxStep}序 / 剩余${remain}序`;
+}
+
+function syncStatusNextButtonState() {
+  if (!statusNextBtn || !statusInput) return;
+  const current = String(statusInput.value || "").trim() || "待排产";
+  statusNextBtn.disabled = current === "已发货";
+  if (current === "待排产") {
+    statusNextBtn.textContent = "下一步：已排产";
+    return;
+  }
+  if (current === "已排产") {
+    statusNextBtn.textContent = "下一步：加工中";
+    return;
+  }
+  if (current === "加工中") {
+    statusNextBtn.textContent = "下一步：推进序号";
+    return;
+  }
+  if (current === "完成待检") {
+    statusNextBtn.textContent = "下一步：已发货";
+    return;
+  }
+  statusNextBtn.textContent = "已完成";
+}
+
 function openProcessTimeDialog(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order || !processTimeDialog) return;
+  const defaults = getShiftDefaults();
   processTimeEditingOrderId = orderId;
+  if (processTimeTitle) processTimeTitle.textContent = formatDialogTitle(PROCESS_TIME_TITLE_BASE, order.orderNo);
   if (processProgramInput) processProgramInput.value = order.programNo || "未出";
   if (processNameInput) processNameInput.value = order.processName || "";
   if (processMinutesInput) processMinutesInput.value = order.plannedHours === "" ? "" : String(order.plannedHours);
-  if (processMachineInput) processMachineInput.value = order.machine || "";
-  if (processLatheInput) processLatheInput.value = order.lathe || "";
+  if (processMachineInput) processMachineInput.value = order.machine || defaults.machine || "";
+  if (processLatheInput) processLatheInput.value = order.lathe || defaults.lathe || "";
   if (processTimeSubTitle) {
     const parts = [];
     if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
@@ -1289,6 +1754,7 @@ function closeProcessTimeDialog() {
   if (!processTimeDialog) return;
   processTimeDialog.hidden = true;
   processTimeEditingOrderId = "";
+  if (processTimeTitle) processTimeTitle.textContent = PROCESS_TIME_TITLE_BASE;
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -1327,6 +1793,7 @@ async function saveProcessTimeDialog() {
   target.plannedHours = nextMinutes;
   target.machine = nextMachine;
   target.lathe = nextLathe;
+  saveShiftDefaultsPatch({ machine: nextMachine, lathe: nextLathe });
   const maxStep = getMaxProcessStep(target);
   const currentStep = normalizeStepValue(target.processStepCurrent);
   if (currentStep && Number(currentStep) > maxStep) {
@@ -1335,6 +1802,8 @@ async function saveProcessTimeDialog() {
   if (String(target.processStepCurrent || "") !== prevStep) changed = true;
   if (changed) {
     await persistOrders({ changed: [target] });
+    markRowSaved(target.id);
+    showSaveFeedback();
     render();
   }
   closeProcessTimeDialog();
@@ -1343,6 +1812,7 @@ async function saveProcessTimeDialog() {
 function beginEdit(td, type = "text") {
   if (td.classList.contains("editing")) return;
   const oldValue = td.dataset.raw ?? td.textContent;
+  const orderId = td.dataset.id;
   const key = td.dataset.key;
   td.classList.add("editing");
   td.innerHTML = "";
@@ -1362,29 +1832,56 @@ function beginEdit(td, type = "text") {
   td.appendChild(input);
   input.focus();
   input.select();
+  const refreshDirtyMark = () => {
+    const dirty = String(input.value ?? "") !== String(oldValue ?? "");
+    setDirtyCellMark(orderId, key, dirty);
+  };
 
   const save = async () => {
     td.classList.remove("editing");
-    await updateOrder(td.dataset.id, key, input.value);
+    const ok = await updateOrder(orderId, key, input.value);
+    if (ok) setDirtyCellMark(orderId, key, false);
   };
 
+  input.addEventListener("input", refreshDirtyMark);
   input.addEventListener("blur", () => {
     void save();
   });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      void save().then(() => jumpToNextRowSameColumn(td));
+      void save().then(() => jumpToNextPreferredField(td));
     }
     if (e.key === "Escape") {
+      setDirtyCellMark(orderId, key, false);
       td.classList.remove("editing");
       render();
     }
   });
 }
 
-function jumpToNextRowSameColumn(currentTd) {
-  const row = currentTd.parentElement;
+function jumpToNextPreferredField(currentTd) {
+  const preferred = ["orderNo", "customer", "name", "drawingNo", "qty", "surface", "note"];
+  const currentKey = String(currentTd?.dataset?.key || "");
+  const row = currentTd?.parentElement;
+  if (!row) return;
+
+  const index = preferred.indexOf(currentKey);
+  if (index >= 0) {
+    for (let i = index + 1; i < preferred.length; i += 1) {
+      const next = row.querySelector(`td[data-key="${preferred[i]}"]`);
+      if (next) {
+        beginEdit(next);
+        return;
+      }
+    }
+    const nextRow = row.nextElementSibling;
+    if (!nextRow) return;
+    const first = nextRow.querySelector('td[data-key="orderNo"]');
+    if (first) beginEdit(first);
+    return;
+  }
+
   const nextRow = row.nextElementSibling;
   if (!nextRow) return;
   const colIndex = [...row.children].indexOf(currentTd);
@@ -1418,21 +1915,68 @@ function selectCell(order, key, options) {
 
 async function updateOrder(id, key, value) {
   const target = orders.find((o) => o.id === id);
-  if (!target) return;
+  if (!target) return false;
 
+  const raw = String(value ?? "").trim();
   const normalized = normalizeValue(key, value);
-  if ((key === "dueDate" || key === "startTime") && (value || "").trim() !== "" && normalized === "") {
-    alert(key === "dueDate" ? "交期格式无效，请输入 YYYY-MM-DD 或 M-D（如 2-20）" : "开始时间格式无效，请输入 YYYY-MM-DD 或 M-D（如 2-20）");
+  if (key === "qty" && raw !== "" && !Number.isFinite(Number(raw))) {
+    setDirtyCellMark(id, key, true);
+    setTransientCellError(id, "qty", "数量必须为数字");
     render();
-    return;
+    return false;
+  }
+  if (key === "orderNo") {
+    if (raw !== "" && normalized === "") {
+      setDirtyCellMark(id, key, true);
+      setTransientCellError(id, "orderNo", "订单号格式无效");
+      render();
+      return false;
+    }
+    const dup = normalized
+      ? orders.some((o) => o.id !== id && String(o.orderNo || "").trim() === normalized)
+      : false;
+    if (dup) {
+      setDirtyCellMark(id, key, true);
+      setTransientCellError(id, "orderNo", "订单号重复");
+      render();
+      return false;
+    }
+  }
+  if ((key === "dueDate" || key === "startTime") && raw !== "" && normalized === "") {
+    setDirtyCellMark(id, key, true);
+    setTransientCellError(id, key, key === "dueDate" ? "交期格式无效" : "开始时间格式无效");
+    render();
+    return false;
   }
 
-  if ((target[key] ?? "") === normalized) return;
+  clearTransientCellError(id, key);
+  if ((target[key] ?? "") === normalized) {
+    setDirtyCellMark(id, key, false);
+    return true;
+  }
+  if (key === "startTime" || key === "dueDate") {
+    const nextStart = key === "startTime" ? normalized : normalizeDateOnlyInput(target.startTime);
+    const nextDue = key === "dueDate" ? normalized : normalizeDateOnlyInput(target.dueDate);
+    if (nextStart && nextDue && nextDue < nextStart) {
+      const msg = "交期不能早于开始时间";
+      setDirtyCellMark(id, key, true);
+      setTransientCellError(id, "startTime", msg);
+      setTransientCellError(id, "dueDate", msg);
+      render();
+      return false;
+    }
+    clearTransientCellError(id, "startTime");
+    clearTransientCellError(id, "dueDate");
+  }
   target[key] = normalized;
   target.isDelayed = calcDelayed(target);
 
   await persistOrders({ changed: [target] });
+  markRowSaved(id);
+  showSaveFeedback();
+  setDirtyCellMark(id, key, false);
   render();
+  return true;
 }
 
 function normalizeValue(key, value) {
@@ -1502,7 +2046,7 @@ function getFilteredOrders() {
     const monthOk = !filters.month || getMonthFromOrderNo(effectiveOrderNo) === filters.month;
     const mOk = !filters.machine || o.machine === filters.machine;
     const sOk = !filters.status || o.status === filters.status;
-    const abnormalOk = !abnormalOnly || o.isDelayed === "延期" || o.status === "返工" || isDueToday(o.dueDate);
+    const abnormalOk = !abnormalOnly || isAbnormalOrder(o);
     return qOk && monthOk && mOk && sOk && abnormalOk;
   });
 }
@@ -1526,34 +2070,19 @@ function getMonthFromOrderNo(v) {
 }
 
 function renderKpis(data) {
-  const nearDue = data.filter((x) => x.status !== "已发货" && isNearDue(x.dueDate, 3)).length;
-  const inProduction = data.filter((x) => x.status !== "已发货").length;
+  const totalOrders = data.length;
+  const inProduction = data.filter((x) => x.status === "加工中").length;
   const dueToday = data.filter((x) => isDueToday(x.dueDate)).length;
+  const abnormalCount = data.filter((x) => isAbnormalOrder(x)).length;
 
-  document.getElementById("kpiPlannedHours").textContent = String(nearDue);
-  document.getElementById("kpiWorkingHours").textContent = String(inProduction);
-  document.getElementById("kpiDelayedCount").textContent = String(dueToday);
-  setKpiClock();
+  document.getElementById("kpiTotalOrders").textContent = String(totalOrders);
+  document.getElementById("kpiInProduction").textContent = String(inProduction);
+  document.getElementById("kpiDueToday").textContent = String(dueToday);
+  document.getElementById("kpiAbnormalCount").textContent = String(abnormalCount);
 }
 
-function startKpiClock() {
-  setKpiClock();
-  setInterval(setKpiClock, 1000);
-}
-
-function setKpiClock() {
-  const target = document.getElementById("kpiCompletion");
-  if (!target) return;
-  const WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mon = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-  const weekday = WEEKDAYS[now.getDay()];
-  target.innerHTML = `${yyyy}-${mon}-${day} ${hh}:${mm}:${ss} <span class="kpi-weekday">${weekday}</span>`;
+function isAbnormalOrder(order) {
+  return order.isDelayed === "延期" || order.status === "返工" || isDueToday(order.dueDate);
 }
 
 function isDueToday(dueDate) {
@@ -1562,18 +2091,6 @@ function isDueToday(dueDate) {
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   return normalized === today;
-}
-
-function isNearDue(dueDate, withinDays = 3) {
-  const normalized = normalizeDateOnlyInput(dueDate);
-  if (!normalized) return false;
-  const due = new Date(`${normalized}T00:00:00`);
-  if (Number.isNaN(due.getTime())) return false;
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const end = new Date(start);
-  end.setDate(end.getDate() + Math.max(0, withinDays));
-  return due >= start && due <= end;
 }
 
 async function persistOrders({ changed = [], deletedId = null } = {}) {
@@ -1832,8 +2349,9 @@ function valueOf(id) {
 }
 
 function clearQuickAdd() {
-  ["qaOrderNo", "qaDrawingNo", "qaCustomer", "qaName", "qaQty", "qaHours", "qaMachine", "qaDueDate"].forEach((id) => {
-    document.getElementById(id).value = "";
+  ["qaOrderNo", "qaCustomer"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
   });
 }
 
@@ -1893,7 +2411,7 @@ async function openLinePreview(orderId) {
   try {
     const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
     const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-    setAttachmentState(orderId, items.length > 0);
+    setAttachmentStateFromItems(orderId, items);
     if (items.length === 0) {
       alert("该零件暂无图纸，请先上传。");
       await openAttachmentDialog(orderId);
@@ -2027,7 +2545,7 @@ async function loadOrderFiles(orderId) {
   try {
     const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
     attachmentItems = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-    setAttachmentState(orderId, attachmentItems.length > 0);
+    setAttachmentStateFromItems(orderId, attachmentItems);
   } catch (e) {
     const detail = e?.message || "未知错误";
     alert(`加载附件失败：${detail}`);
@@ -2070,6 +2588,7 @@ async function uploadAttachmentFromInput(event) {
     await apiFetchJson("/api/files/upload", { method: "POST", body: form });
     setAttachmentState(attachmentPanelOrderId, true);
     await loadOrderFiles(attachmentPanelOrderId);
+    render();
   } catch (e) {
     const detail = e?.message || "未知错误";
     alert(`上传失败：${detail}`);
@@ -2083,8 +2602,9 @@ async function deleteOrderFile(item) {
   try {
     await apiFetchJson(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
     attachmentItems = attachmentItems.filter((x) => x.id !== id);
-    setAttachmentState(attachmentPanelOrderId, attachmentItems.length > 0);
+    setAttachmentStateFromItems(attachmentPanelOrderId, attachmentItems);
     renderAttachmentList();
+    render();
   } catch (e) {
     const detail = e?.message || "未知错误";
     alert(`删除失败：${detail}`);
@@ -2168,6 +2688,25 @@ function setAttachmentState(orderId, hasFiles) {
   syncPreviewCellState(orderId, Boolean(hasFiles));
 }
 
+function setAttachmentStateFromItems(orderId, items) {
+  const list = Array.isArray(items) ? items : [];
+  const hasFiles = list.length > 0;
+  setAttachmentState(orderId, hasFiles);
+  if (!hasFiles) {
+    attachmentLatestTimeByLineId.delete(orderId);
+    syncPreviewUploadedTime(orderId, "");
+    return;
+  }
+  const latest = list
+    .map((x) => x?.created_at || x?.createdAt || "")
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const short = formatDateTimeShort(latest || "");
+  attachmentLatestTimeByLineId.set(orderId, short);
+  syncPreviewUploadedTime(orderId, short);
+}
+
 function syncPreviewCellState(orderId, hasFiles) {
   const selector = `td[data-id="${orderId}"][data-key="name"] .preview-text-link, td[data-id="${orderId}"][data-key="drawingNo"] .preview-text-link`;
   const nodes = document.querySelectorAll(selector);
@@ -2177,12 +2716,31 @@ function syncPreviewCellState(orderId, hasFiles) {
   });
 }
 
-async function warmupAttachmentStates(rows) {
+function syncPreviewUploadedTime(orderId, uploadedAt = "") {
+  const cells = document.querySelectorAll(`td[data-id="${orderId}"][data-key="name"], td[data-id="${orderId}"][data-key="drawingNo"]`);
+  cells.forEach((cell) => {
+    const wrap = cell.querySelector(".cell-with-action");
+    if (!wrap) return;
+    let node = wrap.querySelector(".preview-upload-time");
+    if (!uploadedAt) {
+      if (node) node.remove();
+      return;
+    }
+    if (!node) {
+      node = document.createElement("span");
+      node.className = "preview-upload-time";
+      wrap.appendChild(node);
+    }
+    node.textContent = `已上传 ${uploadedAt}`;
+  });
+}
+
+async function warmupAttachmentStates(rows, forceAll = false) {
   if (!UPLOAD_API_BASE) return;
   const targets = rows
     .map((row) => row.id)
-    .filter((id) => id && !attachmentStateByLineId.has(id) && !attachmentStateLoading.has(id))
-    .slice(0, 12);
+    .filter((id) => id && (forceAll || !attachmentStateByLineId.has(id)) && !attachmentStateLoading.has(id))
+    .slice(0, forceAll ? 200 : 12);
   if (targets.length === 0) return;
   await Promise.all(targets.map((id) => fetchAndSetAttachmentState(id)));
 }
@@ -2192,9 +2750,10 @@ async function fetchAndSetAttachmentState(orderId) {
   try {
     const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
     const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-    setAttachmentState(orderId, items.length > 0);
+    setAttachmentStateFromItems(orderId, items);
   } catch (_e) {
-    // ignore status warmup failures, keep default style
+    attachmentStateByLineId.set(orderId, false);
+    attachmentLatestTimeByLineId.delete(orderId);
   } finally {
     attachmentStateLoading.delete(orderId);
   }
@@ -2234,6 +2793,17 @@ function formatDateTime(value) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mi = String(d.getMinutes()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+function formatDateTimeShort(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${mm}-${dd} ${hh}:${mi}`;
 }
 
 async function apiFetchJson(path, options = {}) {
@@ -2523,10 +3093,14 @@ function setupColumnResizers() {
   ensureTableColGroup();
   const headers = document.querySelectorAll("#orderTable thead th");
   headers.forEach((th, index) => {
+    const colIndex = index + 1;
+    const fixed = isFixedWidthColumn(colIndex);
+    th.classList.toggle("col-fixed", fixed);
+    if (fixed) return;
     if (th.querySelector(".col-resizer")) return;
     const handle = document.createElement("span");
     handle.className = "col-resizer";
-    handle.addEventListener("mousedown", (e) => startResize(e, index + 1));
+    handle.addEventListener("mousedown", (e) => startResize(e, colIndex));
     th.appendChild(handle);
   });
   applyColumnWidths();
@@ -2555,6 +3129,7 @@ function ensureTableColGroup() {
 }
 
 function startResize(event, colIndex) {
+  if (isFixedWidthColumn(colIndex)) return;
   event.preventDefault();
   const header = document.querySelector(`#orderTable thead th:nth-child(${colIndex})`);
   if (!header) return;
@@ -2579,27 +3154,47 @@ function startResize(event, colIndex) {
 }
 
 function setColumnWidth(colIndex, px) {
+  const fixedPx = getFixedColumnWidth(colIndex);
+  const targetPx = Number.isFinite(fixedPx) ? fixedPx : px;
+  if (!Number.isFinite(targetPx)) return;
   const col = document.querySelector(`#orderTable colgroup col:nth-child(${colIndex})`);
-  if (col) col.style.width = `${px}px`;
+  if (col) col.style.width = `${targetPx}px`;
 
   // Keep sticky/fixed columns and headers stable in all browsers.
   const cells = document.querySelectorAll(`#orderTable tr > *:nth-child(${colIndex})`);
   cells.forEach((cell) => {
-    cell.style.width = `${px}px`;
-    cell.style.minWidth = `${px}px`;
-    cell.style.maxWidth = `${px}px`;
+    cell.style.width = `${targetPx}px`;
+    cell.style.minWidth = `${targetPx}px`;
+    cell.style.maxWidth = `${targetPx}px`;
   });
 }
 
 function applyColumnWidths() {
+  Object.keys(FIXED_COL_WIDTHS).forEach((k) => {
+    const col = Number(k);
+    const px = Number(FIXED_COL_WIDTHS[k]);
+    if (Number.isFinite(col) && Number.isFinite(px)) {
+      setColumnWidth(col, px);
+    }
+  });
   Object.keys(columnWidths).forEach((k) => {
     const col = Number(k);
     const px = Number(columnWidths[k]);
+    if (isFixedWidthColumn(col)) return;
     if (Number.isFinite(col) && Number.isFinite(px)) {
       setColumnWidth(col, px);
     }
   });
   queueStickyColumnOffsets();
+}
+
+function isFixedWidthColumn(colIndex) {
+  return Number.isFinite(Number(colIndex)) && Object.prototype.hasOwnProperty.call(FIXED_COL_WIDTHS, String(colIndex));
+}
+
+function getFixedColumnWidth(colIndex) {
+  if (!isFixedWidthColumn(colIndex)) return NaN;
+  return Number(FIXED_COL_WIDTHS[String(colIndex)]);
 }
 
 function updateStickyColumnOffsets() {
@@ -2641,4 +3236,11 @@ function loadColumnWidths() {
     return {};
   }
 }
+
+
+
+
+
+
+
 

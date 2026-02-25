@@ -21,11 +21,6 @@
       <div class="actions-row actions-main-row">
         <button id="reconnectBtn" class="btn btn-secondary" type="button">重连云端</button>
         <a class="btn btn-secondary" href="material.html">物料页面</a>
-        <button id="saveBtn" class="btn btn-secondary">导出Excel</button>
-        <label class="btn upload-btn">
-          导入Excel
-          <input id="importInput" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden />
-        </label>
       </div>
     </div>
   </header>
@@ -33,30 +28,35 @@
   <main>
     <section class="kpi-grid" id="kpiGrid">
       <article class="kpi-card kpi-b">
-        <span>在制订单</span>
-        <strong id="kpiWorkingHours">0</strong>
+        <span>总单</span>
+        <strong id="kpiTotalOrders">0</strong>
       </article>
       <article class="kpi-card kpi-a">
-        <span>临近交期</span>
-        <strong id="kpiPlannedHours">0</strong>
+        <span>加工中</span>
+        <strong id="kpiInProduction">0</strong>
       </article>
       <article class="kpi-card kpi-c">
         <span>今日交期订单</span>
-        <strong id="kpiDelayedCount">0</strong>
+        <strong id="kpiDueToday">0</strong>
       </article>
       <article class="kpi-card kpi-d">
-        <span>当前时间</span>
-        <strong id="kpiCompletion">0</strong>
+        <span>异常数</span>
+        <strong id="kpiAbnormalCount">0</strong>
       </article>
     </section>
+    <section class="board-wrap">
+      <div class="board-head">
+        <h2>订单进度看板</h2>
+        <div id="boardSummary" class="board-summary"></div>
+      </div>
+      <div id="kanbanBoard" class="kanban-board"></div>
+    </section>
 
-    <section class="filters order-filters" id="orderFilters">
-      <button id="filterToggleBtn" class="btn btn-secondary filter-toggle" type="button" aria-expanded="true">收起筛选</button>
-      <div class="filter-fields" id="orderFilterFields">
-        <input id="searchInput" placeholder="搜索订单号/图号/客户" />
-        <button id="abnormalFilterBtn" class="btn" type="button">只看异常</button>
+    <h2 class="detail-title">订单明细表</h2>
+    <section class="order-control-row">
+      <div class="order-control-left">
         <select id="filterMonth" title="按订单号月份筛选">
-          <option value="">全部月份</option>
+          <option value="">显示全部</option>
           <option value="01">01月</option>
           <option value="02">02月</option>
           <option value="03">03月</option>
@@ -70,44 +70,20 @@
           <option value="11">11月</option>
           <option value="12">12月</option>
         </select>
-        <select id="filterMachine">
-          <option value="">全部机台</option>
-          <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
-        </select>
-        <select id="filterStatus">
-          <option value="">全部状态</option>
-          <option>待排产</option><option>已排产</option><option>加工中</option><option>完成待检</option><option>返工</option><option>已发货</option>
-        </select>
-      </div>
-    </section>
-
-    <section class="board-wrap">
-      <div class="board-head">
-        <h2>订单进度看板</h2>
-        <div id="boardSummary" class="board-summary"></div>
-      </div>
-      <div id="kanbanBoard" class="kanban-board"></div>
-    </section>
-
-    <section class="toolbar">
-      <div class="quick-add">
         <input id="qaOrderNo" placeholder="编号(如030)" />
         <input id="qaCustomer" placeholder="客户" />
-        <input id="qaName" placeholder="名称" />
-        <input id="qaDrawingNo" placeholder="图号" />
-        <input id="qaQty" type="number" min="1" placeholder="数量" />
-        <input id="qaHours" type="number" min="0" step="1" placeholder="预计工时(分钟)" />
-        <select id="qaMachine">
-          <option value="">机台</option>
-          <option>CNC1</option><option>CNC2</option><option>CNC3</option><option>CNC4</option><option>CNC5</option>
-        </select>
-        <input id="qaDueDate" type="date" />
-        <button id="quickAddBtn" class="btn btn-primary">快速添加</button>
-        <button id="addRowBtn" class="btn">新增订单 (Ctrl+N)</button>
+        <button id="quickAddBtn" class="btn btn-primary">新增订单</button>
+      </div>
+      <div class="order-control-right">
+        <button id="compactModeBtn" class="btn btn-secondary" type="button">紧凑模式: 关</button>
+        <button id="saveBtn" class="btn btn-secondary" type="button">导出Excel</button>
+        <label class="btn btn-secondary upload-btn">
+          导入Excel
+          <input id="importInput" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden />
+        </label>
+        <span id="saveFeedback" class="save-feedback" aria-live="polite"></span>
       </div>
     </section>
-
-    <h2 class="detail-title">订单明细表</h2>
 
     <section class="table-wrap" id="tableWrap">
       <table id="orderTable">
@@ -131,6 +107,9 @@
         <tbody id="tableBody"></tbody>
       </table>
     </section>
+    <div class="table-footer-actions">
+      <button id="addBlankBottomBtn" class="btn btn-secondary" type="button">添加空白行</button>
+    </div>
 
     <p class="hint">提示：双击单元格可编辑；Enter 保存并跳转下一行同列；</p>
     <div class="scroll-tail" aria-hidden="true"></div>
@@ -195,6 +174,7 @@
         </label>
       </div>
       <div class="process-time-actions">
+        <button id="processTimeCancelBtn" class="btn btn-secondary" type="button">取消</button>
         <button id="processTimeClearBtn" class="btn btn-secondary" type="button">清空</button>
         <button id="processTimeSaveBtn" class="btn btn-primary" type="button">保存</button>
       </div>
@@ -208,6 +188,7 @@
         <button id="statusCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
       <p id="statusSubTitle" class="dialog-subtitle"></p>
+      <p id="statusProcessContext" class="status-process-context">当前第0序 / 共1序 / 剩余1序</p>
       <div class="status-form">
         <label class="status-field">
           <span>状态</span>
@@ -217,8 +198,11 @@
           <span>加工序号</span>
           <select id="statusStepInput"></select>
         </label>
+        <p id="statusStepHint" class="status-step-hint"></p>
       </div>
       <div class="status-actions">
+        <button id="statusCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="statusNextBtn" class="btn btn-secondary" type="button">下一步</button>
         <button id="statusSaveBtn" class="btn btn-primary" type="button">保存</button>
       </div>
     </section>
@@ -242,6 +226,7 @@
         </label>
       </div>
       <div class="date-actions">
+        <button id="dateCancelBtn" class="btn btn-secondary" type="button">取消</button>
         <button id="dateClearBtn" class="btn btn-secondary" type="button">清空</button>
         <button id="dateSaveBtn" class="btn btn-primary" type="button">保存</button>
       </div>
@@ -266,6 +251,7 @@
         </label>
       </div>
       <div class="surface-actions">
+        <button id="surfaceCancelBtn" class="btn btn-secondary" type="button">取消</button>
         <button id="surfaceClearBtn" class="btn btn-secondary" type="button">清空</button>
         <button id="surfaceSaveBtn" class="btn btn-primary" type="button">保存</button>
       </div>
