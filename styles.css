@@ -260,14 +260,64 @@ main {
 
 .order-control-left {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  grid-template-columns: 110px 130px minmax(320px, 1fr) 120px 120px 120px;
   gap: 8px;
   align-items: center;
+  justify-content: start;
 }
 
 .order-control-left > * {
   width: 100%;
 }
+
+.order-control-left #filterMonth {
+  max-width: 110px;
+}
+
+.order-control-left #filterOrderNo {
+  max-width: 130px;
+}
+
+.status-color-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid #315a88;
+  background: rgba(13, 37, 66, 0.86);
+  overflow-x: auto;
+}
+
+.status-color-btn {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 6px 8px;
+  color: #e6f0ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0.82;
+}
+
+.status-color-btn:hover {
+  opacity: 0.95;
+}
+
+.status-color-btn.active {
+  opacity: 1;
+  border-color: #dbe9ff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.status-color-btn.is-all { background: #50627a; }
+.status-color-btn.is-yellow { background: #b58900; }
+.status-color-btn.is-blue { background: #2f72c8; }
+.status-color-btn.is-orange { background: #cb7a15; }
+.status-color-btn.is-green { background: #2e8b57; }
+.status-color-btn.is-red { background: #be3a3a; }
 
 .order-control-right {
   display: flex;

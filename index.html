@@ -1,10 +1,10 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>元源紫泽 生产管理系统</title>
-  <link rel="stylesheet" href="styles.css?v=20260226c" />
+  <link rel="stylesheet" href="styles.css?v=20260226i" />
 </head>
 <body>
   <header class="topbar">
@@ -70,6 +70,15 @@
           <option value="11">11月</option>
           <option value="12">12月</option>
         </select>
+        <input id="filterOrderNo" placeholder="按订单号搜索" />
+        <div id="statusColorFilters" class="status-color-filters" title="按状态颜色筛选" aria-label="按状态颜色筛选">
+          <button class="status-color-btn is-all" type="button" data-color="" title="全部">全部</button>
+          <button class="status-color-btn is-yellow" type="button" data-color="yellow" title="待排产">待排</button>
+          <button class="status-color-btn is-blue" type="button" data-color="blue" title="已排产">已排</button>
+          <button class="status-color-btn is-orange" type="button" data-color="orange" title="加工中">加工</button>
+          <button class="status-color-btn is-green" type="button" data-color="green" title="完成待检/可发货">完成</button>
+          <button class="status-color-btn is-red" type="button" data-color="red" title="返工">返工</button>
+        </div>
         <input id="qaOrderNo" placeholder="编号(如030)" />
         <input id="qaCustomer" placeholder="客户" />
         <button id="quickAddBtn" class="btn btn-primary">新增订单</button>
@@ -335,23 +344,21 @@
     </section>
   </div>
 
-  <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
+  <button id="backTopBtn" class="back-top-btn" title="返回顶部">返回顶部</button>
 
-  <script src="xlsx.full.min.js?v=20260226c"></script>
-  <script src="supabase.min.js?v=20260226c"></script>
-  <script src="config.prod.js?v=20260226c"></script>
+  <script src="xlsx.full.min.js?v=20260226i"></script>
+  <script src="supabase.min.js?v=20260226i"></script>
+  <script src="config.prod.js?v=20260226i"></script>
   <script>
     (function () {
       var h = location.hostname;
       var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
       if (!isLocal) return;
       var s = document.createElement("script");
-      s.src = "config.js?v=20260226c";
+      s.src = "config.js?v=20260226i";
       document.head.appendChild(s);
     })();
   </script>
-  <script src="app.js?v=20260226c"></script>
+  <script src="app.js?v=20260226i"></script>
 </body>
 </html>
-
-

@@ -36,7 +36,14 @@ const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
 let orders = [];
-let filters = { q: "", month: String(new Date().getMonth() + 1).padStart(2, "0"), machine: "", status: "" };
+let filters = {
+  q: "",
+  month: String(new Date().getMonth() + 1).padStart(2, "0"),
+  machine: "",
+  status: "",
+  orderNo: "",
+  statusColor: "",
+};
 let syncing = false;
 let remoteOnline = REMOTE_ENABLED;
 let remoteErrorNotified = false;
@@ -656,6 +663,24 @@ function bindEvents() {
       filters.month = e.target.value;
       render();
     });
+  }
+  const filterOrderNo = document.getElementById("filterOrderNo");
+  if (filterOrderNo) {
+    filterOrderNo.addEventListener("input", (e) => {
+      filters.orderNo = e.target.value.trim().toLowerCase();
+      render();
+    });
+  }
+  const statusColorFilters = document.getElementById("statusColorFilters");
+  if (statusColorFilters) {
+    statusColorFilters.addEventListener("click", (e) => {
+      const btn = e.target.closest("button.status-color-btn");
+      if (!btn) return;
+      filters.statusColor = btn.dataset.color || "";
+      syncStatusColorFilterButtons();
+      render();
+    });
+    syncStatusColorFilterButtons();
   }
   const filterMachine = document.getElementById("filterMachine");
   if (filterMachine) {
@@ -2734,11 +2759,36 @@ function getFilteredOrders() {
       );
     const effectiveOrderNo = getEffectiveOrderNoForMonthFilter(arr, idx);
     const monthOk = !filters.month || getMonthFromOrderNo(effectiveOrderNo) === filters.month;
+    const effectiveSearchOrderNo = getEffectiveOrderNoForMonthFilter(arr, idx);
+    const orderNoOk =
+      !filters.orderNo || String(effectiveSearchOrderNo || "").toLowerCase().includes(filters.orderNo);
+    const statusColorOk = !filters.statusColor || isStatusColorMatch(o.status, filters.statusColor);
     const mOk = !filters.machine || o.machine === filters.machine;
     const sOk = !filters.status || o.status === filters.status;
     const abnormalOk = !abnormalOnly || isAbnormalOrder(o);
-    return qOk && monthOk && mOk && sOk && abnormalOk;
+    return qOk && monthOk && orderNoOk && statusColorOk && mOk && sOk && abnormalOk;
   });
+}
+
+function syncStatusColorFilterButtons() {
+  const root = document.getElementById("statusColorFilters");
+  if (!root) return;
+  const buttons = root.querySelectorAll("button.status-color-btn");
+  buttons.forEach((btn) => {
+    const active = (btn.dataset.color || "") === (filters.statusColor || "");
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function isStatusColorMatch(status, color) {
+  const s = String(status || "").trim();
+  if (color === "yellow") return s === "待排产";
+  if (color === "blue") return s === "已排产";
+  if (color === "orange") return s === "加工中";
+  if (color === "green") return s === "完成待检" || s === "可发货";
+  if (color === "red") return s === "返工";
+  return true;
 }
 
 function getEffectiveOrderNoForMonthFilter(rows, index) {
