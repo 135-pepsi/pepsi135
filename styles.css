@@ -532,9 +532,8 @@ select option {
   margin-top: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  overflow-y: auto;
-  overflow-x: hidden;
-  max-height: calc(30 * var(--order-row-h) + 46px);
+  overflow: visible;
+  max-height: none;
   background: rgba(9, 23, 45, 0.9);
   box-shadow: var(--panel-shadow);
 }
@@ -560,7 +559,10 @@ select option {
 
 body:not(.material-page) #orderTable {
   min-width: 0;
+  width: 100%;
   table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .material-page #orderTable {
@@ -647,8 +649,8 @@ th {
 }
 body:not(.material-page) #orderTable th:nth-child(2) { background: linear-gradient(180deg, #205488, #19436f); }
 body:not(.material-page) #orderTable th:nth-child(3) { background: linear-gradient(180deg, #2a5f8d, #1f4d76); }
-body:not(.material-page) #orderTable th:nth-child(9) { background: linear-gradient(180deg, #58623f, #444f31); }
-body:not(.material-page) #orderTable th:nth-child(11) { background: linear-gradient(180deg, #6d4c44, #5a3c35); }
+body:not(.material-page) #orderTable th:nth-child(8) { background: linear-gradient(180deg, #58623f, #444f31); }
+body:not(.material-page) #orderTable th:nth-child(10) { background: linear-gradient(180deg, #6d4c44, #5a3c35); }
 #orderTable th:nth-child(1),
 #orderTable td:nth-child(1) {
   position: sticky;
@@ -721,6 +723,18 @@ body:not(.material-page) #orderTable td:last-child {
   background: rgba(12, 34, 61, 0.98);
 }
 
+#orderTable td.op-cell {
+  text-align: right;
+}
+
+#orderTable td.op-cell .op-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 100%;
+}
+
 body:not(.material-page) #orderTable tbody tr.row-delayed > td:last-child {
   background: rgba(147, 34, 34, 0.3);
 }
@@ -751,12 +765,6 @@ body:not(.material-page) #orderTable tbody tr.row-shipped > td:last-child {
 
 #orderTable th:nth-child(8),
 #orderTable td:nth-child(8) {
-  width: 120px;
-  min-width: 120px;
-}
-
-#orderTable th:nth-child(9),
-#orderTable td:nth-child(9) {
   min-width: 120px;
 }
 
@@ -766,27 +774,27 @@ body:not(.material-page) #orderTable tbody tr.row-shipped > td:last-child {
   min-width: 220px;
 }
 
-#orderTable th:nth-child(10),
-#orderTable td:nth-child(10) {
+#orderTable th:nth-child(9),
+#orderTable td:nth-child(9) {
   width: 120px;
   min-width: 120px;
 }
 
-#orderTable th:nth-child(11),
-#orderTable td:nth-child(11) {
+#orderTable th:nth-child(10),
+#orderTable td:nth-child(10) {
   min-width: 88px;
 }
 
-#orderTable th:nth-child(12),
-#orderTable td:nth-child(12) {
+#orderTable th:nth-child(11),
+#orderTable td:nth-child(11) {
   width: 160px;
   min-width: 160px;
 }
 
 body:not(.material-page) #orderTable th:nth-child(4),
 body:not(.material-page) #orderTable td:nth-child(4),
-body:not(.material-page) #orderTable th:nth-child(12),
-body:not(.material-page) #orderTable td:nth-child(12) {
+body:not(.material-page) #orderTable th:nth-child(11),
+body:not(.material-page) #orderTable td:nth-child(11) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -802,7 +810,42 @@ td.editing {
 #orderTable tbody tr.row-working > td { background: rgba(98, 78, 10, 0.2); }
 #orderTable tbody tr.row-shipped > td { background: rgba(18, 103, 57, 0.2); }
 #orderTable tbody tr.row-saved > td { animation: rowSavedPulse 1.5s ease; }
-#orderTable tbody tr:nth-child(even):not(.row-delayed):not(.row-working):not(.row-shipped) > td {
+#orderTable tbody tr.order-unit > td {
+  background-image: linear-gradient(180deg, rgba(112, 201, 255, 0.06), rgba(112, 201, 255, 0.02));
+}
+#orderTable tbody tr.order-unit > td:first-child {
+  border-left: 2px solid rgba(112, 201, 255, 0.62);
+}
+#orderTable tbody tr.order-unit > td:last-child {
+  border-right: 2px solid rgba(112, 201, 255, 0.62);
+}
+#orderTable tbody tr.order-unit-start > td {
+  border-top: 2px solid rgba(112, 201, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(167, 225, 255, 0.18);
+}
+#orderTable tbody tr.order-unit-end > td {
+  border-bottom: 2px solid rgba(112, 201, 255, 0.62);
+  box-shadow: inset 0 -1px 0 rgba(167, 225, 255, 0.18);
+}
+#orderTable tbody tr.order-unit-start > td:first-child {
+  border-top-left-radius: 10px;
+}
+#orderTable tbody tr.order-unit-start > td:last-child {
+  border-top-right-radius: 10px;
+}
+#orderTable tbody tr.order-unit-end > td:first-child {
+  border-bottom-left-radius: 10px;
+}
+#orderTable tbody tr.order-unit-end > td:last-child {
+  border-bottom-right-radius: 10px;
+}
+#orderTable tbody tr.order-unit-gap > td {
+  height: 5px;
+  padding: 0;
+  border: none !important;
+  background: transparent !important;
+}
+#orderTable tbody tr:nth-child(even):not(.row-delayed):not(.row-working):not(.row-shipped):not(.order-unit-gap) > td {
   background: rgba(14, 36, 66, 0.35);
 }
 
@@ -1116,13 +1159,13 @@ body.compact-mode {
 }
 
 .process-time-panel {
-  width: min(520px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
 }
 
 .process-time-form {
   margin-top: 10px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .process-time-field {
@@ -1134,6 +1177,58 @@ body.compact-mode {
   color: #b5d1ef;
   font-size: 13px;
 }
+
+.process-craft-options {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 10px;
+  border: 1px solid #386797;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(13, 40, 70, 0.86), rgba(10, 32, 58, 0.78));
+}
+
+.process-craft-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 8px;
+  flex: 0 0 auto;
+  border: 1px solid #4473a2;
+  border-radius: 8px;
+  background: rgba(12, 41, 72, 0.75);
+  color: #e6f3ff;
+  font-size: 12px;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
+}
+
+.process-craft-option:hover {
+  border-color: #6dbcf4;
+  background: rgba(16, 48, 82, 0.88);
+}
+
+.process-craft-option > input[type="checkbox"] {
+  accent-color: #70c9ff;
+  margin: 0;
+}
+
+.process-craft-option > span {
+  white-space: nowrap;
+}
+
+.process-craft-preview {
+  margin: 4px 0 0;
+  min-height: 18px;
+  font-size: 12px;
+  color: #b9daf7;
+}
+
 
 .process-time-actions {
   margin-top: 12px;
@@ -1190,6 +1285,39 @@ body.compact-mode {
 }
 
 .status-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.note-panel {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.note-form {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.note-field {
+  display: grid;
+  gap: 6px;
+}
+
+.note-field > span {
+  color: #b5d1ef;
+  font-size: 13px;
+}
+
+#noteInput {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+}
+
+.note-actions {
   margin-top: 12px;
   display: flex;
   justify-content: flex-end;
