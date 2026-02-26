@@ -3,11 +3,11 @@ const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
 const SHIFT_DEFAULTS_KEY = "mini_mes_shift_defaults_v1";
 const COMPACT_MODE_KEY = "mini_mes_compact_mode_v1";
 
-const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "已发货"];
-const MACHINES = ["CNC1", "CNC2", "CNC3", "CNC4", "CNC5"];
-const FIXED_COL_WIDTHS = {};
+const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "可发货"];
+const MACHINES = ["机台1", "机台2", "机台3", "机台4", "机台5"];
+const FIXED_COL_WIDTHS = { 12: 90 };
 const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
-const PROCESS_OPTIONS = ["", "1", "2", "3", "4", "5", "6"];
+const PROCESS_CRAFT_OPTIONS = ["下料", "车床", "CNC", "钳工", "热处理", "表面处理"];
 const XLSX_COLUMNS = [
   { key: "orderNo", title: "订单号" },
   { key: "customer", title: "客户" },
@@ -21,7 +21,7 @@ const XLSX_COLUMNS = [
   { key: "lathe", title: "车床" },
   { key: "surface", title: "表面处理" },
   { key: "status", title: "状态" },
-  { key: "startTime", title: "开始时间" },
+  { key: "startTime", title: "下单时间" },
   { key: "dueDate", title: "交期" },
   { key: "isDelayed", title: "是否延期" },
   { key: "note", title: "备注" },
@@ -36,7 +36,7 @@ const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
 let orders = [];
-let filters = { q: "", month: "", machine: "", status: "" };
+let filters = { q: "", month: String(new Date().getMonth() + 1).padStart(2, "0"), machine: "", status: "" };
 let syncing = false;
 let remoteOnline = REMOTE_ENABLED;
 let remoteErrorNotified = false;
@@ -61,6 +61,7 @@ let statusEditingOrderId = "";
 let dateEditingOrderId = "";
 let dateEditingKey = "";
 let surfaceEditingOrderId = "";
+let noteEditingOrderId = "";
 let transientCellErrors = new Map();
 let ruleCellErrors = new Map();
 let rowSavedUntil = new Map();
@@ -72,6 +73,7 @@ let authLoginSubmitting = false;
 let authLoginSubmittingMode = "";
 let authLoginCooldownUntil = 0;
 let authLoginCooldownTimer = 0;
+let processCraftOrderSeq = 0;
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -108,10 +110,14 @@ const processTimeSaveBtn = document.getElementById("processTimeSaveBtn");
 const processTimeClearBtn = document.getElementById("processTimeClearBtn");
 const processTimeSubTitle = document.getElementById("processTimeSubTitle");
 const processProgramInput = document.getElementById("processProgramInput");
-const processNameInput = document.getElementById("processNameInput");
+const processCraftOptions = document.getElementById("processCraftOptions");
+const processCraftPreview = document.getElementById("processCraftPreview");
+const processCncStepWrap = document.getElementById("processCncStepWrap");
+const processCncStepInput = document.getElementById("processCncStepInput");
+const processSurfaceWrap = document.getElementById("processSurfaceWrap");
+const processSurfaceInput = document.getElementById("processSurfaceInput");
 const processMinutesInput = document.getElementById("processMinutesInput");
 const processMachineInput = document.getElementById("processMachineInput");
-const processLatheInput = document.getElementById("processLatheInput");
 const statusDialog = document.getElementById("statusDialog");
 const statusTitle = document.getElementById("statusTitle");
 const statusCloseBtn = document.getElementById("statusCloseBtn");
@@ -142,6 +148,14 @@ const surfaceClearBtn = document.getElementById("surfaceClearBtn");
 const surfaceSubTitle = document.getElementById("surfaceSubTitle");
 const surfacePresetInput = document.getElementById("surfacePresetInput");
 const surfaceCustomInput = document.getElementById("surfaceCustomInput");
+const noteDialog = document.getElementById("noteDialog");
+const noteTitle = document.getElementById("noteTitle");
+const noteSubTitle = document.getElementById("noteSubTitle");
+const noteInput = document.getElementById("noteInput");
+const noteCloseBtn = document.getElementById("noteCloseBtn");
+const noteCancelBtn = document.getElementById("noteCancelBtn");
+const noteClearBtn = document.getElementById("noteClearBtn");
+const noteSaveBtn = document.getElementById("noteSaveBtn");
 const compactModeBtn = document.getElementById("compactModeBtn");
 const saveFeedback = document.getElementById("saveFeedback");
 const deleteConfirmDialog = document.getElementById("deleteConfirmDialog");
@@ -284,7 +298,7 @@ function rebuildRuleCellErrors() {
     const start = normalizeDateOnlyInput(order.startTime);
     const due = normalizeDateOnlyInput(order.dueDate);
     if (start && due && due < start) {
-      const msg = "交期不能早于开始时间";
+      const msg = "交期不能早于下单";
       next.set(getErrorKey(order.id, "startTime"), msg);
       next.set(getErrorKey(order.id, "dueDate"), msg);
     }
@@ -375,10 +389,16 @@ function bindEvents() {
   if (processTimeClearBtn) {
     processTimeClearBtn.addEventListener("click", () => {
       if (processProgramInput) processProgramInput.value = "";
-      if (processNameInput) processNameInput.value = "";
+      if (processCraftOptions) {
+        processCraftOptions.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+          el.checked = false;
+        });
+      }
+      if (processCncStepInput) processCncStepInput.value = "1";
+      if (processSurfaceInput) processSurfaceInput.value = "";
+      syncProcessCraftPreview();
       if (processMinutesInput) processMinutesInput.value = "";
       if (processMachineInput) processMachineInput.value = "";
-      if (processLatheInput) processLatheInput.value = "";
     });
   }
   if (processTimeDialog) {
@@ -501,6 +521,28 @@ function bindEvents() {
       if (event.target === surfaceDialog) closeSurfaceDialog();
     });
   }
+  if (noteCloseBtn) {
+    noteCloseBtn.addEventListener("click", closeNoteDialog);
+  }
+  if (noteCancelBtn) {
+    noteCancelBtn.addEventListener("click", closeNoteDialog);
+  }
+  if (noteSaveBtn) {
+    noteSaveBtn.addEventListener("click", () => {
+      void saveNoteDialog();
+    });
+  }
+  if (noteClearBtn) {
+    noteClearBtn.addEventListener("click", () => {
+      if (noteInput) noteInput.value = "";
+    });
+  }
+  if (noteDialog) {
+    noteDialog.addEventListener("click", (event) => {
+      if (event.target === noteDialog) closeNoteDialog();
+    });
+  }
+  bindDialogEnterSave(noteDialog, saveNoteDialog);
   if (deleteConfirmCloseBtn) {
     deleteConfirmCloseBtn.addEventListener("click", closeDeleteConfirmDialog);
   }
@@ -609,6 +651,7 @@ function bindEvents() {
   }
   const filterMonth = document.getElementById("filterMonth");
   if (filterMonth) {
+    filterMonth.value = filters.month;
     filterMonth.addEventListener("change", (e) => {
       filters.month = e.target.value;
       render();
@@ -668,6 +711,11 @@ function bindEvents() {
     if (e.key === "Escape" && surfaceDialog && !surfaceDialog.hidden) {
       e.preventDefault();
       closeSurfaceDialog();
+      return;
+    }
+    if (e.key === "Escape" && noteDialog && !noteDialog.hidden) {
+      e.preventDefault();
+      closeNoteDialog();
       return;
     }
     if (e.key === "Escape" && attachmentDialog && !attachmentDialog.hidden) {
@@ -1051,6 +1099,7 @@ function createEmptyOrder() {
     surface: "",
     status: "待排产",
     startTime: "",
+    completionDate: "",
     dueDate: "",
     isDelayed: "",
     note: "",
@@ -1107,6 +1156,7 @@ function render() {
   ensureTableColGroup();
   rebuildRuleCellErrors();
   const rows = getFilteredOrders();
+  const unitFlags = buildOrderUnitFlags(rows);
   tableBody.innerHTML = "";
   const now = Date.now();
 
@@ -1115,9 +1165,13 @@ function render() {
     tr.dataset.id = o.id;
 
     const stateClass =
-      o.isDelayed === "延期" ? "row-delayed" : o.status === "加工中" ? "row-working" : o.status === "已发货" ? "row-shipped" : "";
+      o.isDelayed === "延期" ? "row-delayed" : o.status === "加工中" ? "row-working" : o.status === "可发货" ? "row-shipped" : "";
     if (stateClass) tr.classList.add(stateClass);
     if ((rowSavedUntil.get(o.id) || 0) > now) tr.classList.add("row-saved");
+    const flags = unitFlags.get(o.id);
+    if (flags?.unit) tr.classList.add("order-unit");
+    if (flags?.start) tr.classList.add("order-unit-start");
+    if (flags?.end) tr.classList.add("order-unit-end");
 
     tr.appendChild(textCell(idx + 1));
     tr.appendChild(editCell(o, "orderNo"));
@@ -1126,30 +1180,45 @@ function render() {
     tr.appendChild(previewEditCell(o, "drawingNo"));
     tr.appendChild(editCell(o, "qty"));
     tr.appendChild(processTimeCell(o));
-    tr.appendChild(surfaceCell(o));
     tr.appendChild(statusCell(o));
-    tr.appendChild(dateCell(o, "startTime", "开始时间"));
+    tr.appendChild(dateCell(o, "startTime", "下单"));
     tr.appendChild(dateCell(o, "dueDate", "交期"));
-    tr.appendChild(editCell(o, "note"));
+    tr.appendChild(noteCell(o));
 
     const opTd = document.createElement("td");
-    const fileBtn = document.createElement("button");
-    fileBtn.className = "action-btn-secondary";
-    fileBtn.textContent = "图纸";
-    fileBtn.addEventListener("click", () => {
-      void openAttachmentDialog(o.id);
-    });
+    opTd.className = "op-cell";
+    const opActions = document.createElement("div");
+    opActions.className = "op-actions";
+    if (flags?.start) {
+      const fileBtn = document.createElement("button");
+      fileBtn.className = "action-btn-secondary";
+      fileBtn.textContent = "图纸";
+      const targetId = flags?.rootId || o.id;
+      fileBtn.addEventListener("click", () => {
+        void openAttachmentDialog(targetId);
+      });
+      opActions.appendChild(fileBtn);
+    }
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
     delBtn.textContent = "删除";
     delBtn.addEventListener("click", () => {
       void removeOrder(o.id);
     });
-    opTd.appendChild(fileBtn);
-    opTd.appendChild(delBtn);
+    opActions.appendChild(delBtn);
+    opTd.appendChild(opActions);
     tr.appendChild(opTd);
 
     tableBody.appendChild(tr);
+
+    if (flags?.end && idx < rows.length - 1) {
+      const gapTr = document.createElement("tr");
+      gapTr.className = "order-unit-gap";
+      const gapTd = document.createElement("td");
+      gapTd.colSpan = 12;
+      gapTr.appendChild(gapTd);
+      tableBody.appendChild(gapTr);
+    }
   });
 
   rowSavedUntil.forEach((until, id) => {
@@ -1161,6 +1230,45 @@ function render() {
   renderKanban(rows);
   renderKpis(orders);
   void warmupAttachmentStates(rows);
+}
+
+function buildOrderUnitFlags(rows) {
+  const flags = new Map();
+  let unitStartIndex = -1;
+  let currentRootId = "";
+  for (let i = 0; i < rows.length; i += 1) {
+    const id = rows[i]?.id;
+    if (!id) continue;
+    const hasOrderNo = String(rows[i]?.orderNo || "").trim() !== "";
+    if (hasOrderNo) {
+      if (unitStartIndex >= 0) {
+        const prevEndId = rows[i - 1]?.id;
+        if (prevEndId) {
+          const prevEnd = flags.get(prevEndId) || {};
+          flags.set(prevEndId, { ...prevEnd, end: true });
+        }
+      }
+      unitStartIndex = i;
+      currentRootId = id;
+      const startFlag = flags.get(id) || {};
+      flags.set(id, { ...startFlag, unit: true, start: true, end: false, rootId: currentRootId });
+      continue;
+    }
+    if (unitStartIndex >= 0) {
+      const f = flags.get(id) || {};
+      flags.set(id, { ...f, unit: true, rootId: currentRootId || id });
+      continue;
+    }
+    flags.set(id, { unit: true, start: true, end: true, rootId: id });
+  }
+  if (rows.length > 0) {
+    const lastId = rows[rows.length - 1]?.id;
+    if (lastId) {
+      const last = flags.get(lastId) || {};
+      flags.set(lastId, { ...last, end: true });
+    }
+  }
+  return flags;
 }
 
 function renderKanban(rows) {
@@ -1238,7 +1346,9 @@ function createKanbanCard(order, displayOrderNo = "") {
   meta.appendChild(createKanbanTag(order.customer || "未填客户"));
   if (order.machine) meta.appendChild(createKanbanTag(order.machine));
   if (order.status === "加工中" && normalizeStepValue(order.processStepCurrent)) {
-    meta.appendChild(createKanbanTag(`加工中第${normalizeStepValue(order.processStepCurrent)}序`));
+    const step = normalizeStepValue(order.processStepCurrent);
+    const name = getProcessStepName(order, step);
+    meta.appendChild(createKanbanTag(name ? `加工中·${name}` : `加工中第${step}序`));
   }
   if (order.dueDate) meta.appendChild(createKanbanTag(`交期 ${toMonthDay(order.dueDate)}`));
   if (order.plannedHours !== "" && order.plannedHours != null) meta.appendChild(createKanbanTag(`工时 ${order.plannedHours}分`));
@@ -1312,16 +1422,23 @@ function previewEditCell(order, key, type = "text") {
   const text = document.createElement("span");
   text.className = "cell-main-text";
   text.classList.add("preview-text-link");
-  if (attachmentStateByLineId.get(order.id) === true) {
+  const hasFiles = attachmentStateByLineId.get(order.id) === true;
+  if (hasFiles) {
     text.classList.add("preview-text-has-file");
   }
   const display = formatDisplayValue(key, rawValue);
   text.textContent = display;
-  text.title = display ? `${display}\n点击预览图纸` : "点击预览图纸";
+  const actionHint = hasFiles ? "点击预览图纸" : "点击截屏并上传图纸";
+  text.title = display ? `${display}\n${actionHint}` : actionHint;
   text.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    void openLinePreview(order.id);
+    const nowHasFiles = attachmentStateByLineId.get(order.id) === true;
+    if (nowHasFiles) {
+      void openLinePreview(order.id);
+      return;
+    }
+    void captureAndUploadScreenshot(order.id);
   });
   text.addEventListener("dblclick", (event) => {
     event.preventDefault();
@@ -1357,16 +1474,130 @@ function processTimeCell(order) {
   return td;
 }
 
+function normalizeProcessRoute(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return [];
+  if (/^\d+$/.test(raw)) {
+    const max = Math.max(1, Math.min(200, Number(raw)));
+    return Array.from({ length: max }, (_x, i) => `第${i + 1}序`);
+  }
+  return raw
+    .split(/\s*(?:->|→|＞|>|\/)\s*/g)
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+}
+
+function serializeProcessRoute(route) {
+  return route.join(" -> ");
+}
+
+function getProcessRoute(order) {
+  return normalizeProcessRoute(order?.processName || "");
+}
+
+function getProcessStepName(order, stepValue) {
+  const step = Number(normalizeStepValue(stepValue) || 0);
+  if (!step) return "";
+  const route = getProcessRoute(order);
+  return route[step - 1] || `第${step}序`;
+}
+
+function getSelectedCraftRoute() {
+  if (!processCraftOptions) return [];
+  const selected = [];
+  processCraftOptions.querySelectorAll('input[type="checkbox"]').forEach((el, idx) => {
+    if (!el.checked) return;
+    selected.push({
+      name: String(el.value || "").trim(),
+      order: Number(el.dataset.selectedOrder || 0),
+      index: idx,
+    });
+  });
+  selected.sort((a, b) => {
+    if (a.order && b.order) return a.order - b.order;
+    if (a.order) return -1;
+    if (b.order) return 1;
+    return a.index - b.index;
+  });
+  return selected.map((x) => x.name);
+}
+
+function getCncStepCountInput() {
+  const v = Number(processCncStepInput?.value || 1);
+  if (!Number.isFinite(v) || v < 1) return 1;
+  return Math.min(6, Math.floor(v));
+}
+
+function syncProcessCncStepVisibility() {
+  if (!processCncStepWrap) return;
+  const hasCnc = getSelectedCraftRoute().includes("CNC");
+  processCncStepWrap.style.display = hasCnc ? "grid" : "none";
+}
+
+function syncProcessSurfaceVisibility() {
+  if (!processSurfaceWrap) return;
+  const hasSurface = getSelectedCraftRoute().includes("表面处理");
+  processSurfaceWrap.style.display = hasSurface ? "grid" : "none";
+}
+
+function getExpandedCraftRoute() {
+  const selected = getSelectedCraftRoute();
+  if (!selected.length) return [];
+  const cncCount = getCncStepCountInput();
+  const expanded = [];
+  selected.forEach((name) => {
+    if (name !== "CNC") {
+      expanded.push(name);
+      return;
+    }
+    for (let i = 1; i <= cncCount; i += 1) {
+      expanded.push(`CNC${i}`);
+    }
+  });
+  return expanded;
+}
+
+function normalizeCraftNameFromRouteItem(name) {
+  const s = String(name || "").trim();
+  if (!s) return "";
+  if (/^CNC\d+$/i.test(s) || /^CNC$/i.test(s)) return "CNC";
+  return s;
+}
+
+function getSelectedCraftOrderFromRoute(route) {
+  const seen = new Set();
+  const ordered = [];
+  route.forEach((item) => {
+    const base = normalizeCraftNameFromRouteItem(item);
+    if (!base || seen.has(base)) return;
+    seen.add(base);
+    ordered.push(base);
+  });
+  return ordered;
+}
+
+function syncProcessCraftPreview() {
+  if (!processCraftPreview) return;
+  syncProcessCncStepVisibility();
+  syncProcessSurfaceVisibility();
+  const route = getExpandedCraftRoute();
+  if (!route.length) {
+    processCraftPreview.textContent = "未选择工艺";
+    return;
+  }
+  processCraftPreview.textContent = route.join(" -> ");
+}
+
 function formatProcessTimeLabel(order) {
   const minutes = normalizeValue("plannedHours", order.plannedHours);
-  const process = String(order.processName || "").trim();
-  const processText = process ? `共${process}序` : "";
+  const route = getProcessRoute(order);
+  const processText = route.length ? route.join(" -> ") : "";
   const parts = [];
   if (order.programNo) parts.push(`程序单${order.programNo}`);
   if (processText) parts.push(processText);
   if (minutes !== "") parts.push(`${minutes} 分钟`);
   if (order.machine) parts.push(order.machine);
-  if (order.lathe) parts.push(`车床${order.lathe}`);
+  if (order.surface) parts.push(order.surface);
   return parts.join(" · ");
 }
 
@@ -1404,7 +1635,13 @@ function dateCell(order, key, label) {
   td.dataset.key = key;
   td.dataset.id = order.id;
   td.className = "date-cell";
-  td.textContent = formatDisplayValue(key, order[key] ?? "");
+  if (key === "startTime") {
+    td.textContent = formatOrderCompletionLabel(order);
+  } else if (key === "dueDate") {
+    td.textContent = toMonthDay(order?.dueDate || "");
+  } else {
+    td.textContent = formatDisplayValue(key, order[key] ?? "");
+  }
   td.title = `点击设置${label}（月/日）`;
   appendCellError(td, order.id, key);
   td.addEventListener("click", (event) => {
@@ -1415,11 +1652,33 @@ function dateCell(order, key, label) {
   return td;
 }
 
+function noteCell(order) {
+  const td = document.createElement("td");
+  td.dataset.key = "note";
+  td.dataset.id = order.id;
+  td.className = "note-cell";
+  const text = String(order.note || "").trim();
+  td.textContent = text;
+  td.title = text || "点击设置备注";
+  td.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openNoteDialog(order.id);
+  });
+  return td;
+}
+
+function formatOrderCompletionLabel(order) {
+  const start = toMonthDay(order?.startTime || "");
+  const done = toMonthDay(order?.completionDate || "");
+  return `${start || "--"}/${done || "--"}`;
+}
+
 function surfaceCell(order) {
   const td = document.createElement("td");
   td.dataset.key = "surface";
   td.dataset.id = order.id;
-  td.className = "surface-cell";
+  td.className = "surface-cell surface-col";
   td.textContent = String(order.surface || "");
   td.title = "点击设置表面处理";
   td.addEventListener("click", (event) => {
@@ -1434,7 +1693,9 @@ function formatStatusLabel(order) {
   const base = String(order.status || "").trim() || "待排产";
   if (base !== "加工中") return base;
   const step = normalizeStepValue(order.processStepCurrent);
-  return step ? `加工中第${step}序` : "加工中";
+  if (!step) return "加工中";
+  const name = getProcessStepName(order, step);
+  return name ? `加工中 · ${name}` : `加工中第${step}序`;
 }
 
 function buildStatusProgress(order) {
@@ -1467,7 +1728,7 @@ function getStatusClassName(status) {
   if (s === "加工中") return "status-working";
   if (s === "完成待检") return "status-done";
   if (s === "返工") return "status-rework";
-  if (s === "已发货") return "status-done";
+  if (s === "可发货") return "status-done";
   return "status-pending";
 }
 
@@ -1485,14 +1746,43 @@ function initProcessTimeOptions() {
       processProgramInput.appendChild(option);
     });
   }
-  if (!processNameInput) return;
-  processNameInput.innerHTML = "";
-  PROCESS_OPTIONS.forEach((name) => {
-    const option = document.createElement("option");
-    option.value = name;
-    option.textContent = name ? `共${name}序` : "请选择工序";
-    processNameInput.appendChild(option);
-  });
+  if (processCraftOptions) {
+    processCraftOptions.innerHTML = "";
+    processCraftOrderSeq = 0;
+    PROCESS_CRAFT_OPTIONS.forEach((name) => {
+      const label = document.createElement("label");
+      label.className = "process-craft-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = name;
+      input.addEventListener("change", () => {
+        if (input.checked) {
+          processCraftOrderSeq += 1;
+          input.dataset.selectedOrder = String(processCraftOrderSeq);
+        } else {
+          delete input.dataset.selectedOrder;
+        }
+        syncProcessCraftPreview();
+      });
+      const text = document.createElement("span");
+      text.textContent = name;
+      label.appendChild(input);
+      label.appendChild(text);
+      processCraftOptions.appendChild(label);
+    });
+  }
+  if (processCncStepInput) {
+    processCncStepInput.innerHTML = "";
+    for (let i = 1; i <= 6; i += 1) {
+      const option = document.createElement("option");
+      option.value = String(i);
+      option.textContent = String(i);
+      processCncStepInput.appendChild(option);
+    }
+    processCncStepInput.value = "1";
+    processCncStepInput.addEventListener("change", syncProcessCraftPreview);
+  }
+  syncProcessCraftPreview();
   if (processMachineInput) {
     processMachineInput.innerHTML = "";
     const blank = document.createElement("option");
@@ -1506,17 +1796,17 @@ function initProcessTimeOptions() {
       processMachineInput.appendChild(option);
     });
   }
-  if (processLatheInput) {
-    processLatheInput.innerHTML = "";
+  if (processSurfaceInput) {
+    processSurfaceInput.innerHTML = "";
     const blank = document.createElement("option");
     blank.value = "";
     blank.textContent = "请选择";
-    processLatheInput.appendChild(blank);
-    ["是", "否"].forEach((name) => {
+    processSurfaceInput.appendChild(blank);
+    SURFACE_OPTIONS.filter(Boolean).forEach((name) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = name;
-      processLatheInput.appendChild(option);
+      processSurfaceInput.appendChild(option);
     });
   }
 }
@@ -1663,7 +1953,7 @@ async function saveDateDialog() {
   const nextStart = dateEditingKey === "startTime" ? next : normalizeDateOnlyInput(order.startTime);
   const nextDue = dateEditingKey === "dueDate" ? next : normalizeDateOnlyInput(order.dueDate);
   if (nextStart && nextDue && nextDue < nextStart) {
-    const msg = "交期不能早于开始时间";
+    const msg = "交期不能早于下单";
     setTransientCellError(order.id, "startTime", msg);
     setTransientCellError(order.id, "dueDate", msg);
     render();
@@ -1743,6 +2033,8 @@ function closeSurfaceDialog() {
     document.body.style.overflow = "hidden";
   } else if (dateDialog && !dateDialog.hidden) {
     document.body.style.overflow = "hidden";
+  } else if (noteDialog && !noteDialog.hidden) {
+    document.body.style.overflow = "hidden";
   } else {
     document.body.style.overflow = "";
   }
@@ -1786,9 +2078,67 @@ async function clearSurfaceDialogValue() {
   closeSurfaceDialog();
 }
 
+function openNoteDialog(orderId) {
+  const order = orders.find((x) => x.id === orderId);
+  if (!order || !noteDialog) return;
+  noteEditingOrderId = orderId;
+  if (noteTitle) noteTitle.textContent = formatDialogTitle("备注设置", order.orderNo);
+  if (noteInput) noteInput.value = String(order.note || "");
+  if (noteSubTitle) {
+    const parts = [];
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    noteSubTitle.textContent = parts.join(" · ") || "设置备注";
+  }
+  noteDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+  if (noteInput) noteInput.focus();
+}
+
+function closeNoteDialog() {
+  if (!noteDialog) return;
+  noteDialog.hidden = true;
+  noteEditingOrderId = "";
+  if (noteTitle) noteTitle.textContent = "备注设置";
+  if (attachmentDialog && !attachmentDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (previewDialog && !previewDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (processTimeDialog && !processTimeDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (statusDialog && !statusDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (dateDialog && !dateDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else if (surfaceDialog && !surfaceDialog.hidden) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+}
+
+async function saveNoteDialog() {
+  if (!noteEditingOrderId) return;
+  const order = orders.find((x) => x.id === noteEditingOrderId);
+  if (!order) {
+    closeNoteDialog();
+    return;
+  }
+  const next = String(noteInput?.value || "").trim();
+  if (String(order.note || "") !== next) {
+    order.note = next;
+    await persistOrders({ changed: [order] });
+    markRowSaved(order.id);
+    showSaveFeedback();
+    render();
+  }
+  closeNoteDialog();
+}
+
 function getMaxProcessStep(order) {
-  const max = Number(String(order?.processName || "").trim());
-  if (Number.isFinite(max) && max >= 1) return Math.min(6, Math.floor(max));
+  const max = getProcessRoute(order).length;
+  if (Number.isFinite(max) && max >= 1) return Math.min(200, Math.floor(max));
   return 1;
 }
 
@@ -1796,21 +2146,23 @@ function normalizeStepValue(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "";
   const v = Math.floor(n);
-  if (v < 1 || v > 6) return "";
+  if (v < 1 || v > 200) return "";
   return String(v);
 }
 
-function rebuildStatusStepOptions(maxStep = 6) {
+function rebuildStatusStepOptions(order, maxStep = 1) {
   if (!statusStepInput) return;
   statusStepInput.innerHTML = "";
   const blank = document.createElement("option");
   blank.value = "";
   blank.textContent = "请选择";
   statusStepInput.appendChild(blank);
+  const route = getProcessRoute(order);
   for (let i = 1; i <= maxStep; i += 1) {
     const option = document.createElement("option");
     option.value = String(i);
-    option.textContent = `第${i}序`;
+    const name = route[i - 1];
+    option.textContent = name ? `第${i}序 · ${name}` : `第${i}序`;
     statusStepInput.appendChild(option);
   }
 }
@@ -1830,7 +2182,7 @@ function openStatusDialog(orderId) {
   if (statusTitle) statusTitle.textContent = formatDialogTitle(STATUS_TITLE_BASE, order.orderNo);
   if (statusInput) statusInput.value = order.status || "待排产";
   const maxStep = getMaxProcessStep(order);
-  rebuildStatusStepOptions(maxStep);
+  rebuildStatusStepOptions(order, maxStep);
   const normalizedStep = normalizeStepValue(order.processStepCurrent);
   const clampedStep = normalizedStep && Number(normalizedStep) <= maxStep ? normalizedStep : "";
   if (statusStepInput) statusStepInput.value = clampedStep;
@@ -1841,7 +2193,8 @@ function openStatusDialog(orderId) {
     if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
     if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
     if (order.name) parts.push(`名称 ${order.name}`);
-    parts.push(`最多第${maxStep}序`);
+    const route = getProcessRoute(order);
+    parts.push(route.length ? route.join(" -> ") : `最多第${maxStep}序`);
     statusSubTitle.textContent = parts.join(" · ");
   }
   statusDialog.hidden = false;
@@ -1853,7 +2206,7 @@ function closeStatusDialog() {
   statusDialog.hidden = true;
   statusEditingOrderId = "";
   if (statusTitle) statusTitle.textContent = STATUS_TITLE_BASE;
-  if (statusProcessContext) statusProcessContext.textContent = "当前第0序 / 共1序 / 剩余1序";
+  if (statusProcessContext) statusProcessContext.textContent = "当前未选择工艺 / 共1序 / 剩余1序";
   if (attachmentDialog && !attachmentDialog.hidden) {
     document.body.style.overflow = "hidden";
   } else if (previewDialog && !previewDialog.hidden) {
@@ -1873,6 +2226,7 @@ async function saveStatusDialog() {
     return;
   }
   const nextStatus = String(statusInput?.value || "待排产").trim() || "待排产";
+  const prevStatus = String(order.status || "").trim();
   const maxStep = getMaxProcessStep(order);
   let nextStep = "";
   if (nextStatus === "加工中") {
@@ -1890,6 +2244,11 @@ async function saveStatusDialog() {
   const changed = order.status !== nextStatus || String(order.processStepCurrent || "") !== nextStep;
   order.status = nextStatus;
   order.processStepCurrent = nextStep;
+  if (nextStatus === "可发货") {
+    order.completionDate = new Date().toISOString().slice(0, 10);
+  } else if (prevStatus === "可发货" && nextStatus !== "可发货") {
+    order.completionDate = "";
+  }
   if (changed) {
     await persistOrders({ changed: [order] });
     markRowSaved(order.id);
@@ -1930,7 +2289,7 @@ function applyStatusNextStep() {
     return;
   }
   if (current === "完成待检") {
-    statusInput.value = "已发货";
+    statusInput.value = "可发货";
     if (statusStepInput) statusStepInput.value = "";
     syncStatusStepVisibility();
     syncStatusStepHint();
@@ -1949,12 +2308,13 @@ function syncStatusStepHint() {
   const maxStep = getMaxProcessStep(order || {});
   const currentStep = Number(normalizeStepValue(statusStepInput?.value || "") || 0);
   if (!currentStep) {
-    statusStepHint.textContent = `当前未选择序号，共${maxStep}序。`;
+    statusStepHint.textContent = `当前未选择工艺，共${maxStep}序。`;
     syncStatusProcessContext();
     return;
   }
   const remain = Math.max(0, maxStep - currentStep);
-  statusStepHint.textContent = `当前第${currentStep}序，剩余${remain}序。`;
+  const name = getProcessStepName(order, String(currentStep));
+  statusStepHint.textContent = name ? `当前${name}，剩余${remain}序。` : `当前第${currentStep}序，剩余${remain}序。`;
   syncStatusProcessContext();
 }
 
@@ -1971,13 +2331,15 @@ function syncStatusProcessContext() {
   }
   currentStep = Math.max(0, Math.min(maxStep, currentStep));
   const remain = Math.max(0, maxStep - currentStep);
-  statusProcessContext.textContent = `当前第${currentStep}序 / 共${maxStep}序 / 剩余${remain}序`;
+  const name = currentStep ? getProcessStepName(order, String(currentStep)) : "";
+  const currentText = name ? `当前${name}` : `当前第${currentStep}序`;
+  statusProcessContext.textContent = `${currentText} / 共${maxStep}序 / 剩余${remain}序`;
 }
 
 function syncStatusNextButtonState() {
   if (!statusNextBtn || !statusInput) return;
   const current = String(statusInput.value || "").trim() || "待排产";
-  statusNextBtn.disabled = current === "已发货";
+  statusNextBtn.disabled = current === "可发货";
   if (current === "待排产") {
     statusNextBtn.textContent = "下一步：已排产";
     return;
@@ -1987,11 +2349,11 @@ function syncStatusNextButtonState() {
     return;
   }
   if (current === "加工中") {
-    statusNextBtn.textContent = "下一步：推进序号";
+    statusNextBtn.textContent = "下一步：推进工艺";
     return;
   }
   if (current === "完成待检") {
-    statusNextBtn.textContent = "下一步：已发货";
+    statusNextBtn.textContent = "下一步：可发货";
     return;
   }
   statusNextBtn.textContent = "已完成";
@@ -2004,10 +2366,30 @@ function openProcessTimeDialog(orderId) {
   processTimeEditingOrderId = orderId;
   if (processTimeTitle) processTimeTitle.textContent = formatDialogTitle(PROCESS_TIME_TITLE_BASE, order.orderNo);
   if (processProgramInput) processProgramInput.value = order.programNo || "未出";
-  if (processNameInput) processNameInput.value = order.processName || "";
+  const route = getProcessRoute(order);
+  const selectedOrder = getSelectedCraftOrderFromRoute(route);
+  const selected = new Set(selectedOrder);
+  const cncCount = route.filter((x) => /^CNC(\d+)?$/i.test(String(x))).length;
+  if (processCraftOptions) {
+    processCraftOrderSeq = 0;
+    processCraftOptions.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+      const v = String(el.value || "").trim();
+      const checked = selected.has(v);
+      el.checked = checked;
+      delete el.dataset.selectedOrder;
+      if (checked) {
+        const orderIndex = selectedOrder.indexOf(v);
+        const orderNo = orderIndex >= 0 ? orderIndex + 1 : processCraftOrderSeq + 1;
+        el.dataset.selectedOrder = String(orderNo);
+        processCraftOrderSeq = Math.max(processCraftOrderSeq, orderNo);
+      }
+    });
+  }
+  if (processCncStepInput) processCncStepInput.value = String(Math.max(1, cncCount || 1));
+  syncProcessCraftPreview();
   if (processMinutesInput) processMinutesInput.value = order.plannedHours === "" ? "" : String(order.plannedHours);
   if (processMachineInput) processMachineInput.value = order.machine || defaults.machine || "";
-  if (processLatheInput) processLatheInput.value = order.lathe || defaults.lathe || "";
+  if (processSurfaceInput) processSurfaceInput.value = String(order.surface || "").trim();
   if (processTimeSubTitle) {
     const parts = [];
     if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
@@ -2042,10 +2424,11 @@ async function saveProcessTimeDialog() {
     return;
   }
   const nextProgramNo = String(processProgramInput?.value || "").trim();
-  const nextProcess = String(processNameInput?.value || "").trim();
+  const nextProcess = serializeProcessRoute(getExpandedCraftRoute());
   const minuteRaw = String(processMinutesInput?.value || "").trim();
   const nextMachine = String(processMachineInput?.value || "").trim();
-  const nextLathe = String(processLatheInput?.value || "").trim();
+  const hasSurfaceCraft = getSelectedCraftRoute().includes("表面处理");
+  const nextSurface = hasSurfaceCraft ? String(processSurfaceInput?.value || "").trim() : "";
   const nextMinutes = normalizeValue("plannedHours", minuteRaw);
   if (minuteRaw !== "" && nextMinutes === "") {
     alert("工时格式无效，请输入整数分钟。");
@@ -2057,13 +2440,13 @@ async function saveProcessTimeDialog() {
     target.plannedHours !== nextMinutes ||
     String(target.programNo || "") !== nextProgramNo ||
     String(target.machine || "") !== nextMachine ||
-    String(target.lathe || "") !== nextLathe;
+    String(target.surface || "") !== nextSurface;
   target.programNo = nextProgramNo;
   target.processName = nextProcess;
   target.plannedHours = nextMinutes;
   target.machine = nextMachine;
-  target.lathe = nextLathe;
-  saveShiftDefaultsPatch({ machine: nextMachine, lathe: nextLathe });
+  target.surface = nextSurface;
+  saveShiftDefaultsPatch({ machine: nextMachine, surface: nextSurface });
   const maxStep = getMaxProcessStep(target);
   const currentStep = normalizeStepValue(target.processStepCurrent);
   if (currentStep && Number(currentStep) > maxStep) {
@@ -2214,7 +2597,7 @@ async function updateOrder(id, key, value) {
   }
   if ((key === "dueDate" || key === "startTime") && raw !== "" && normalized === "") {
     setDirtyCellMark(id, key, true);
-    setTransientCellError(id, key, key === "dueDate" ? "交期格式无效" : "开始时间格式无效");
+    setTransientCellError(id, key, key === "dueDate" ? "交期格式无效" : "下单格式无效");
     render();
     return false;
   }
@@ -2228,7 +2611,7 @@ async function updateOrder(id, key, value) {
     const nextStart = key === "startTime" ? normalized : normalizeDateOnlyInput(target.startTime);
     const nextDue = key === "dueDate" ? normalized : normalizeDateOnlyInput(target.dueDate);
     if (nextStart && nextDue && nextDue < nextStart) {
-      const msg = "交期不能早于开始时间";
+      const msg = "交期不能早于下单";
       setDirtyCellMark(id, key, true);
       setTransientCellError(id, "startTime", msg);
       setTransientCellError(id, "dueDate", msg);
@@ -2293,7 +2676,7 @@ function toMonthDay(value) {
 }
 
 function calcDelayed(order) {
-  if (!order.dueDate || order.status === "已发货") return "";
+  if (!order.dueDate || order.status === "可发货") return "";
   const due = new Date(order.dueDate + "T23:59:59");
   return Date.now() > due.getTime() ? "延期" : "正常";
 }
@@ -2546,6 +2929,7 @@ function toDbRow(order, updatedAtOverride = "") {
   const mergedNote = mergeOrderMetaIntoNote(order.note || "", {
     processName: normalizedProcess,
     processStepCurrent: normalizedStep,
+    completionDate: normalizeDateOnlyInput(order.completionDate),
   });
   return {
     id: order.id,
@@ -2589,6 +2973,7 @@ function fromDbRow(row) {
   o.dueDate = formatDueDateFromDb(row.due_date);
   o.processName = parsedNote.processName || "";
   o.processStepCurrent = parsedNote.processStepCurrent || "";
+  o.completionDate = normalizeDateOnlyInput(parsedNote.completionDate || "");
   o.note = parsedNote.note || "";
   o.updatedAt = row.updated_at || "";
   o.isDelayed = calcDelayed(o);
@@ -2753,11 +3138,7 @@ async function openAttachmentDialog(orderId) {
 function syncAttachmentHeader(order) {
   if (attachmentTitle) attachmentTitle.textContent = "零件图纸";
   if (attachmentSubTitle) {
-    const parts = [];
-    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
-    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
-    if (order.name) parts.push(`名称 ${order.name}`);
-    attachmentSubTitle.textContent = parts.join(" · ") || "未填写订单基础信息";
+    attachmentSubTitle.textContent = order.orderNo ? `订单号 ${order.orderNo}` : "未填写订单号";
   }
   if (attachmentHint) {
     attachmentHint.textContent = `支持类型: ${UPLOAD_ACCEPT}，单文件上限 ${UPLOAD_MAX_MB}MB`;
@@ -2867,6 +3248,11 @@ async function uploadAttachmentFromInput(event) {
   const file = event?.target?.files?.[0];
   event.target.value = "";
   if (!file || !attachmentPanelOrderId) return;
+  await uploadAttachmentFile(attachmentPanelOrderId, file, true);
+}
+
+async function uploadAttachmentFile(orderId, file, refreshDialogList = false) {
+  if (!file || !orderId) return;
   if (!UPLOAD_API_BASE) {
     alert("未配置上传服务地址，请先设置 config.js 的 UPLOAD_API_BASE。");
     return;
@@ -2885,20 +3271,71 @@ async function uploadAttachmentFromInput(event) {
 
   try {
     const form = new FormData();
-    const order = orders.find((x) => x.id === attachmentPanelOrderId);
-    form.append("orderId", attachmentPanelOrderId);
-    form.append("lineId", attachmentPanelOrderId);
+    const order = orders.find((x) => x.id === orderId);
+    form.append("orderId", orderId);
+    form.append("lineId", orderId);
     form.append("orderNo", order?.orderNo || "");
     form.append("drawingNo", order?.drawingNo || "");
     form.append("partName", order?.name || "");
     form.append("file", file);
     await apiFetchJson("/api/files/upload", { method: "POST", body: form });
-    setAttachmentState(attachmentPanelOrderId, true);
-    await loadOrderFiles(attachmentPanelOrderId);
+    setAttachmentState(orderId, true);
+    if (refreshDialogList && attachmentPanelOrderId === orderId) {
+      await loadOrderFiles(orderId);
+    }
     render();
   } catch (e) {
     const detail = e?.message || "未知错误";
     alert(`上传失败：${detail}`);
+  }
+}
+
+async function captureAndUploadScreenshot(orderId) {
+  const order = orders.find((x) => x.id === orderId);
+  if (!order) return;
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    alert("当前浏览器不支持截屏上传，请使用图纸按钮手动上传。");
+    return;
+  }
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: "always" },
+      audio: false,
+    });
+    const track = stream.getVideoTracks?.()[0];
+    if (!track) throw new Error("未获取到屏幕画面");
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    await video.play();
+    await new Promise((resolve) => {
+      if (video.readyState >= 2) resolve();
+      else video.onloadeddata = () => resolve();
+    });
+    const width = video.videoWidth || 1920;
+    const height = video.videoHeight || 1080;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("无法创建截图画布");
+    ctx.drawImage(video, 0, 0, width, height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+    if (!blob) throw new Error("截图失败");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const file = new File([blob], `screenshot_${order.orderNo || orderId}_${ts}.png`, { type: "image/png" });
+    await uploadAttachmentFile(orderId, file, false);
+  } catch (e) {
+    const message = String(e?.message || "");
+    const canceled = message.toLowerCase().includes("permission denied") || message.toLowerCase().includes("cancel");
+    if (!canceled) {
+      alert(`截屏上传失败：${message || "未知错误"}`);
+    }
+    await openAttachmentDialog(orderId);
+  } finally {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
   }
 }
 
@@ -3020,6 +3457,9 @@ function syncPreviewCellState(orderId, hasFiles) {
   nodes.forEach((node) => {
     if (hasFiles) node.classList.add("preview-text-has-file");
     else node.classList.remove("preview-text-has-file");
+    const currentText = (node.textContent || "").trim();
+    const actionHint = hasFiles ? "点击预览图纸" : "点击截屏并上传图纸";
+    node.title = currentText ? `${currentText}\n${actionHint}` : actionHint;
   });
 }
 
@@ -3318,6 +3758,7 @@ function splitNoteAndMeta(noteValue) {
   let clean = String(noteValue || "");
   let processName = "";
   let processStepCurrent = "";
+  let completionDate = "";
 
   clean = clean.replace(/\s*\[STEP:([^\]]*)\]\s*/g, (_all, v) => {
     processStepCurrent = normalizeStepValue(v || "");
@@ -3327,22 +3768,29 @@ function splitNoteAndMeta(noteValue) {
     processName = String(v || "").trim();
     return " ";
   });
+  clean = clean.replace(/\s*\[DONE:([^\]]*)\]\s*/g, (_all, v) => {
+    completionDate = normalizeDateOnlyInput(v || "");
+    return " ";
+  });
   clean = clean.replace(/\s+/g, " ").trim();
 
   return {
     note: clean,
     processName,
     processStepCurrent,
+    completionDate,
   };
 }
 
-function mergeOrderMetaIntoNote(noteValue, { processName = "", processStepCurrent = "" } = {}) {
+function mergeOrderMetaIntoNote(noteValue, { processName = "", processStepCurrent = "", completionDate = "" } = {}) {
   const base = splitNoteAndMeta(noteValue).note;
   const process = String(processName || "").trim();
   const step = normalizeStepValue(processStepCurrent);
+  const done = normalizeDateOnlyInput(completionDate);
   const tail = [];
   if (step) tail.push(`[STEP:${step}]`);
   if (process) tail.push(`[PROC:${process}]`);
+  if (done) tail.push(`[DONE:${done}]`);
   if (!base && tail.length === 0) return "";
   if (!base) return tail.join(" ");
   if (tail.length === 0) return base;
@@ -3562,6 +4010,7 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
+
 
 
 

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>元源紫泽 生产管理系统</title>
-  <link rel="stylesheet" href="styles.css?v=20260225i" />
+  <link rel="stylesheet" href="styles.css?v=20260226c" />
 </head>
 <body>
   <header class="topbar">
@@ -96,9 +96,8 @@
             <th>图号</th>
             <th>数量</th>
             <th>工序/工时/设备</th>
-            <th>表面处理</th>
             <th>状态</th>
-            <th>开始时间</th>
+            <th>下单/完成</th>
             <th>交期</th>
             <th>备注</th>
             <th>操作</th>
@@ -157,8 +156,17 @@
           <select id="processProgramInput"></select>
         </label>
         <label class="process-time-field">
-          <span>总共几序</span>
-          <select id="processNameInput"></select>
+          <span>工艺（可多选）</span>
+          <div id="processCraftOptions" class="process-craft-options"></div>
+          <p id="processCraftPreview" class="process-craft-preview">未选择工艺</p>
+        </label>
+        <label id="processCncStepWrap" class="process-time-field" style="display:none;">
+          <span>CNC总序数</span>
+          <select id="processCncStepInput"></select>
+        </label>
+        <label id="processSurfaceWrap" class="process-time-field" style="display:none;">
+          <span>表面处理选项</span>
+          <select id="processSurfaceInput"></select>
         </label>
         <label class="process-time-field">
           <span>工时（分钟）</span>
@@ -167,10 +175,6 @@
         <label class="process-time-field">
           <span>机台</span>
           <select id="processMachineInput"></select>
-        </label>
-        <label class="process-time-field">
-          <span>车床</span>
-          <select id="processLatheInput"></select>
         </label>
       </div>
       <div class="process-time-actions">
@@ -188,7 +192,7 @@
         <button id="statusCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
       <p id="statusSubTitle" class="dialog-subtitle"></p>
-      <p id="statusProcessContext" class="status-process-context">当前第0序 / 共1序 / 剩余1序</p>
+      <p id="statusProcessContext" class="status-process-context">当前未选择工艺 / 共1序 / 剩余1序</p>
       <div class="status-form">
         <label class="status-field">
           <span>状态</span>
@@ -258,6 +262,27 @@
     </section>
   </div>
 
+  <div id="noteDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel note-panel" role="dialog" aria-modal="true" aria-labelledby="noteTitle">
+      <header class="dialog-head">
+        <h3 id="noteTitle">备注设置</h3>
+        <button id="noteCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="noteSubTitle" class="dialog-subtitle"></p>
+      <div class="note-form">
+        <label class="note-field" for="noteInput">
+          <span>备注内容</span>
+          <textarea id="noteInput" rows="5" maxlength="1000" placeholder="请输入备注"></textarea>
+        </label>
+      </div>
+      <div class="note-actions">
+        <button id="noteCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="noteClearBtn" class="btn btn-secondary" type="button">清空</button>
+        <button id="noteSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
   <div id="deleteConfirmDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
       <header class="dialog-head">
@@ -312,20 +337,21 @@
 
   <button id="backTopBtn" class="back-top-btn" title="返回顶行">返回顶行</button>
 
-  <script src="xlsx.full.min.js?v=20260225i"></script>
-  <script src="supabase.min.js?v=20260225i"></script>
-  <script src="config.prod.js?v=20260225i"></script>
+  <script src="xlsx.full.min.js?v=20260226c"></script>
+  <script src="supabase.min.js?v=20260226c"></script>
+  <script src="config.prod.js?v=20260226c"></script>
   <script>
     (function () {
       var h = location.hostname;
       var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
       if (!isLocal) return;
       var s = document.createElement("script");
-      s.src = "config.js?v=20260225i";
+      s.src = "config.js?v=20260226c";
       document.head.appendChild(s);
     })();
   </script>
-  <script src="app.js?v=20260225i"></script>
+  <script src="app.js?v=20260226c"></script>
 </body>
 </html>
+
 
