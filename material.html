@@ -1,26 +1,26 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>鍏冩簮绱辰 鐗╂枡绠＄悊</title>
-  <link rel="stylesheet" href="styles.css?v=20260226n" />
+  <title>元源紫泽 物料管理</title>
+  <link rel="stylesheet" href="styles.css?v=20260226o" />
 </head>
 <body class="material-page">
   <header class="topbar">
     <div>
-      <h1>鍏冩簮绱辰 鐗╂枡绠＄悊</h1>
-      <p>鎸夎鍗曞彿蹇€熷綍鍏ヤ笌鍗虫椂淇敼 路 <span id="systemMode">鏈湴妯″紡</span> 路 <span id="lastSyncTime">鏈€杩戝悓姝?--</span></p>
+      <h1>元源紫泽 物料管理</h1>
+      <p>按订单号快速录入与即时修改 · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
     </div>
     <div class="actions">
       <div class="actions-row actions-auth-row">
-        <span id="authUser" class="auth-user" title="褰撳墠鐧诲綍璐﹀彿">鏈櫥褰?/span>
-        <button id="loginBtn" class="btn" type="button">閭鐧诲綍</button>
-        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">閫€鍑虹櫥褰?/button>
+        <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
+        <button id="loginBtn" class="btn" type="button">邮箱登录</button>
+        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">退出登录</button>
       </div>
       <div class="actions-row actions-main-row">
-        <button id="reconnectBtn" class="btn btn-secondary" type="button">閲嶈繛浜戠</button>
-        <a class="btn btn-secondary" href="index.html">杩斿洖璁㈠崟椤甸潰</a>
+        <button id="reconnectBtn" class="btn btn-secondary" type="button">重连云端</button>
+        <a class="btn btn-secondary" href="index.html">返回订单页面</a>
       </div>
     </div>
   </header>
@@ -28,12 +28,12 @@
   <main>
     <section class="toolbar">
       <div class="quick-add">
-        <input id="qaOrderNo" placeholder="缂栧彿(濡?030)" />
-        <input id="qaCustomer" placeholder="瀹㈡埛(鑷姩甯﹀嚭)" readonly />
-        <button id="quickAddBtn" class="btn btn-primary">蹇€熸坊鍔犺</button>
+        <input id="qaOrderNo" placeholder="编号(如 030)" />
+        <input id="qaCustomer" placeholder="客户(自动带出)" readonly />
+        <button id="quickAddBtn" class="btn btn-primary">快速添加行</button>
       </div>
       <div class="filters material-filters" id="materialFilters">
-        <button id="materialFilterToggleBtn" class="btn btn-secondary filter-toggle" type="button" aria-expanded="true">鏀惰捣鎼滅储</button>
+        <button id="materialFilterToggleBtn" class="btn btn-secondary filter-toggle" type="button" aria-expanded="true">收起搜索</button>
         <div class="filter-fields" id="materialFilterFields">
           <select id="materialFilterMonth" title="按订单号月份筛选">
             <option value="">显示全部</option>
@@ -51,8 +51,8 @@
             <option value="12">12月</option>
           </select>
           <input id="searchInput" placeholder="搜索订单号/客户/物料/规格/数量" />
-          <button id="dedupeOrderBtn" class="btn btn-secondary" type="button">鍒犻櫎閲嶅璁㈠崟琛?/button>
-          <button id="addRowInlineBtn" class="btn btn-primary" type="button">+ 娣诲姞琛?/button>
+          <button id="dedupeOrderBtn" class="btn btn-secondary" type="button">删除重复订单行</button>
+          <button id="addRowInlineBtn" class="btn btn-primary" type="button">+ 添加行</button>
         </div>
       </div>
     </section>
@@ -61,45 +61,45 @@
       <table id="orderTable">
         <thead>
           <tr>
-            <th>璁㈠崟鍙?/th>
-            <th>瀹㈡埛</th>
-            <th>鐗╂枡</th>
-            <th>瑙勬牸</th>
-            <th>鏁伴噺</th>
-            <th>閲戦</th>
-            <th>鏄惁榻愬</th>
-            <th>鎿嶄綔</th>
+            <th>订单号</th>
+            <th>客户</th>
+            <th>物料</th>
+            <th>规格</th>
+            <th>数量</th>
+            <th>金额</th>
+            <th>是否齐备</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
       </table>
     </section>
 
-    <p class="hint">鎻愮ず锛氬弻鍑诲崟鍏冩牸鍙紪杈戯紱Enter 淇濆瓨骞惰烦杞笅涓€琛屽悓鍒楋紱</p>
+    <p class="hint">提示：双击单元格可编辑；Enter 保存并跳转下一行同列；</p>
     <div class="scroll-tail" aria-hidden="true"></div>
   </main>
 
   <div id="authLoginDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel auth-login-panel" role="dialog" aria-modal="true" aria-labelledby="authLoginTitle">
       <header class="dialog-head">
-        <h3 id="authLoginTitle">閭鐧诲綍</h3>
-        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">鍏抽棴</button>
+        <h3 id="authLoginTitle">邮箱登录</h3>
+        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
-      <p class="dialog-subtitle">浼樺厛浣跨敤閭+瀵嗙爜鐧诲綍锛涗篃鍙彂閫侀偖绠辩櫥褰曢摼鎺ャ€?/p>
+      <p class="dialog-subtitle">优先使用邮箱+密码登录；也可发送邮箱登录链接。</p>
       <div class="auth-login-form">
         <label class="auth-login-field" for="authLoginEmailInput">
-          <span>閭</span>
+          <span>邮箱</span>
           <input id="authLoginEmailInput" type="email" autocomplete="email" placeholder="name@example.com" />
         </label>
         <label class="auth-login-field" for="authLoginPasswordInput">
-          <span>瀵嗙爜</span>
-          <input id="authLoginPasswordInput" type="password" autocomplete="current-password" placeholder="璇疯緭鍏ュ瘑鐮? />
+          <span>密码</span>
+          <input id="authLoginPasswordInput" type="password" autocomplete="current-password" placeholder="请输入密码" />
         </label>
       </div>
       <div class="auth-login-actions">
-        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">鍙栨秷</button>
-        <button id="authPasswordLoginBtn" class="btn btn-primary" type="button">瀵嗙爜鐧诲綍</button>
-        <button id="authLoginSubmitBtn" class="btn btn-secondary" type="button">鍙戦€佺櫥褰曢偖浠?/button>
+        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="authPasswordLoginBtn" class="btn btn-primary" type="button">密码登录</button>
+        <button id="authLoginSubmitBtn" class="btn btn-secondary" type="button">发送登录邮件</button>
       </div>
     </section>
   </div>
@@ -107,32 +107,30 @@
   <div id="infoDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="infoDialogTitle">
       <header class="dialog-head">
-        <h3 id="infoDialogTitle">鎻愮ず</h3>
-        <button id="infoDialogCloseBtn" class="btn btn-secondary" type="button">鍏抽棴</button>
+        <h3 id="infoDialogTitle">提示</h3>
+        <button id="infoDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
       <p id="infoDialogText" class="dialog-subtitle"></p>
       <div class="confirm-actions">
-        <button id="infoDialogOkBtn" class="btn btn-primary" type="button">鐭ラ亾浜?/button>
+        <button id="infoDialogOkBtn" class="btn btn-primary" type="button">知道了</button>
       </div>
     </section>
   </div>
 
-  <button id="backTopBtn" class="back-top-btn" title="杩斿洖椤堕儴">杩斿洖椤堕儴</button>
+  <button id="backTopBtn" class="back-top-btn" title="返回顶部">返回顶部</button>
 
-  <script src="supabase.min.js?v=20260226n"></script>
-  <script src="config.prod.js?v=20260226n"></script>
+  <script src="supabase.min.js?v=20260226o"></script>
+  <script src="config.prod.js?v=20260226o"></script>
   <script>
     (function () {
       var h = location.hostname;
       var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
       if (!isLocal) return;
       var s = document.createElement("script");
-      s.src = "config.js?v=20260226n";
+      s.src = "config.js?v=20260226o";
       document.head.appendChild(s);
     })();
   </script>
-  <script src="material.js?v=20260226n"></script>
+  <script src="material.js?v=20260226o"></script>
 </body>
 </html>
-
-
