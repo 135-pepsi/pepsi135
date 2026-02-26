@@ -616,7 +616,9 @@ body:not(.material-page) #orderTable {
 }
 
 .material-page #orderTable {
-  min-width: 960px;
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -682,8 +684,10 @@ th {
 
 .material-page #orderTable th,
 .material-page #orderTable td {
-  padding: 10px 10px;
-  line-height: 1.45;
+  padding: 8px 8px;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .material-page #orderTable th:nth-child(-n+4) {
@@ -691,11 +695,11 @@ th {
 }
 
 .material-page #orderTable td {
-  background: rgba(10, 30, 55, 0.95);
+  background: transparent;
 }
 
 .material-page #orderTable td:nth-child(-n+4) {
-  background: rgba(12, 34, 61, 0.98);
+  background: transparent;
 }
 body:not(.material-page) #orderTable th:nth-child(2) { background: linear-gradient(180deg, #205488, #19436f); }
 body:not(.material-page) #orderTable th:nth-child(3) { background: linear-gradient(180deg, #2a5f8d, #1f4d76); }
@@ -906,6 +910,15 @@ td.editing {
 
 body:not(.material-page) #orderTable tbody td {
   min-height: var(--order-row-h);
+}
+
+.material-page #orderTable tbody td {
+  min-height: var(--order-row-h);
+}
+
+.material-page #orderTable td.inherited-order-no {
+  color: #9fc3e8;
+  font-weight: 600;
 }
 
 body:not(.material-page) #orderTable th:nth-child(2),

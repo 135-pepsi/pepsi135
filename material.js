@@ -534,7 +534,12 @@ async function quickAdd() {
 }
 
 async function addBlankRow() {
-  const next = createEmptyMaterial();
+  const context = getLastOrderContext();
+  const next = {
+    ...createEmptyMaterial(),
+    orderNo: context.orderNo || "",
+    customer: context.customer || "",
+  };
   materials.push(next);
   await persist({ changed: [next] });
   render();
@@ -545,9 +550,10 @@ async function addBlankRow() {
 }
 
 function getFilteredRows() {
-  return materials.filter((m) => {
+  return materials.filter((m, idx, arr) => {
+    const effectiveOrderNo = getEffectiveOrderNoForMaterialRows(arr, idx);
     if (!filterText) return true;
-    return [m.orderNo, m.customer, m.material, m.spec, m.quantity].some((x) =>
+    return [effectiveOrderNo, m.customer, m.material, m.spec, m.quantity].some((x) =>
       String(x || "").toLowerCase().includes(filterText)
     );
   });
@@ -556,12 +562,25 @@ function getFilteredRows() {
 function render() {
   ensureTableColGroup();
   const rows = getFilteredRows();
+  const unitFlags = buildOrderUnitFlags(rows);
   tableBody.innerHTML = "";
 
-  rows.forEach((m) => {
+  rows.forEach((m, index) => {
     const tr = document.createElement("tr");
     tr.dataset.id = m.id;
-    tr.appendChild(editCell(m, "orderNo"));
+    const flags = unitFlags.get(m.id);
+    if (flags?.unit) tr.classList.add("order-unit");
+    if (flags?.start) tr.classList.add("order-unit-start");
+    if (flags?.end) tr.classList.add("order-unit-end");
+
+    const effectiveOrderNo = getEffectiveOrderNoForMaterialRows(rows, index);
+    const orderNoDisplay = String(m.orderNo || "").trim() || effectiveOrderNo;
+    const orderNoTd = editCell(m, "orderNo", "text", orderNoDisplay);
+    if (!String(m.orderNo || "").trim() && orderNoDisplay) {
+      orderNoTd.classList.add("inherited-order-no");
+      orderNoTd.title = "继承上一行订单号";
+    }
+    tr.appendChild(orderNoTd);
     tr.appendChild(textCell(m.customer || ""));
     tr.appendChild(editCell(m, "material"));
     tr.appendChild(editCell(m, "spec"));
@@ -579,6 +598,19 @@ function render() {
     opTd.appendChild(delBtn);
     tr.appendChild(opTd);
     tableBody.appendChild(tr);
+
+    const next = rows[index + 1];
+    const currRoot = flags?.rootId || m.id;
+    const nextRoot = next ? unitFlags.get(next.id)?.rootId || next.id : "";
+    const needGap = Boolean(next && currRoot && nextRoot && currRoot !== nextRoot);
+    if (needGap) {
+      const gapTr = document.createElement("tr");
+      gapTr.className = "order-unit-gap";
+      const gapTd = document.createElement("td");
+      gapTd.colSpan = 8;
+      gapTr.appendChild(gapTd);
+      tableBody.appendChild(gapTr);
+    }
   });
 
   applyColumnWidths();
@@ -591,15 +623,64 @@ function textCell(value) {
   return td;
 }
 
-function editCell(item, key, type = "text") {
+function editCell(item, key, type = "text", displayValue = null) {
   const td = document.createElement("td");
   td.dataset.key = key;
   td.dataset.id = item.id;
   const raw = String(item[key] ?? "");
   td.dataset.raw = raw;
-  td.textContent = formatDisplayValue(key, raw);
+  td.textContent = displayValue == null ? formatDisplayValue(key, raw) : String(displayValue);
   td.addEventListener("dblclick", () => beginEdit(td, type));
   return td;
+}
+
+function getEffectiveOrderNoForMaterialRows(rows, index) {
+  const current = String(rows[index]?.orderNo || "").trim();
+  if (current) return current;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const prev = String(rows[i]?.orderNo || "").trim();
+    if (prev) return prev;
+  }
+  return "";
+}
+
+function buildOrderUnitFlags(rows) {
+  const flags = new Map();
+  let unitStartIndex = -1;
+  let currentRootId = "";
+  for (let i = 0; i < rows.length; i += 1) {
+    const id = rows[i]?.id;
+    if (!id) continue;
+    const hasOrderNo = String(rows[i]?.orderNo || "").trim() !== "";
+    if (hasOrderNo) {
+      if (unitStartIndex >= 0) {
+        const prevEndId = rows[i - 1]?.id;
+        if (prevEndId) {
+          const prevEnd = flags.get(prevEndId) || {};
+          flags.set(prevEndId, { ...prevEnd, end: true });
+        }
+      }
+      unitStartIndex = i;
+      currentRootId = id;
+      const startFlag = flags.get(id) || {};
+      flags.set(id, { ...startFlag, unit: true, start: true, end: false, rootId: currentRootId });
+      continue;
+    }
+    if (unitStartIndex >= 0) {
+      const f = flags.get(id) || {};
+      flags.set(id, { ...f, unit: true, rootId: currentRootId || id });
+      continue;
+    }
+    flags.set(id, { unit: true, start: true, end: true, rootId: id });
+  }
+  if (rows.length > 0) {
+    const lastId = rows[rows.length - 1]?.id;
+    if (lastId) {
+      const last = flags.get(lastId) || {};
+      flags.set(lastId, { ...last, end: true });
+    }
+  }
+  return flags;
 }
 
 function beginEdit(td, type = "text") {
