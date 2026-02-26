@@ -51,7 +51,6 @@ const infoDialogCloseBtn = document.getElementById("infoDialogCloseBtn");
 const infoDialogOkBtn = document.getElementById("infoDialogOkBtn");
 const lastSyncTime = document.getElementById("lastSyncTime");
 const materialFilters = document.getElementById("materialFilters");
-const materialFilterToggleBtn = document.getElementById("materialFilterToggleBtn");
 const materialToolbar = document.querySelector(".material-page .toolbar");
 
 init();
@@ -97,16 +96,6 @@ function setLastSyncTime() {
 }
 
 function bindEvents() {
-  const quickAddBtn = document.getElementById("quickAddBtn");
-  if (quickAddBtn) quickAddBtn.addEventListener("click", quickAdd);
-  const addRowInlineBtn = document.getElementById("addRowInlineBtn");
-  if (addRowInlineBtn) addRowInlineBtn.addEventListener("click", addBlankRow);
-  const dedupeOrderBtn = document.getElementById("dedupeOrderBtn");
-  if (dedupeOrderBtn) {
-    dedupeOrderBtn.addEventListener("click", () => {
-      void removeDuplicateOrderRows(true);
-    });
-  }
   if (reconnectBtn) {
     reconnectBtn.addEventListener("click", () => {
       void tryReconnectRemote(true);
@@ -174,11 +163,15 @@ function bindEvents() {
       if (event.target === infoDialog) closeInfoDialog();
     });
   }
-  document.getElementById("qaOrderNo").addEventListener("input", syncQuickCustomer);
-  document.getElementById("searchInput").addEventListener("input", (e) => {
-    filterText = String(e.target.value || "").trim().toLowerCase();
-    render();
-  });
+  const qaOrderNoInput = document.getElementById("qaOrderNo");
+  if (qaOrderNoInput) qaOrderNoInput.addEventListener("input", syncQuickCustomer);
+  const searchInput = document.getElementById("searchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      filterText = String(e.target.value || "").trim().toLowerCase();
+      render();
+    });
+  }
   const materialFilterMonth = document.getElementById("materialFilterMonth");
   if (materialFilterMonth) {
     materialFilterMonth.value = filterMonth;
@@ -187,24 +180,16 @@ function bindEvents() {
       render();
     });
   }
-  if (materialFilterToggleBtn && materialFilters) {
-    materialFilterToggleBtn.addEventListener("click", () => {
-      const collapsed = materialFilters.classList.toggle("collapsed");
-      materialFilterToggleBtn.textContent = collapsed ? "展开搜索" : "收起搜索";
-      materialFilterToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      updateLayoutMetrics();
+  if (backTopBtn) {
+    backTopBtn.addEventListener("click", () => {
+      if (tableWrap) tableWrap.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
   }
-
-  backTopBtn.addEventListener("click", () => {
-    if (tableWrap) tableWrap.scrollTo({ top: 0, behavior: "smooth" });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  });
   window.addEventListener("scroll", updateBackTopBtn);
   tableWrap.addEventListener("scroll", updateBackTopBtn);
   window.addEventListener("resize", () => {
     queueStickyColumnOffsets();
-    syncFilterPanelForViewport();
     updateLayoutMetrics();
   });
   window.addEventListener("storage", (e) => {
@@ -222,7 +207,6 @@ function bindEvents() {
   updateBackTopBtn();
   updateAuthUi();
   syncReconnectButton();
-  syncFilterPanelForViewport();
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && authLoginDialog && !authLoginDialog.hidden) {
@@ -242,21 +226,11 @@ function bindEvents() {
   });
 }
 
-function syncFilterPanelForViewport() {
-  if (!materialFilters || !materialFilterToggleBtn) return;
-  if (window.innerWidth > 780) {
-    materialFilters.classList.remove("collapsed");
-    materialFilterToggleBtn.textContent = "收起搜索";
-    materialFilterToggleBtn.setAttribute("aria-expanded", "true");
-  }
-  updateLayoutMetrics();
-}
-
 function updateLayoutMetrics() {
   const root = document.documentElement;
   const topbar = document.querySelector(".topbar");
   const topbarH = topbar ? Math.round(topbar.getBoundingClientRect().height) : 72;
-  const toolbarH = materialToolbar ? Math.round(materialToolbar.getBoundingClientRect().height) : 92;
+  const toolbarH = materialToolbar ? Math.round(materialToolbar.getBoundingClientRect().height) : 0;
   root.style.setProperty("--topbar-h", `${topbarH}px`);
   root.style.setProperty("--material-toolbar-h", `${toolbarH}px`);
 }
@@ -562,6 +536,23 @@ async function addBlankRow() {
   if (firstEditable) beginEdit(firstEditable);
 }
 
+async function addBlankRowAfter(afterId, fallbackOrderNo = "") {
+  const idx = materials.findIndex((x) => x.id === afterId);
+  const contextOrderNo = String(fallbackOrderNo || "").trim() || getLastOrderContext().orderNo || "";
+  const next = {
+    ...createEmptyMaterial(),
+    orderNo: contextOrderNo,
+    customer: resolveCustomerByOrderNo(contextOrderNo, ""),
+  };
+  if (idx >= 0) {
+    materials.splice(idx + 1, 0, next);
+  } else {
+    materials.push(next);
+  }
+  await persist({ changed: [next] });
+  render();
+}
+
 function getFilteredRows() {
   return materials.filter((m, idx, arr) => {
     const effectiveOrderNo = getEffectiveOrderNoForMaterialRows(arr, idx);
@@ -610,6 +601,14 @@ function render() {
     tr.appendChild(selectCell(m, "isReady", READY_OPTIONS));
 
     const opTd = document.createElement("td");
+    const addBtn = document.createElement("button");
+    addBtn.className = "action-btn-secondary";
+    addBtn.textContent = "添加行";
+    addBtn.addEventListener("click", () => {
+      void addBlankRowAfter(m.id, effectiveOrderNo);
+    });
+    opTd.appendChild(addBtn);
+
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn";
     delBtn.textContent = "删除";

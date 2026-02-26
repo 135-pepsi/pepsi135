@@ -514,12 +514,12 @@ main {
 }
 
 .material-page .toolbar {
-  position: sticky;
-  top: calc(var(--topbar-h, 78px) + 8px);
-  z-index: 4;
-  padding-top: 4px;
-  background: linear-gradient(180deg, rgba(8, 26, 50, 0.96), rgba(8, 26, 50, 0.72));
-  backdrop-filter: blur(3px);
+  position: static;
+  top: auto;
+  z-index: auto;
+  padding-top: 0;
+  background: transparent;
+  backdrop-filter: none;
 }
 
 .material-page .quick-add,
@@ -538,7 +538,7 @@ main {
 }
 
 .material-filters .filter-fields {
-  grid-template-columns: 120px minmax(220px, 280px) auto auto;
+  grid-template-columns: 120px minmax(220px, 280px);
   justify-content: start;
   align-items: center;
 }
@@ -683,8 +683,9 @@ th {
 }
 
 .material-page #orderTable th {
-  top: calc(var(--topbar-h, 78px) + var(--material-toolbar-h, 92px) + 12px);
-  z-index: 6;
+  position: static;
+  top: auto;
+  z-index: 1;
 }
 
 .material-page #orderTable th,
@@ -696,7 +697,7 @@ th {
 }
 
 .material-page #orderTable th:nth-child(-n+4) {
-  z-index: 7;
+  z-index: 1;
 }
 
 .material-page #orderTable td {
@@ -705,6 +706,15 @@ th {
 
 .material-page #orderTable td:nth-child(-n+4) {
   background: transparent;
+}
+
+.material-page #orderTable th:nth-child(-n+4),
+.material-page #orderTable td:nth-child(-n+4),
+.material-page #orderTable th:last-child,
+.material-page #orderTable td:last-child {
+  position: static;
+  left: auto;
+  right: auto;
 }
 body:not(.material-page) #orderTable th:nth-child(2) { background: linear-gradient(180deg, #205488, #19436f); }
 body:not(.material-page) #orderTable th:nth-child(3) { background: linear-gradient(180deg, #2a5f8d, #1f4d76); }
