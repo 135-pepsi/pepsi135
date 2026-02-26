@@ -11,6 +11,7 @@ const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL
 
 let materials = [];
 let filterText = "";
+let filterMonth = String(new Date().getMonth() + 1).padStart(2, "0");
 let syncing = false;
 let remoteOnline = REMOTE_ENABLED;
 let remoteErrorNotified = false;
@@ -178,6 +179,14 @@ function bindEvents() {
     filterText = String(e.target.value || "").trim().toLowerCase();
     render();
   });
+  const materialFilterMonth = document.getElementById("materialFilterMonth");
+  if (materialFilterMonth) {
+    materialFilterMonth.value = filterMonth;
+    materialFilterMonth.addEventListener("change", (e) => {
+      filterMonth = String(e.target.value || "");
+      render();
+    });
+  }
   if (materialFilterToggleBtn && materialFilters) {
     materialFilterToggleBtn.addEventListener("click", () => {
       const collapsed = materialFilters.classList.toggle("collapsed");
@@ -556,11 +565,19 @@ async function addBlankRow() {
 function getFilteredRows() {
   return materials.filter((m, idx, arr) => {
     const effectiveOrderNo = getEffectiveOrderNoForMaterialRows(arr, idx);
-    if (!filterText) return true;
-    return [effectiveOrderNo, m.customer, m.material, m.spec, m.quantity].some((x) =>
+    const monthOk = !filterMonth || getMonthFromOrderNo(effectiveOrderNo) === filterMonth;
+    if (!filterText) return monthOk;
+    const textOk = [effectiveOrderNo, m.customer, m.material, m.spec, m.quantity].some((x) =>
       String(x || "").toLowerCase().includes(filterText)
     );
+    return monthOk && textOk;
   });
+}
+
+function getMonthFromOrderNo(orderNo) {
+  const no = String(orderNo || "").trim().toUpperCase();
+  if (!/^ZZ\d{7}$/.test(no)) return "";
+  return no.slice(4, 6);
 }
 
 function render() {
@@ -1059,8 +1076,6 @@ async function syncInheritedOrderRows() {
   if (!Array.isArray(materials)) return;
 
   const changedById = new Map();
-  const byOrderNo = new Map();
-  const deletedIdSet = new Set();
 
   const markChanged = (item) => {
     if (!item?.id) return;
@@ -1074,9 +1089,6 @@ async function syncInheritedOrderRows() {
       markChanged(item);
     }
     if (!key) return;
-    const list = byOrderNo.get(key) || [];
-    list.push(item);
-    byOrderNo.set(key, list);
 
     const inheritedCustomer = orderCustomerMap.get(key);
     if (!inheritedCustomer) return;
@@ -1085,50 +1097,9 @@ async function syncInheritedOrderRows() {
     markChanged(item);
   });
 
-  byOrderNo.forEach((rows) => {
-    const placeholders = rows.filter(isPlaceholderRow);
-    const realRows = rows.filter((row) => !isPlaceholderRow(row));
-
-    if (realRows.length > 0 && placeholders.length > 0) {
-      placeholders.forEach((row) => deletedIdSet.add(row.id));
-      return;
-    }
-
-    if (placeholders.length > 1) {
-      const sorted = placeholders
-        .slice()
-        .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
-      sorted.slice(1).forEach((row) => deletedIdSet.add(row.id));
-    }
-  });
-
-  if (deletedIdSet.size > 0) {
-    materials = materials.filter((item) => !deletedIdSet.has(item.id));
-  }
-
-  const existingOrderNos = new Set(
-    materials
-      .map((item) => String(item.orderNo || "").trim().toUpperCase())
-      .filter(Boolean)
-  );
-
-  orderCustomerMap.forEach((customer, orderNo) => {
-    const key = String(orderNo || "").trim().toUpperCase();
-    if (!key || existingOrderNos.has(key)) return;
-    const next = {
-      ...createEmptyMaterial(),
-      orderNo: key,
-      customer: customer || "",
-    };
-    materials.push(next);
-    existingOrderNos.add(key);
-    markChanged(next);
-  });
-
-  const changed = Array.from(changedById.values()).filter((item) => !deletedIdSet.has(item.id));
-  const deletedIds = Array.from(deletedIdSet).filter(Boolean);
-  if (changed.length > 0 || deletedIds.length > 0) {
-    await persist({ changed, deletedIds, notifyAuth: false });
+  const changed = Array.from(changedById.values());
+  if (changed.length > 0) {
+    await persist({ changed, notifyAuth: false });
   }
 }
 

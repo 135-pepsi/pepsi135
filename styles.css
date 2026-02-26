@@ -538,7 +538,7 @@ main {
 }
 
 .material-filters .filter-fields {
-  grid-template-columns: minmax(220px, 280px) auto auto;
+  grid-template-columns: 120px minmax(220px, 280px) auto auto;
   justify-content: start;
   align-items: center;
 }
@@ -546,6 +546,11 @@ main {
 .material-page #searchInput {
   width: 240px;
   max-width: 240px;
+}
+
+.material-page #materialFilterMonth {
+  width: 110px;
+  max-width: 110px;
 }
 
 .filter-toggle {
