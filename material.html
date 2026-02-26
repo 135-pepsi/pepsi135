@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>元源紫泽 物料管理</title>
-  <link rel="stylesheet" href="styles.css?v=20260226s" />
+  <title>元源紫泽 物料采购跟踪</title>
+  <link rel="stylesheet" href="styles.css?v=20260226v" />
 </head>
 <body class="material-page">
   <header class="topbar">
     <div>
-      <h1>元源紫泽 物料管理</h1>
-      <p>按订单号快速录入与即时修改 · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
+      <h1>元源紫泽 物料采购跟踪</h1>
+      <p>轻量 MRP + 看板补货（5台 CNC） · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
     </div>
     <div class="actions">
       <div class="actions-row actions-auth-row">
@@ -26,49 +26,120 @@
   </header>
 
   <main>
-    <section class="toolbar">
-      <div class="filters material-filters" id="materialFilters">
-        <div class="filter-fields" id="materialFilterFields">
-          <select id="materialFilterMonth" title="按订单号月份筛选">
-            <option value="">显示全部</option>
-            <option value="01">01月</option>
-            <option value="02">02月</option>
-            <option value="03">03月</option>
-            <option value="04">04月</option>
-            <option value="05">05月</option>
-            <option value="06">06月</option>
-            <option value="07">07月</option>
-            <option value="08">08月</option>
-            <option value="09">09月</option>
-            <option value="10">10月</option>
-            <option value="11">11月</option>
-            <option value="12">12月</option>
-          </select>
-          <input id="searchInput" placeholder="搜索订单号/客户/物料/规格/数量" />
+    <section class="kpi-grid material-kpi-grid">
+      <article class="kpi-card kpi-a"><span>待下单数</span><strong id="materialKpiNeedOrder">0</strong></article>
+      <article class="kpi-card kpi-b"><span>在途数</span><strong id="materialKpiInTransit">0</strong></article>
+      <article class="kpi-card kpi-c"><span>超期未到货</span><strong id="materialKpiOverdue">0</strong></article>
+      <article class="kpi-card kpi-d"><span>3天缺料风险</span><strong id="materialKpiRisk3d">0</strong></article>
+      <article class="kpi-card kpi-a"><span>总采购金额</span><strong id="materialKpiAmount">¥0.00</strong></article>
+      <article class="kpi-card kpi-b"><span>影响订单数</span><strong id="materialKpiOrderImpact">0</strong></article>
+    </section>
+
+    <section class="material-layout">
+      <aside class="material-side-card">
+        <h3>筛选</h3>
+        <div class="material-filter-grid">
+          <label>
+            <span>按月</span>
+            <select id="materialFilterMonth">
+              <option value="">全部</option>
+              <option value="01">01月</option>
+              <option value="02">02月</option>
+              <option value="03">03月</option>
+              <option value="04">04月</option>
+              <option value="05">05月</option>
+              <option value="06">06月</option>
+              <option value="07">07月</option>
+              <option value="08">08月</option>
+              <option value="09">09月</option>
+              <option value="10">10月</option>
+              <option value="11">11月</option>
+              <option value="12">12月</option>
+            </select>
+          </label>
+          <label>
+            <span>供应商</span>
+            <input id="materialFilterSupplier" placeholder="输入供应商" />
+          </label>
+          <label>
+            <span>状态</span>
+            <select id="materialFilterStatus">
+              <option value="">全部</option>
+              <option value="待请购">待请购</option>
+              <option value="待下单">待下单</option>
+              <option value="在途">在途</option>
+              <option value="部分到货">部分到货</option>
+              <option value="已到货">已到货</option>
+              <option value="异常">异常</option>
+            </select>
+          </label>
+          <label>
+            <span>机台</span>
+            <select id="materialFilterMachine">
+              <option value="">全部</option>
+              <option value="机台1">机台1</option>
+              <option value="机台2">机台2</option>
+              <option value="机台3">机台3</option>
+              <option value="机台4">机台4</option>
+              <option value="机台5">机台5</option>
+            </select>
+          </label>
+          <label class="check-row">
+            <input id="materialFilterOverdueOnly" type="checkbox" />
+            <span>仅看超期</span>
+          </label>
+          <label>
+            <span>关键字</span>
+            <input id="searchInput" placeholder="订单号/客户/物料/规格" />
+          </label>
         </div>
-      </div>
+      </aside>
+
+      <section class="material-main-card">
+        <div class="material-main-head">
+          <h3>采购明细</h3>
+          <button id="materialAddOrderBtn" class="btn btn-primary" type="button">新增行</button>
+        </div>
+        <div class="table-wrap" id="tableWrap">
+          <table id="orderTable">
+            <thead>
+              <tr>
+                <th>订单号</th>
+                <th>客户</th>
+                <th>物料</th>
+                <th>规格</th>
+                <th>库存</th>
+                <th>可用量</th>
+                <th>安全库存</th>
+                <th>建议采购量</th>
+                <th>承诺到货</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="material-side-card">
+        <h3>预警卡</h3>
+        <div class="warning-list">
+          <h4>超期未到货</h4>
+          <ul id="warningOverdueItems"></ul>
+        </div>
+        <div class="warning-list">
+          <h4>未来3天缺料风险</h4>
+          <ul id="warningRiskItems"></ul>
+        </div>
+        <div class="warning-list">
+          <h4>低于安全库存</h4>
+          <ul id="warningSafetyItems"></ul>
+        </div>
+      </aside>
     </section>
 
-    <section class="table-wrap" id="tableWrap">
-      <table id="orderTable">
-        <thead>
-          <tr>
-            <th>订单号</th>
-            <th>客户</th>
-            <th>物料</th>
-            <th>规格</th>
-            <th>数量</th>
-            <th>金额</th>
-            <th>是否齐备</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
-    </section>
-
-    <p class="hint">提示：双击单元格可编辑；Enter 保存并跳转下一行同列；</p>
-    <div class="scroll-tail" aria-hidden="true"></div>
+    <p class="hint">提示：双击可编辑基础字段；采购操作请使用“下单/到货/异常”按钮。</p>
   </main>
 
   <div id="authLoginDialog" class="dialog-backdrop" hidden>
@@ -77,7 +148,7 @@
         <h3 id="authLoginTitle">邮箱登录</h3>
         <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
-      <p class="dialog-subtitle">优先使用邮箱+密码登录；也可发送邮箱登录链接。</p>
+      <p class="dialog-subtitle">优先使用邮箱+密码登录；也可发送登录邮件。</p>
       <div class="auth-login-form">
         <label class="auth-login-field" for="authLoginEmailInput">
           <span>邮箱</span>
@@ -92,6 +163,60 @@
         <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">取消</button>
         <button id="authPasswordLoginBtn" class="btn btn-primary" type="button">密码登录</button>
         <button id="authLoginSubmitBtn" class="btn btn-secondary" type="button">发送登录邮件</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="poDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="poDialogTitle">
+      <header class="dialog-head">
+        <h3 id="poDialogTitle">下单</h3>
+        <button id="poDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <div class="auth-login-form">
+        <label class="auth-login-field"><span>供应商</span><input id="poSupplier" /></label>
+        <label class="auth-login-field"><span>采购数量</span><input id="poQty" type="number" min="0" step="1" /></label>
+        <label class="auth-login-field"><span>单价</span><input id="poPrice" type="number" min="0" step="0.01" /></label>
+        <label class="auth-login-field"><span>承诺交期</span><input id="poPromiseDate" type="date" /></label>
+      </div>
+      <div class="auth-login-actions">
+        <button id="poCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="poSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="arrivalDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="arrivalDialogTitle">
+      <header class="dialog-head">
+        <h3 id="arrivalDialogTitle">到货</h3>
+        <button id="arrivalDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <div class="auth-login-form">
+        <label class="auth-login-field"><span>到货数量</span><input id="arrivalQty" type="number" min="0" step="1" /></label>
+        <label class="auth-login-field"><span>到货日期</span><input id="arrivalDate" type="date" /></label>
+      </div>
+      <div class="auth-login-actions">
+        <button id="arrivalCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="arrivalSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="abnormalDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="abnormalDialogTitle">
+      <header class="dialog-head">
+        <h3 id="abnormalDialogTitle">异常</h3>
+        <button id="abnormalDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <div class="auth-login-form">
+        <label class="auth-login-field"><span>延期原因</span><input id="abnormalReason" /></label>
+        <label class="auth-login-field"><span>替代料</span><input id="abnormalAltMaterial" /></label>
+        <label class="auth-login-field"><span>预计恢复时间</span><input id="abnormalRecoverDate" type="date" /></label>
+      </div>
+      <div class="auth-login-actions">
+        <button id="abnormalCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="abnormalSaveBtn" class="btn btn-primary" type="button">保存</button>
       </div>
     </section>
   </div>
@@ -111,18 +236,18 @@
 
   <button id="backTopBtn" class="back-top-btn" title="返回顶部">返回顶部</button>
 
-  <script src="supabase.min.js?v=20260226s"></script>
-  <script src="config.prod.js?v=20260226s"></script>
+  <script src="supabase.min.js?v=20260226v"></script>
+  <script src="config.prod.js?v=20260226v"></script>
   <script>
     (function () {
       var h = location.hostname;
       var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
       if (!isLocal) return;
       var s = document.createElement("script");
-      s.src = "config.js?v=20260226s";
+      s.src = "config.js?v=20260226v";
       document.head.appendChild(s);
     })();
   </script>
-  <script src="material.js?v=20260226s"></script>
+  <script src="material.js?v=20260226v"></script>
 </body>
 </html>

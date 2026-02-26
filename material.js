@@ -1,569 +1,220 @@
-﻿const STORAGE_KEY = "mini_mes_materials_v1";
-const COL_WIDTH_KEY = "mini_mes_materials_col_widths_v1";
+﻿
+const STORAGE_KEY = "mini_mes_materials_v2";
+const EXTRA_KEY = "mini_mes_materials_extra_v2";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
-const ORDER_SYNC_ENABLED = true;
 
-const READY_OPTIONS = ["是", "否"];
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
-const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
+const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 20) * 1000);
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
-let materials = [];
-let filterText = "";
-let filterMonth = String(new Date().getMonth() + 1).padStart(2, "0");
-let syncing = false;
-let remoteOnline = REMOTE_ENABLED;
-let remoteErrorNotified = false;
-let reconnectTimer = null;
-let reconnectDelayMs = 5000;
-let authSession = null;
-let authWriteHintNotified = false;
-let authLoginSubmitting = false;
-let authLoginSubmittingMode = "";
-let authLoginCooldownUntil = 0;
-let authLoginCooldownTimer = 0;
-let stickyOffsetRaf = 0;
-let pageUnloading = false;
+const STATUS_LIST = ["待请购", "待下单", "在途", "部分到货", "已到货", "异常"];
+
+let rows = [];
+let extras = loadExtras();
 let orderCustomerMap = new Map();
-let serialOrderNoMap = new Map();
-let columnWidths = loadColumnWidths();
+let authSession = null;
+let remoteOnline = REMOTE_ENABLED;
+let syncing = false;
+let reconnectTimer = 0;
+let reconnectDelayMs = 5000;
+let pageUnloading = false;
+let activeRowId = "";
 
-const tableBody = document.getElementById("tableBody");
-const systemMode = document.getElementById("systemMode");
-const tableWrap = document.getElementById("tableWrap");
-const backTopBtn = document.getElementById("backTopBtn");
-const reconnectBtn = document.getElementById("reconnectBtn");
-const authUser = document.getElementById("authUser");
-const loginBtn = document.getElementById("loginBtn");
-const logoutBtn = document.getElementById("logoutBtn");
-const authLoginDialog = document.getElementById("authLoginDialog");
-const authLoginEmailInput = document.getElementById("authLoginEmailInput");
-const authLoginPasswordInput = document.getElementById("authLoginPasswordInput");
-const authLoginCloseBtn = document.getElementById("authLoginCloseBtn");
-const authLoginCancelBtn = document.getElementById("authLoginCancelBtn");
-const authPasswordLoginBtn = document.getElementById("authPasswordLoginBtn");
-const authLoginSubmitBtn = document.getElementById("authLoginSubmitBtn");
-const infoDialog = document.getElementById("infoDialog");
-const infoDialogTitle = document.getElementById("infoDialogTitle");
-const infoDialogText = document.getElementById("infoDialogText");
-const infoDialogCloseBtn = document.getElementById("infoDialogCloseBtn");
-const infoDialogOkBtn = document.getElementById("infoDialogOkBtn");
-const lastSyncTime = document.getElementById("lastSyncTime");
-const materialFilters = document.getElementById("materialFilters");
-const materialToolbar = document.querySelector(".material-page .toolbar");
+const filterState = {
+  month: String(new Date().getMonth() + 1).padStart(2, "0"),
+  supplier: "",
+  status: "",
+  machine: "",
+  overdueOnly: false,
+  keyword: "",
+};
 
-init();
+const el = {
+  tableBody: document.getElementById("tableBody"),
+  tableWrap: document.getElementById("tableWrap"),
+  backTopBtn: document.getElementById("backTopBtn"),
+  systemMode: document.getElementById("systemMode"),
+  lastSyncTime: document.getElementById("lastSyncTime"),
+  authUser: document.getElementById("authUser"),
+  loginBtn: document.getElementById("loginBtn"),
+  logoutBtn: document.getElementById("logoutBtn"),
+  reconnectBtn: document.getElementById("reconnectBtn"),
+
+  filterMonth: document.getElementById("materialFilterMonth"),
+  filterSupplier: document.getElementById("materialFilterSupplier"),
+  filterStatus: document.getElementById("materialFilterStatus"),
+  filterMachine: document.getElementById("materialFilterMachine"),
+  filterOverdueOnly: document.getElementById("materialFilterOverdueOnly"),
+  searchInput: document.getElementById("searchInput"),
+  addOrderBtn: document.getElementById("materialAddOrderBtn"),
+
+  kpiNeedOrder: document.getElementById("materialKpiNeedOrder"),
+  kpiInTransit: document.getElementById("materialKpiInTransit"),
+  kpiOverdue: document.getElementById("materialKpiOverdue"),
+  kpiRisk3d: document.getElementById("materialKpiRisk3d"),
+  kpiAmount: document.getElementById("materialKpiAmount"),
+  kpiOrderImpact: document.getElementById("materialKpiOrderImpact"),
+
+  warningOverdue: document.getElementById("warningOverdueItems"),
+  warningRisk: document.getElementById("warningRiskItems"),
+  warningSafety: document.getElementById("warningSafetyItems"),
+
+  authDialog: document.getElementById("authLoginDialog"),
+  authEmail: document.getElementById("authLoginEmailInput"),
+  authPassword: document.getElementById("authLoginPasswordInput"),
+  authClose: document.getElementById("authLoginCloseBtn"),
+  authCancel: document.getElementById("authLoginCancelBtn"),
+  authPasswordLogin: document.getElementById("authPasswordLoginBtn"),
+  authOtpLogin: document.getElementById("authLoginSubmitBtn"),
+
+  poDialog: document.getElementById("poDialog"),
+  poClose: document.getElementById("poDialogCloseBtn"),
+  poCancel: document.getElementById("poCancelBtn"),
+  poSave: document.getElementById("poSaveBtn"),
+  poSupplier: document.getElementById("poSupplier"),
+  poQty: document.getElementById("poQty"),
+  poPrice: document.getElementById("poPrice"),
+  poPromise: document.getElementById("poPromiseDate"),
+
+  arrivalDialog: document.getElementById("arrivalDialog"),
+  arrivalClose: document.getElementById("arrivalDialogCloseBtn"),
+  arrivalCancel: document.getElementById("arrivalCancelBtn"),
+  arrivalSave: document.getElementById("arrivalSaveBtn"),
+  arrivalQty: document.getElementById("arrivalQty"),
+  arrivalDate: document.getElementById("arrivalDate"),
+
+  abnormalDialog: document.getElementById("abnormalDialog"),
+  abnormalClose: document.getElementById("abnormalDialogCloseBtn"),
+  abnormalCancel: document.getElementById("abnormalCancelBtn"),
+  abnormalSave: document.getElementById("abnormalSaveBtn"),
+  abnormalReason: document.getElementById("abnormalReason"),
+  abnormalAlt: document.getElementById("abnormalAltMaterial"),
+  abnormalRecover: document.getElementById("abnormalRecoverDate"),
+
+  infoDialog: document.getElementById("infoDialog"),
+  infoTitle: document.getElementById("infoDialogTitle"),
+  infoText: document.getElementById("infoDialogText"),
+  infoClose: document.getElementById("infoDialogCloseBtn"),
+  infoOk: document.getElementById("infoDialogOkBtn"),
+};
+
+init().catch((e) => {
+  console.error("物料页初始化失败", e);
+  showInfo("初始化失败，请刷新页面重试。", "错误");
+});
 
 async function init() {
   bindEvents();
-  setupColumnResizers();
-  updateLayoutMetrics();
+  setFilterDefaults();
+  rows = loadLocalRows();
+  await refreshOrderCustomerMap();
   if (REMOTE_ENABLED) {
     await initAuth();
-    await refreshOrderCustomerMap();
-    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemote();
-    setInterval(async () => {
-      if (!syncing && remoteOnline) {
-        await refreshOrderCustomerMap();
-        await refreshFromRemote(false);
-      }
+    setInterval(() => {
+      if (!syncing && remoteOnline) void refreshFromRemote(false);
     }, AUTO_REFRESH_MS);
   } else {
-    await refreshOrderCustomerMap();
     setModeText("本地模式");
-    materials = loadLocal();
-    await syncInheritedOrderRows();
     render();
-    syncQuickCustomer();
     setLastSyncTime();
   }
 }
 
-function setModeText(text) {
-  if (systemMode) systemMode.textContent = text;
-  if (lastSyncTime && text.includes("失败")) lastSyncTime.classList.add("sync-warning");
-  if (lastSyncTime && !text.includes("失败")) lastSyncTime.classList.remove("sync-warning");
-  syncReconnectButton();
-}
-
-function setLastSyncTime() {
-  if (!lastSyncTime) return;
-  const now = new Date();
-  const t = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-  lastSyncTime.textContent = `最近同步 ${t}`;
-}
-
 function bindEvents() {
-  if (reconnectBtn) {
-    reconnectBtn.addEventListener("click", () => {
-      void tryReconnectRemote(true);
-    });
-  }
-  if (loginBtn) {
-    loginBtn.addEventListener("click", () => {
-      void beginEmailLogin();
-    });
-  }
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-      void logoutAuth();
-    });
-  }
-  if (authLoginCloseBtn) {
-    authLoginCloseBtn.addEventListener("click", closeAuthLoginDialog);
-  }
-  if (authLoginCancelBtn) {
-    authLoginCancelBtn.addEventListener("click", closeAuthLoginDialog);
-  }
-  if (authPasswordLoginBtn) {
-    authPasswordLoginBtn.addEventListener("click", () => {
-      void submitPasswordLoginFromDialog();
-    });
-  }
-  if (authLoginSubmitBtn) {
-    authLoginSubmitBtn.addEventListener("click", () => {
-      void submitEmailLoginFromDialog();
-    });
-  }
-  if (authLoginEmailInput) {
-    authLoginEmailInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        if (String(authLoginPasswordInput?.value || "").trim()) {
-          void submitPasswordLoginFromDialog();
-        } else {
-          void submitEmailLoginFromDialog();
-        }
-      }
-    });
-  }
-  if (authLoginPasswordInput) {
-    authLoginPasswordInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void submitPasswordLoginFromDialog();
-      }
-    });
-  }
-  if (authLoginDialog) {
-    authLoginDialog.addEventListener("click", (event) => {
-      if (event.target === authLoginDialog) closeAuthLoginDialog();
-    });
-  }
-  if (infoDialogCloseBtn) {
-    infoDialogCloseBtn.addEventListener("click", closeInfoDialog);
-  }
-  if (infoDialogOkBtn) {
-    infoDialogOkBtn.addEventListener("click", closeInfoDialog);
-  }
-  if (infoDialog) {
-    infoDialog.addEventListener("click", (event) => {
-      if (event.target === infoDialog) closeInfoDialog();
-    });
-  }
-  const qaOrderNoInput = document.getElementById("qaOrderNo");
-  if (qaOrderNoInput) qaOrderNoInput.addEventListener("input", syncQuickCustomer);
-  const searchInput = document.getElementById("searchInput");
-  if (searchInput) {
-    searchInput.addEventListener("input", (e) => {
-      filterText = String(e.target.value || "").trim().toLowerCase();
-      render();
-    });
-  }
-  const materialFilterMonth = document.getElementById("materialFilterMonth");
-  if (materialFilterMonth) {
-    materialFilterMonth.value = filterMonth;
-    materialFilterMonth.addEventListener("change", (e) => {
-      filterMonth = String(e.target.value || "");
-      render();
-    });
-  }
-  if (backTopBtn) {
-    backTopBtn.addEventListener("click", () => {
-      if (tableWrap) tableWrap.scrollTo({ top: 0, behavior: "smooth" });
+  bindFilterEvents();
+  bindAuthEvents();
+  bindDialogEvents();
+  if (el.addOrderBtn) el.addOrderBtn.addEventListener("click", () => void addBlankRow());
+  if (el.reconnectBtn) el.reconnectBtn.addEventListener("click", () => void tryReconnect(true));
+
+  if (el.backTopBtn) {
+    el.backTopBtn.addEventListener("click", () => {
+      if (el.tableWrap) el.tableWrap.scrollTo({ top: 0, behavior: "smooth" });
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
   }
+  if (el.tableWrap) el.tableWrap.addEventListener("scroll", updateBackTopBtn);
   window.addEventListener("scroll", updateBackTopBtn);
-  tableWrap.addEventListener("scroll", updateBackTopBtn);
-  window.addEventListener("resize", () => {
-    queueStickyColumnOffsets();
-    updateLayoutMetrics();
-  });
-  window.addEventListener("storage", (e) => {
-    if (!ORDER_SYNC_ENABLED) return;
-    if (e.key !== ORDER_STORAGE_KEY) return;
-    loadOrderCustomerMapFromLocal();
-    void syncInheritedOrderRows().then(() => {
-      render();
-      syncQuickCustomer();
-    });
-  });
   window.addEventListener("beforeunload", () => {
     pageUnloading = true;
   });
-  updateBackTopBtn();
-  updateAuthUi();
-  syncReconnectButton();
-
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && authLoginDialog && !authLoginDialog.hidden) {
-      e.preventDefault();
-      closeAuthLoginDialog();
-      return;
-    }
-    if (e.key === "Escape" && infoDialog && !infoDialog.hidden) {
-      e.preventDefault();
-      closeInfoDialog();
-      return;
-    }
-    if (e.ctrlKey && e.key.toLowerCase() === "n") {
-      e.preventDefault();
-      void addBlankRow();
+    if (e.key === "Escape") {
+      closeAuthDialog();
+      closeDialog(el.poDialog);
+      closeDialog(el.arrivalDialog);
+      closeDialog(el.abnormalDialog);
+      closeInfo();
     }
   });
 }
 
-function updateLayoutMetrics() {
-  const root = document.documentElement;
-  const topbar = document.querySelector(".topbar");
-  const topbarH = topbar ? Math.round(topbar.getBoundingClientRect().height) : 72;
-  const toolbarH = materialToolbar ? Math.round(materialToolbar.getBoundingClientRect().height) : 0;
-  root.style.setProperty("--topbar-h", `${topbarH}px`);
-  root.style.setProperty("--material-toolbar-h", `${toolbarH}px`);
+function bindFilterEvents() {
+  if (el.filterMonth) el.filterMonth.addEventListener("change", (e) => { filterState.month = String(e.target.value || ""); render(); });
+  if (el.filterSupplier) el.filterSupplier.addEventListener("input", (e) => { filterState.supplier = String(e.target.value || "").trim().toLowerCase(); render(); });
+  if (el.filterStatus) el.filterStatus.addEventListener("change", (e) => { filterState.status = String(e.target.value || ""); render(); });
+  if (el.filterMachine) el.filterMachine.addEventListener("change", (e) => { filterState.machine = String(e.target.value || ""); render(); });
+  if (el.filterOverdueOnly) el.filterOverdueOnly.addEventListener("change", (e) => { filterState.overdueOnly = Boolean(e.target.checked); render(); });
+  if (el.searchInput) el.searchInput.addEventListener("input", (e) => { filterState.keyword = String(e.target.value || "").trim().toLowerCase(); render(); });
+}
+function bindAuthEvents() {
+  if (el.loginBtn) el.loginBtn.addEventListener("click", openAuthDialog);
+  if (el.logoutBtn) el.logoutBtn.addEventListener("click", () => void logoutAuth());
+  if (el.authClose) el.authClose.addEventListener("click", closeAuthDialog);
+  if (el.authCancel) el.authCancel.addEventListener("click", closeAuthDialog);
+  if (el.authPasswordLogin) el.authPasswordLogin.addEventListener("click", () => void loginByPassword());
+  if (el.authOtpLogin) el.authOtpLogin.addEventListener("click", () => void loginByOtp());
+  if (el.authDialog) el.authDialog.addEventListener("click", (e) => { if (e.target === el.authDialog) closeAuthDialog(); });
 }
 
-async function initAuth() {
-  if (!REMOTE_ENABLED || !db?.auth) return;
-  try {
-    const { data, error } = await db.auth.getSession();
-    if (error) throw error;
-    authSession = data?.session || null;
-  } catch (e) {
-    console.warn("读取登录态失败", e);
-    authSession = null;
-  }
-  updateAuthUi();
-  db.auth.onAuthStateChange((_event, session) => {
-    authSession = session || null;
-    authWriteHintNotified = false;
-    updateAuthUi();
-    if (remoteOnline) {
-      setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
-    }
-    if (authSession && remoteOnline) {
-      void refreshFromRemote(false);
-    }
-  });
+function bindDialogEvents() {
+  bindActionDialog(el.poDialog, [el.poClose, el.poCancel], () => void savePo(), el.poSave);
+  bindActionDialog(el.arrivalDialog, [el.arrivalClose, el.arrivalCancel], () => void saveArrival(), el.arrivalSave);
+  bindActionDialog(el.abnormalDialog, [el.abnormalClose, el.abnormalCancel], () => void saveAbnormal(), el.abnormalSave);
+  if (el.infoClose) el.infoClose.addEventListener("click", closeInfo);
+  if (el.infoOk) el.infoOk.addEventListener("click", closeInfo);
+  if (el.infoDialog) el.infoDialog.addEventListener("click", (e) => { if (e.target === el.infoDialog) closeInfo(); });
 }
 
-async function beginEmailLogin() {
-  openAuthLoginDialog();
+function bindActionDialog(dialogEl, closeButtons, saveFn, saveBtn) {
+  closeButtons.forEach((b) => { if (b) b.addEventListener("click", () => closeDialog(dialogEl)); });
+  if (saveBtn) saveBtn.addEventListener("click", saveFn);
+  if (dialogEl) dialogEl.addEventListener("click", (e) => { if (e.target === dialogEl) closeDialog(dialogEl); });
 }
 
-function openAuthLoginDialog() {
-  if (!REMOTE_ENABLED || !db?.auth || !authLoginDialog) return;
-  if (authLoginEmailInput) authLoginEmailInput.value = "";
-  if (authLoginPasswordInput) authLoginPasswordInput.value = "";
-  authLoginDialog.hidden = false;
-  refreshAuthLoginSubmitUi();
-  document.body.style.overflow = "hidden";
-  if (authLoginEmailInput) authLoginEmailInput.focus();
-}
+function setFilterDefaults() { if (el.filterMonth) el.filterMonth.value = filterState.month; }
+function createEmptyRow() { return { id: crypto.randomUUID(), createdAt: new Date().toISOString(), orderNo: "", customer: "", material: "", spec: "", quantity: "", amount: "", isReady: "" }; }
+function createDefaultExtra() { return { supplier: "", status: "待请购", machine: "机台1", safetyStock: 0, inTransit: 0, allocated: 0, dailyUse: 0, leadDays: 7, promiseDate: "", actualDate: "", lastOrderQty: 0, lastOrderPrice: 0, abnormalReason: "", abnormalAltMaterial: "", abnormalRecoverDate: "" }; }
+function getExtra(id) { return { ...createDefaultExtra(), ...(extras[id] || {}) }; }
+function saveExtra(id, patch) { extras[id] = { ...getExtra(id), ...patch }; saveExtras(); }
+function deleteExtra(id) { if (extras[id]) { delete extras[id]; saveExtras(); } }
 
-function closeAuthLoginDialog() {
-  if (!authLoginDialog) return;
-  authLoginDialog.hidden = true;
-  setAuthLoginSubmitting(false);
-  if (infoDialog && !infoDialog.hidden) {
-    document.body.style.overflow = "hidden";
-    return;
-  }
-  document.body.style.overflow = "";
+function getCurrentStock(row) { const n = Number(row.quantity); return Number.isFinite(n) ? n : 0; }
+function getAvailable(row, extra) { return getCurrentStock(row) + Number(extra.inTransit || 0) - Number(extra.allocated || 0); }
+function getSuggestedQty(row, extra) {
+  const available = getAvailable(row, extra);
+  const target = Math.max(0, Number(extra.dailyUse || 0)) * Math.max(0, Number(extra.leadDays || 0)) * 1.2 + Math.max(0, Number(extra.safetyStock || 0));
+  return Math.max(0, Math.ceil(target - available));
 }
-
-function showInfoDialog(message, title = "提示") {
-  if (!infoDialog || !infoDialogText) {
-    alert(message);
-    return;
-  }
-  if (infoDialogTitle) infoDialogTitle.textContent = title;
-  infoDialogText.textContent = String(message || "");
-  infoDialog.hidden = false;
-  document.body.style.overflow = "hidden";
+function getStatus(row, extra) {
+  if (STATUS_LIST.includes(extra.status)) return extra.status;
+  if (String(row.isReady || "").trim() === "是") return "已到货";
+  if (Number(extra.inTransit || 0) > 0) return "在途";
+  return "待请购";
 }
-
-function closeInfoDialog() {
-  if (!infoDialog) return;
-  infoDialog.hidden = true;
-  if (authLoginDialog && !authLoginDialog.hidden) {
-    document.body.style.overflow = "hidden";
-    return;
-  }
-  document.body.style.overflow = "";
+function isOverdue(row, extra) {
+  if (getStatus(row, extra) === "已到货") return false;
+  if (!extra.promiseDate) return false;
+  const d = new Date(extra.promiseDate);
+  if (Number.isNaN(d.getTime())) return false;
+  d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d.getTime() < today.getTime();
 }
-
-function setAuthLoginSubmitting(submitting, mode = "") {
-  authLoginSubmitting = Boolean(submitting);
-  authLoginSubmittingMode = authLoginSubmitting ? String(mode || "") : "";
-  refreshAuthLoginSubmitUi();
-}
-
-function getAuthLoginCooldownSeconds() {
-  return Math.max(0, Math.ceil((authLoginCooldownUntil - Date.now()) / 1000));
-}
-
-function refreshAuthLoginSubmitUi() {
-  const remain = getAuthLoginCooldownSeconds();
-  const otpLocked = authLoginSubmitting || remain > 0;
-  const pwdLocked = authLoginSubmitting;
-  if (authPasswordLoginBtn) {
-    authPasswordLoginBtn.disabled = pwdLocked;
-    authPasswordLoginBtn.textContent = authLoginSubmitting && authLoginSubmittingMode === "password" ? "登录中..." : "密码登录";
-  }
-  if (!authLoginSubmitBtn) return;
-  authLoginSubmitBtn.disabled = otpLocked;
-  if (authLoginSubmitting && authLoginSubmittingMode === "otp") {
-    authLoginSubmitBtn.textContent = "发送中...";
-  } else if (remain > 0) {
-    authLoginSubmitBtn.textContent = `请 ${remain}s 后重试`;
-  } else {
-    authLoginSubmitBtn.textContent = "发送登录邮件";
-  }
-}
-
-function startAuthLoginCooldown(seconds) {
-  authLoginCooldownUntil = Date.now() + Math.max(1, Number(seconds) || 0) * 1000;
-  if (authLoginCooldownTimer) clearInterval(authLoginCooldownTimer);
-  refreshAuthLoginSubmitUi();
-  authLoginCooldownTimer = setInterval(() => {
-    if (getAuthLoginCooldownSeconds() <= 0) {
-      clearInterval(authLoginCooldownTimer);
-      authLoginCooldownTimer = 0;
-      authLoginCooldownUntil = 0;
-    }
-    refreshAuthLoginSubmitUi();
-  }, 1000);
-}
-
-function isRateLimitError(err) {
-  const msg = String(err?.message || err?.error_description || "").toLowerCase();
-  return Number(err?.status) === 429 || msg.includes("rate limit");
-}
-
-function getRetryAfterSeconds(err, fallback = 60) {
-  const v = Number(err?.retry_after || err?.retryAfter || 0);
-  if (Number.isFinite(v) && v > 0) return Math.ceil(v);
-  return fallback;
-}
-
-async function submitEmailLoginFromDialog() {
-  if (!REMOTE_ENABLED || !db?.auth) return;
-  if (authLoginSubmitting) return;
-  const cooldown = getAuthLoginCooldownSeconds();
-  if (cooldown > 0) {
-    alert(`请求过于频繁，请 ${cooldown} 秒后重试。`);
-    return;
-  }
-  const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
-  if (!email) {
-    alert("请输入登录邮箱。");
-    return;
-  }
-  setAuthLoginSubmitting(true, "otp");
-  try {
-    const { error } = await db.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: window.location.href.split("#")[0],
-      },
-    });
-    if (error) throw error;
-    startAuthLoginCooldown(60);
-    closeAuthLoginDialog();
-    alert("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
-  } catch (e) {
-    if (isRateLimitError(e)) {
-      const retry = getRetryAfterSeconds(e, 120);
-      startAuthLoginCooldown(retry);
-      alert(`发送过于频繁，请 ${retry} 秒后再试。`);
-      setAuthLoginSubmitting(false);
-      return;
-    }
-    const detail = e?.message || e?.error_description || "未知错误";
-    alert(`发送登录邮件失败：${detail}`);
-    setAuthLoginSubmitting(false);
-  }
-}
-
-async function submitPasswordLoginFromDialog() {
-  if (!REMOTE_ENABLED || !db?.auth) return;
-  if (authLoginSubmitting) return;
-  const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
-  const password = String(authLoginPasswordInput?.value || "");
-  if (!email) {
-    alert("请输入登录邮箱。");
-    return;
-  }
-  if (!password) {
-    alert("请输入登录密码。");
-    return;
-  }
-  setAuthLoginSubmitting(true, "password");
-  try {
-    const { error } = await db.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    closeAuthLoginDialog();
-    showInfoDialog("登录成功。", "登录成功");
-  } catch (e) {
-    const detail = e?.message || e?.error_description || "未知错误";
-    alert(`密码登录失败：${detail}`);
-    setAuthLoginSubmitting(false);
-  }
-}
-
-async function logoutAuth() {
-  if (!REMOTE_ENABLED || !db?.auth) return;
-  try {
-    const { error } = await db.auth.signOut();
-    if (error) throw error;
-    authSession = null;
-    updateAuthUi();
-    setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
-  } catch (e) {
-    const detail = e?.message || e?.error_description || "未知错误";
-    alert(`退出失败：${detail}`);
-  }
-}
-
-function updateAuthUi() {
-  if (authUser) {
-    authUser.textContent = authSession?.user?.email || "未登录";
-  }
-  if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
-  if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
-}
-
-function canWriteRemote(notify = true) {
-  if (!REMOTE_ENABLED) return false;
-  if (authSession) return true;
-  if (notify && !authWriteHintNotified) {
-    authWriteHintNotified = true;
-    showInfoDialog("当前为只读模式，请先点击“邮箱登录”后再写入云端数据。", "写入受限");
-  }
-  return false;
-}
-
-function updateBackTopBtn() {
-  const pageY = window.scrollY || 0;
-  const tableY = tableWrap ? tableWrap.scrollTop : 0;
-  const show = pageY > 120 || tableY > 120;
-  backTopBtn.style.display = show ? "inline-flex" : "none";
-}
-
-function syncReconnectButton() {
-  if (!reconnectBtn) return;
-  if (!REMOTE_ENABLED) {
-    reconnectBtn.style.display = "none";
-    return;
-  }
-  reconnectBtn.style.display = remoteOnline ? "none" : "inline-flex";
-}
-
-function createEmptyMaterial() {
-  return {
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    orderNo: "",
-    customer: "",
-    material: "",
-    spec: "",
-    quantity: "",
-    amount: "",
-    isReady: "",
-  };
-}
-
-function valueOf(id) {
-  const el = document.getElementById(id);
-  return el ? String(el.value || "").trim() : "";
-}
-
-function clearQuickAdd() {
-  syncQuickCustomer();
-}
-
-async function quickAdd() {
-  const orderNoInput = valueOf("qaOrderNo");
-  if (!orderNoInput) {
-    alert("请先输入编号");
-    return;
-  }
-  const orderNo = normalizeOrderNoInput(orderNoInput);
-  if (!orderNo) {
-    alert("订单号格式无效，请输入 1-3 位数字或完整单号（ZZYYMMNNN）");
-    return;
-  }
-  const customer = resolveCustomerByOrderNo(orderNo, "");
-  const next = {
-    ...createEmptyMaterial(),
-    orderNo,
-    customer,
-  };
-
-  materials.push(next);
-  await persist({ changed: [next] });
-  clearQuickAdd();
-  render();
-}
-
-async function addBlankRow() {
-  const context = getLastOrderContext();
-  const next = {
-    ...createEmptyMaterial(),
-    orderNo: context.orderNo || "",
-    customer: context.customer || "",
-  };
-  materials.push(next);
-  await persist({ changed: [next] });
-  render();
-  const rows = tableBody.querySelectorAll("tr");
-  const lastRow = rows[rows.length - 1];
-  const firstEditable = lastRow ? lastRow.querySelector("td[data-key='material']") : null;
-  if (firstEditable) beginEdit(firstEditable);
-}
-
-async function addBlankRowAfter(afterId, fallbackOrderNo = "") {
-  const idx = materials.findIndex((x) => x.id === afterId);
-  const contextOrderNo = String(fallbackOrderNo || "").trim() || getLastOrderContext().orderNo || "";
-  const next = {
-    ...createEmptyMaterial(),
-    orderNo: contextOrderNo,
-    customer: resolveCustomerByOrderNo(contextOrderNo, ""),
-  };
-  if (idx >= 0) {
-    materials.splice(idx + 1, 0, next);
-  } else {
-    materials.push(next);
-  }
-  await persist({ changed: [next] });
-  render();
-}
-
-function getFilteredRows() {
-  return materials.filter((m, idx, arr) => {
-    const effectiveOrderNo = getEffectiveOrderNoForMaterialRows(arr, idx);
-    const monthOk = !filterMonth || getMonthFromOrderNo(effectiveOrderNo) === filterMonth;
-    if (!filterText) return monthOk;
-    const textOk = [effectiveOrderNo, m.customer, m.material, m.spec, m.quantity].some((x) =>
-      String(x || "").toLowerCase().includes(filterText)
-    );
-    return monthOk && textOk;
-  });
-}
+function isRisk3d(row, extra) { return getAvailable(row, extra) <= Math.max(0, Number(extra.dailyUse || 0)) * 3; }
 
 function getMonthFromOrderNo(orderNo) {
   const no = String(orderNo || "").trim().toUpperCase();
@@ -571,799 +222,439 @@ function getMonthFromOrderNo(orderNo) {
   return no.slice(4, 6);
 }
 
-function render() {
-  ensureTableColGroup();
-  const rows = getFilteredRows();
-  const unitFlags = buildOrderUnitFlags(rows);
-  tableBody.innerHTML = "";
-
-  rows.forEach((m, index) => {
-    const tr = document.createElement("tr");
-    tr.dataset.id = m.id;
-    const flags = unitFlags.get(m.id);
-    if (flags?.unit) tr.classList.add("order-unit");
-    if (flags?.start) tr.classList.add("order-unit-start");
-    if (flags?.end) tr.classList.add("order-unit-end");
-
-    const effectiveOrderNo = getEffectiveOrderNoForMaterialRows(rows, index);
-    const orderNoDisplay = String(m.orderNo || "").trim() || effectiveOrderNo;
-    const orderNoTd = editCell(m, "orderNo", "text", orderNoDisplay);
-    if (!String(m.orderNo || "").trim() && orderNoDisplay) {
-      orderNoTd.classList.add("inherited-order-no");
-      orderNoTd.title = "继承上一行订单号";
-    }
-    tr.appendChild(orderNoTd);
-    tr.appendChild(textCell(m.customer || ""));
-    tr.appendChild(editCell(m, "material"));
-    tr.appendChild(editCell(m, "spec"));
-    tr.appendChild(editCell(m, "quantity"));
-    tr.appendChild(editCell(m, "amount"));
-    tr.appendChild(selectCell(m, "isReady", READY_OPTIONS));
-
-    const opTd = document.createElement("td");
-    const addBtn = document.createElement("button");
-    addBtn.className = "action-btn-secondary";
-    addBtn.textContent = "添加行";
-    addBtn.addEventListener("click", () => {
-      void addBlankRowAfter(m.id, effectiveOrderNo);
-    });
-    opTd.appendChild(addBtn);
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "action-btn";
-    delBtn.textContent = "删除";
-    delBtn.addEventListener("click", () => {
-      void removeItem(m.id);
-    });
-    opTd.appendChild(delBtn);
-    tr.appendChild(opTd);
-    tableBody.appendChild(tr);
-
-    const next = rows[index + 1];
-    const currRoot = flags?.rootId || m.id;
-    const nextRoot = next ? unitFlags.get(next.id)?.rootId || next.id : "";
-    const needGap = Boolean(next && currRoot && nextRoot && currRoot !== nextRoot);
-    if (needGap) {
-      const gapTr = document.createElement("tr");
-      gapTr.className = "order-unit-gap";
-      const gapTd = document.createElement("td");
-      gapTd.colSpan = 8;
-      gapTr.appendChild(gapTd);
-      tableBody.appendChild(gapTr);
-    }
+function getFilteredRows() {
+  return rows.filter((row) => {
+    const extra = getExtra(row.id);
+    const status = getStatus(row, extra);
+    const monthOk = !filterState.month || getMonthFromOrderNo(row.orderNo) === filterState.month;
+    const supplierOk = !filterState.supplier || String(extra.supplier || "").toLowerCase().includes(filterState.supplier);
+    const statusOk = !filterState.status || status === filterState.status;
+    const machineOk = !filterState.machine || String(extra.machine || "") === filterState.machine;
+    const overdueOk = !filterState.overdueOnly || isOverdue(row, extra);
+    if (!(monthOk && supplierOk && statusOk && machineOk && overdueOk)) return false;
+    if (!filterState.keyword) return true;
+    const hay = [row.orderNo, row.customer, row.material, row.spec, extra.supplier, extra.machine, status].join(" ").toLowerCase();
+    return hay.includes(filterState.keyword);
   });
-
-  applyColumnWidths();
-  queueStickyColumnOffsets();
 }
 
-function textCell(value) {
-  const td = document.createElement("td");
-  td.textContent = value ?? "";
-  return td;
+function render() {
+  cleanupExtras();
+  const list = getFilteredRows();
+  renderKpi(list);
+  renderWarnings(list);
+  if (!el.tableBody) return;
+  el.tableBody.innerHTML = "";
+  list.forEach((row) => {
+    const extra = getExtra(row.id);
+    const tr = document.createElement("tr");
+    tr.appendChild(editCell(row, "orderNo"));
+    tr.appendChild(textCell(row.customer || ""));
+    tr.appendChild(editCell(row, "material"));
+    tr.appendChild(editCell(row, "spec"));
+    tr.appendChild(editCell(row, "quantity"));
+    tr.appendChild(textCell(String(getAvailable(row, extra))));
+    tr.appendChild(textCell(String(extra.safetyStock || 0)));
+    tr.appendChild(textCell(String(getSuggestedQty(row, extra))));
+    tr.appendChild(textCell(formatMmDd(extra.promiseDate)));
+    tr.appendChild(textCell(getStatus(row, extra)));
+    tr.appendChild(actionCell(row));
+    el.tableBody.appendChild(tr);
+  });
 }
 
-function editCell(item, key, type = "text", displayValue = null) {
-  const td = document.createElement("td");
-  td.dataset.key = key;
-  td.dataset.id = item.id;
-  const raw = String(item[key] ?? "");
-  td.dataset.raw = raw;
-  td.textContent = displayValue == null ? formatDisplayValue(key, raw) : String(displayValue);
-  td.addEventListener("dblclick", () => beginEdit(td, type));
-  return td;
+function renderKpi(list) {
+  const needOrder = list.filter((r) => getStatus(r, getExtra(r.id)) === "待下单").length;
+  const inTransit = list.filter((r) => ["在途", "部分到货"].includes(getStatus(r, getExtra(r.id)))).length;
+  const overdue = list.filter((r) => isOverdue(r, getExtra(r.id))).length;
+  const risk3d = list.filter((r) => isRisk3d(r, getExtra(r.id))).length;
+  const totalAmount = list.reduce((sum, r) => { const e = getExtra(r.id); return sum + Number(e.lastOrderQty || 0) * Number(e.lastOrderPrice || 0); }, 0);
+  const impactOrders = new Set(list.filter((r) => isOverdue(r, getExtra(r.id)) || isRisk3d(r, getExtra(r.id))).map((r) => String(r.orderNo || "").trim()).filter(Boolean)).size;
+  if (el.kpiNeedOrder) el.kpiNeedOrder.textContent = String(needOrder);
+  if (el.kpiInTransit) el.kpiInTransit.textContent = String(inTransit);
+  if (el.kpiOverdue) el.kpiOverdue.textContent = String(overdue);
+  if (el.kpiRisk3d) el.kpiRisk3d.textContent = String(risk3d);
+  if (el.kpiAmount) el.kpiAmount.textContent = formatCurrency(totalAmount);
+  if (el.kpiOrderImpact) el.kpiOrderImpact.textContent = String(impactOrders);
 }
 
-function getEffectiveOrderNoForMaterialRows(rows, index) {
-  const current = String(rows[index]?.orderNo || "").trim();
-  if (current) return current;
-  for (let i = index - 1; i >= 0; i -= 1) {
-    const prev = String(rows[i]?.orderNo || "").trim();
-    if (prev) return prev;
+function renderWarnings(list) {
+  renderWarningList(el.warningOverdue, list.filter((r) => isOverdue(r, getExtra(r.id))));
+  renderWarningList(el.warningRisk, list.filter((r) => isRisk3d(r, getExtra(r.id))));
+  renderWarningList(el.warningSafety, list.filter((r) => { const ex = getExtra(r.id); return getAvailable(r, ex) <= Number(ex.safetyStock || 0); }));
+}
+
+function renderWarningList(container, list) {
+  if (!container) return;
+  container.innerHTML = "";
+  const top = list.slice(0, 8);
+  if (top.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "暂无";
+    container.appendChild(li);
+    return;
   }
-  return "";
+  top.forEach((r) => {
+    const li = document.createElement("li");
+    li.textContent = `${r.orderNo || "-"} ${r.material || ""}`.trim();
+    container.appendChild(li);
+  });
 }
+function textCell(text) { const td = document.createElement("td"); td.textContent = String(text ?? ""); return td; }
+function editCell(row, key) { const td = document.createElement("td"); td.dataset.id = row.id; td.dataset.key = key; td.textContent = String(row[key] ?? ""); td.addEventListener("dblclick", () => beginEdit(td)); return td; }
 
-function buildOrderUnitFlags(rows) {
-  const flags = new Map();
-  let unitStartIndex = -1;
-  let currentRootId = "";
-  for (let i = 0; i < rows.length; i += 1) {
-    const id = rows[i]?.id;
-    if (!id) continue;
-    const hasOrderNo = String(rows[i]?.orderNo || "").trim() !== "";
-    if (hasOrderNo) {
-      if (unitStartIndex >= 0) {
-        const prevEndId = rows[i - 1]?.id;
-        if (prevEndId) {
-          const prevEnd = flags.get(prevEndId) || {};
-          flags.set(prevEndId, { ...prevEnd, end: true });
-        }
-      }
-      unitStartIndex = i;
-      currentRootId = id;
-      const startFlag = flags.get(id) || {};
-      flags.set(id, { ...startFlag, unit: true, start: true, end: false, rootId: currentRootId });
-      continue;
-    }
-    if (unitStartIndex >= 0) {
-      const f = flags.get(id) || {};
-      flags.set(id, { ...f, unit: true, rootId: currentRootId || id });
-      continue;
-    }
-    flags.set(id, { unit: true, start: true, end: true, rootId: id });
-  }
-  if (rows.length > 0) {
-    const lastId = rows[rows.length - 1]?.id;
-    if (lastId) {
-      const last = flags.get(lastId) || {};
-      flags.set(lastId, { ...last, end: true });
-    }
-  }
-  return flags;
-}
-
-function beginEdit(td, type = "text") {
+function beginEdit(td) {
   if (td.classList.contains("editing")) return;
-  const oldValue = td.dataset.raw ?? td.textContent;
-  const oldDisplay = td.textContent;
+  const row = rows.find((r) => r.id === td.dataset.id);
+  if (!row) return;
   const key = td.dataset.key;
+  const old = String(row[key] ?? "");
   td.classList.add("editing");
   td.innerHTML = "";
-
   const input = document.createElement("input");
-  input.type = type;
-  input.value = oldValue;
-  input.style.display = "block";
+  input.type = key === "quantity" ? "number" : "text";
+  input.value = old;
   input.style.width = "100%";
-  input.style.boxSizing = "border-box";
-  input.style.margin = "0";
-  input.style.background = "#0b2748";
-  input.style.border = "1px solid #42a5f5";
-  input.style.color = "#e6f0ff";
-  input.style.padding = "4px";
-  input.style.textAlign = "center";
   td.appendChild(input);
   input.focus();
   input.select();
 
   const save = async () => {
     td.classList.remove("editing");
-    await updateItem(td.dataset.id, key, input.value);
+    let next = String(input.value || "").trim();
+    if (key === "orderNo") {
+      next = normalizeOrderNo(next.toUpperCase());
+      if (String(input.value || "").trim() && !next) {
+        td.textContent = old;
+        showInfo("订单号格式应为 ZZYYMMNNN 或 1~3 位流水号。", "校验失败");
+        return;
+      }
+      row.customer = resolveCustomer(next, row.customer);
+    }
+    if (key === "quantity") {
+      const n = Number(next);
+      next = Number.isFinite(n) ? String(n) : "";
+    }
+    row[key] = next;
+    await persist({ changed: [row] });
+    render();
   };
 
-  input.addEventListener("blur", () => {
-    void save();
-  });
+  input.addEventListener("blur", () => { void save(); });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      void save().then(() => jumpToNextRowSameColumn(td));
-    }
-    if (e.key === "Escape") {
-      td.classList.remove("editing");
-      td.textContent = oldDisplay;
-    }
+    if (e.key === "Enter") { e.preventDefault(); void save(); }
+    if (e.key === "Escape") { td.classList.remove("editing"); td.textContent = old; }
   });
 }
 
-function formatDisplayValue(key, rawValue) {
-  if (key !== "amount") return String(rawValue ?? "");
-  const raw = String(rawValue ?? "").trim();
-  if (raw === "") return "";
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return raw;
-  return new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-}
-
-function jumpToNextRowSameColumn(currentTd) {
-  const row = currentTd.parentElement;
-  const nextRow = row ? row.nextElementSibling : null;
-  if (!nextRow) return;
-  const colIndex = [...row.children].indexOf(currentTd);
-  const nextTd = nextRow.children[colIndex];
-  if (nextTd && nextTd.dataset.key) beginEdit(nextTd);
-}
-
-function selectCell(item, key, options) {
+function actionCell(row) {
   const td = document.createElement("td");
-  const sel = document.createElement("select");
-  sel.className = "cell-select";
-  const blank = document.createElement("option");
-  blank.value = "";
-  blank.textContent = "";
-  sel.appendChild(blank);
-
-  options.forEach((opt) => {
-    const o = document.createElement("option");
-    o.value = opt;
-    o.textContent = opt;
-    if (item[key] === opt) o.selected = true;
-    sel.appendChild(o);
-  });
-
-  sel.addEventListener("change", () => {
-    void updateItem(item.id, key, sel.value);
-  });
-  td.appendChild(sel);
+  td.className = "op-cell";
+  const wrap = document.createElement("div");
+  wrap.className = "op-actions";
+  wrap.append(
+    actionButton("添加行", "action-btn-secondary", () => void addRowAfter(row.id)),
+    actionButton("下单", "action-btn-secondary", () => openPoDialog(row.id)),
+    actionButton("到货", "action-btn-secondary", () => openArrivalDialog(row.id)),
+    actionButton("异常", "action-btn-secondary", () => openAbnormalDialog(row.id)),
+    actionButton("删除", "action-btn", () => void deleteRow(row.id))
+  );
+  td.appendChild(wrap);
   return td;
 }
 
-async function updateItem(id, key, value) {
-  const target = materials.find((x) => x.id === id);
-  if (!target) return;
-  const normalized = normalizeValue(key, value);
+function actionButton(text, cls, click) { const b = document.createElement("button"); b.type = "button"; b.className = cls; b.textContent = text; b.addEventListener("click", click); return b; }
 
-  if (key === "orderNo") {
-    if ((value || "").trim() !== "" && !normalized) {
-      alert("订单号格式无效，请输入 1-3 位数字或完整单号（ZZYYMMNNN）");
-      render();
-      return;
-    }
-    target.orderNo = normalized;
-    target.customer = resolveCustomerByOrderNo(target.orderNo, "");
-  } else {
-    target[key] = normalized;
-  }
-
-  await persist({ changed: [target] });
+async function addBlankRow() {
+  const next = createEmptyRow();
+  const last = rows[rows.length - 1];
+  if (last) { next.orderNo = last.orderNo || ""; next.customer = last.customer || ""; }
+  rows.push(next);
+  saveExtra(next.id, createDefaultExtra());
+  await persist({ changed: [next], notifyAuth: false });
   render();
-  syncQuickCustomer();
 }
 
-function normalizeValue(key, value) {
-  const raw = String(value ?? "").trim();
-  if (key === "orderNo") return normalizeOrderNoInput(raw);
-  if (key === "amount") {
-    if (raw === "") return "";
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : "";
-  }
-  if (key === "quantity") {
-    if (raw === "") return "";
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : "";
-  }
-  if (key === "isReady") {
-    return READY_OPTIONS.includes(raw) ? raw : "";
-  }
-  return raw;
+async function addRowAfter(afterId) {
+  const idx = rows.findIndex((r) => r.id === afterId);
+  const next = createEmptyRow();
+  if (idx >= 0) {
+    next.orderNo = rows[idx].orderNo || "";
+    next.customer = rows[idx].customer || "";
+    rows.splice(idx + 1, 0, next);
+  } else rows.push(next);
+  saveExtra(next.id, createDefaultExtra());
+  await persist({ changed: [next], notifyAuth: false });
+  render();
 }
 
-function normalizeOrderNoInput(value) {
-  const raw = (value || "").trim().toUpperCase();
-  if (!raw) return "";
-  if (/^ZZ\d{7}$/.test(raw)) return raw;
-  if (!/^\d{1,3}$/.test(raw)) return "";
-  const serial = raw.padStart(3, "0");
-  const matchedOrderNo = serialOrderNoMap.get(serial);
-  if (matchedOrderNo) return matchedOrderNo;
-  const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  return `ZZ${yy}${mm}${serial}`;
-}
-
-function resolveCustomerByOrderNo(orderNo, fallbackCustomer = "") {
-  const key = String(orderNo || "").trim().toUpperCase();
-  if (!key) return String(fallbackCustomer || "").trim();
-  return orderCustomerMap.get(key) || String(fallbackCustomer || "").trim();
-}
-
-function getLastOrderContext() {
-  for (let i = materials.length - 1; i >= 0; i -= 1) {
-    const orderNo = String(materials[i]?.orderNo || "").trim();
-    if (!orderNo) continue;
-    const customer = resolveCustomerByOrderNo(orderNo, materials[i]?.customer || "");
-    return { orderNo, customer };
-  }
-  const orderRaw = valueOf("qaOrderNo");
-  const orderNo = normalizeOrderNoInput(orderRaw);
-  return { orderNo, customer: resolveCustomerByOrderNo(orderNo, "") };
-}
-
-function syncQuickCustomer() {
-  const currentOrderNo = normalizeOrderNoInput(valueOf("qaOrderNo"));
-  const context = getLastOrderContext();
-  const orderNo = currentOrderNo || context.orderNo;
-  const customer = resolveCustomerByOrderNo(orderNo, context.customer);
-  const input = document.getElementById("qaCustomer");
-  if (input) input.value = customer || "";
-}
-
-async function removeItem(id) {
-  const confirmed = confirm("确认删除该物料行吗？");
-  if (!confirmed) return;
-
-  materials = materials.filter((x) => x.id !== id);
+async function deleteRow(id) {
+  if (!confirm("确认删除该物料行吗？")) return;
+  rows = rows.filter((r) => r.id !== id);
+  deleteExtra(id);
   await persist({ deletedId: id });
   render();
-  syncQuickCustomer();
 }
 
-function saveLocal() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(materials));
+function openPoDialog(id) {
+  activeRowId = id;
+  const e = getExtra(id);
+  if (el.poSupplier) el.poSupplier.value = e.supplier || "";
+  if (el.poQty) el.poQty.value = e.lastOrderQty ? String(e.lastOrderQty) : "";
+  if (el.poPrice) el.poPrice.value = e.lastOrderPrice ? String(e.lastOrderPrice) : "";
+  if (el.poPromise) el.poPromise.value = e.promiseDate || "";
+  openDialog(el.poDialog);
 }
 
-function loadLocal() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
+async function savePo() {
+  const row = rows.find((r) => r.id === activeRowId);
+  if (!row) return;
+  const qty = Math.max(0, Number(el.poQty?.value || 0));
+  const price = Math.max(0, Number(el.poPrice?.value || 0));
+  const old = getExtra(row.id);
+  saveExtra(row.id, {
+    supplier: String(el.poSupplier?.value || "").trim(),
+    promiseDate: String(el.poPromise?.value || "").trim(),
+    inTransit: Math.max(0, Number(old.inTransit || 0) + qty),
+    lastOrderQty: qty,
+    lastOrderPrice: price,
+    status: qty > 0 ? "在途" : "待下单",
+  });
+  row.amount = qty > 0 && price > 0 ? Number((qty * price).toFixed(2)) : row.amount;
+  await persist({ changed: [row] });
+  closeDialog(el.poDialog);
+  render();
+}
+
+function openArrivalDialog(id) { activeRowId = id; if (el.arrivalQty) el.arrivalQty.value = ""; if (el.arrivalDate) el.arrivalDate.value = new Date().toISOString().slice(0, 10); openDialog(el.arrivalDialog); }
+async function saveArrival() {
+  const row = rows.find((r) => r.id === activeRowId);
+  if (!row) return;
+  const qty = Math.max(0, Number(el.arrivalQty?.value || 0));
+  if (qty <= 0) { showInfo("请填写大于 0 的到货数量。", "校验失败"); return; }
+  const e = getExtra(row.id);
+  const left = Math.max(0, Number(e.inTransit || 0) - qty);
+  const status = left > 0 ? "部分到货" : "已到货";
+  saveExtra(row.id, { inTransit: left, actualDate: String(el.arrivalDate?.value || "").trim(), status });
+  row.quantity = getCurrentStock(row) + qty;
+  row.isReady = status === "已到货" ? "是" : "否";
+  await persist({ changed: [row] });
+  closeDialog(el.arrivalDialog);
+  render();
+}
+
+function openAbnormalDialog(id) { activeRowId = id; const e = getExtra(id); if (el.abnormalReason) el.abnormalReason.value = e.abnormalReason || ""; if (el.abnormalAlt) el.abnormalAlt.value = e.abnormalAltMaterial || ""; if (el.abnormalRecover) el.abnormalRecover.value = e.abnormalRecoverDate || ""; openDialog(el.abnormalDialog); }
+async function saveAbnormal() {
+  const row = rows.find((r) => r.id === activeRowId);
+  if (!row) return;
+  saveExtra(row.id, { abnormalReason: String(el.abnormalReason?.value || "").trim(), abnormalAltMaterial: String(el.abnormalAlt?.value || "").trim(), abnormalRecoverDate: String(el.abnormalRecover?.value || "").trim(), status: "异常" });
+  await persist({ changed: [row], notifyAuth: false });
+  closeDialog(el.abnormalDialog);
+  render();
+}
+
+function openDialog(d) { if (!d) return; d.hidden = false; document.body.style.overflow = "hidden"; }
+function closeDialog(d) { if (!d) return; d.hidden = true; refreshBodyOverflow(); }
+function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.infoDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
+
+function updateBackTopBtn() { if (!el.backTopBtn) return; const pageY = window.scrollY || 0; const tableY = el.tableWrap ? el.tableWrap.scrollTop : 0; el.backTopBtn.style.display = pageY > 120 || tableY > 120 ? "inline-flex" : "none"; }
+
+async function initAuth() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  try { const { data, error } = await db.auth.getSession(); if (error) throw error; authSession = data?.session || null; } catch { authSession = null; }
+  updateAuthUi();
+  db.auth.onAuthStateChange((_e, session) => { authSession = session || null; updateAuthUi(); setModeText(authSession ? "云端共享模式" : "云端只读（未登录）"); });
+}
+
+function updateAuthUi() { if (el.authUser) el.authUser.textContent = authSession?.user?.email || "未登录"; if (el.loginBtn) el.loginBtn.style.display = authSession ? "none" : "inline-flex"; if (el.logoutBtn) el.logoutBtn.style.display = authSession ? "inline-flex" : "none"; }
+function openAuthDialog() { if (!REMOTE_ENABLED || !db?.auth) return; if (el.authEmail) el.authEmail.value = ""; if (el.authPassword) el.authPassword.value = ""; openDialog(el.authDialog); }
+function closeAuthDialog() { closeDialog(el.authDialog); }
+
+async function loginByPassword() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  const email = String(el.authEmail?.value || "").trim().toLowerCase();
+  const password = String(el.authPassword?.value || "");
+  if (!email || !password) { showInfo("请输入邮箱和密码。", "登录失败"); return; }
+  try { const { error } = await db.auth.signInWithPassword({ email, password }); if (error) throw error; closeAuthDialog(); showInfo("登录成功。", "登录成功"); } catch (e) { showInfo(`密码登录失败：${e?.message || "未知错误"}`, "登录失败"); }
+}
+
+async function loginByOtp() {
+  if (!REMOTE_ENABLED || !db?.auth) return;
+  const email = String(el.authEmail?.value || "").trim().toLowerCase();
+  if (!email) { showInfo("请输入邮箱。", "登录失败"); return; }
   try {
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data)) return [];
-    return data.map((x, idx) => ({
-      ...createEmptyMaterial(),
-      ...x,
-      createdAt: x.createdAt || new Date(Date.now() + idx).toISOString(),
-    }));
+    const { error } = await db.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: window.location.href.split("#")[0] } });
+    if (error) throw error;
+    closeAuthDialog();
+    showInfo("登录邮件已发送，请到邮箱点击链接。", "提示");
   } catch (e) {
-    console.warn("读取本地物料缓存失败", e);
-    return [];
+    showInfo(`发送失败：${e?.message || "未知错误"}`, "登录失败");
   }
 }
 
-async function persist({ changed = [], deletedId = null, deletedIds = [], notifyAuth = true } = {}) {
-  saveLocal();
+async function logoutAuth() { if (!REMOTE_ENABLED || !db?.auth) return; try { const { error } = await db.auth.signOut(); if (error) throw error; } catch (e) { showInfo(`退出失败：${e?.message || "未知错误"}`, "提示"); } }
+function canWriteRemote(notify = true) { if (!REMOTE_ENABLED) return false; if (authSession) return true; if (notify) showInfo("当前为只读模式，请先登录后再写入云端。", "写入受限"); return false; }
+
+function setModeText(text) { if (el.systemMode) el.systemMode.textContent = text; }
+function setLastSyncTime() { if (!el.lastSyncTime) return; const now = new Date(); const t = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`; el.lastSyncTime.textContent = `最近同步 ${t}`; }
+
+async function persist({ changed = [], deletedId = "", notifyAuth = true } = {}) {
+  saveLocalRows();
   setLastSyncTime();
   if (!REMOTE_ENABLED || !remoteOnline) return;
   if (!canWriteRemote(notifyAuth)) return;
   syncing = true;
   try {
     if (changed.length > 0) {
-      const baseMs = Date.now();
-      const payload = changed.map((item, idx) => toDbRow(item, new Date(baseMs + idx).toISOString()));
+      const base = Date.now();
+      const payload = changed.map((r, i) => toDbRow(r, new Date(base + i).toISOString()));
       const { error } = await db.from("mes_materials").upsert(payload, { onConflict: "id" });
       if (error) throw error;
     }
-    const idsToDelete = [];
-    if (deletedId) idsToDelete.push(deletedId);
-    if (Array.isArray(deletedIds) && deletedIds.length > 0) idsToDelete.push(...deletedIds);
-    const uniqDeleteIds = Array.from(new Set(idsToDelete.filter(Boolean)));
-    if (uniqDeleteIds.length > 0) {
-      for (const id of uniqDeleteIds) {
-        const { error } = await db.from("mes_materials").delete().eq("id", id);
-        if (error) throw error;
-      }
+    if (deletedId) {
+      const { error } = await db.from("mes_materials").delete().eq("id", deletedId);
+      if (error) throw error;
     }
   } catch (e) {
-    if (isAuthError(e)) {
-      authSession = null;
-      authWriteHintNotified = false;
-      updateAuthUi();
-      setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
-      alert("写入失败：登录态已失效，请重新登录。");
-      return;
-    }
     handleRemoteError("物料云端同步失败", e);
-  } finally {
-    syncing = false;
-  }
+  } finally { syncing = false; }
 }
-
 async function refreshFromRemote(showAlert = false) {
-  if (!remoteOnline) return;
+  if (!REMOTE_ENABLED || !remoteOnline) return;
   try {
     const { data, error } = await db.from("mes_materials").select("*").order("updated_at", { ascending: true });
     if (error) throw error;
-    materials = (data || [])
-      .map(fromDbRow)
-      .map((x) => ({ ...x, customer: resolveCustomerByOrderNo(x.orderNo, x.customer) }))
-      .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
-
-    await syncInheritedOrderRows();
-
-    if (materials.length === 0) {
-      materials = loadLocal();
-      if (materials.length > 0) await persist({ changed: materials });
-    }
-
-    saveLocal();
-    render();
-    syncQuickCustomer();
+    rows = (data || []).map(fromDbRow).map((r) => ({ ...r, customer: resolveCustomer(r.orderNo, r.customer) })).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    saveLocalRows();
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     setLastSyncTime();
-    reconnectDelayMs = 5000;
-    remoteErrorNotified = false;
-    if (showAlert) alert("已从云端刷新最新物料数据");
-  } catch (e) {
-    if (pageUnloading || isAbortLikeError(e)) return;
-    if (isAuthError(e) && !authSession) {
-      remoteOnline = true;
-      remoteErrorNotified = false;
-      setModeText("云端只读（未登录）");
-      materials = loadLocal();
-      render();
-      syncQuickCustomer();
-      setLastSyncTime();
-      return;
-    }
-    handleRemoteError("物料云端读取失败", e);
-    materials = loadLocal();
     render();
-    syncQuickCustomer();
-  }
-}
-
-async function refreshOrderCustomerMap() {
-  if (!ORDER_SYNC_ENABLED) return;
-  if (!REMOTE_ENABLED || !remoteOnline) {
-    loadOrderCustomerMapFromLocal();
-    await syncInheritedOrderRows();
-    syncQuickCustomer();
-    return;
-  }
-  try {
-    const { data, error } = await db
-      .from("mes_orders")
-      .select("order_no,customer,updated_at")
-      .neq("order_no", "")
-      .order("updated_at", { ascending: true });
-    if (error) throw error;
-
-    const map = new Map();
-    const serialCandidates = new Map();
-    (data || []).forEach((row) => {
-      const orderNo = String(row.order_no || "").trim().toUpperCase();
-      const customer = String(row.customer || "").trim();
-      if (!orderNo) return;
-      map.set(orderNo, customer);
-      const serial = orderNo.slice(-3);
-      if (/^\d{3}$/.test(serial)) {
-        const set = serialCandidates.get(serial) || new Set();
-        set.add(orderNo);
-        serialCandidates.set(serial, set);
-      }
-    });
-    const serialMap = new Map();
-    serialCandidates.forEach((set, serial) => {
-      if (set.size !== 1) return;
-      serialMap.set(serial, Array.from(set)[0]);
-    });
-    orderCustomerMap = map;
-    serialOrderNoMap = serialMap;
-    await syncInheritedOrderRows();
-    syncQuickCustomer();
+    reconnectDelayMs = 5000;
+    if (showAlert) showInfo("已从云端刷新。", "提示");
   } catch (e) {
-    console.warn("读取订单-客户映射失败，改用本地订单缓存", e);
-    loadOrderCustomerMapFromLocal();
-    await syncInheritedOrderRows();
-    syncQuickCustomer();
+    if (pageUnloading) return;
+    handleRemoteError("物料云端读取失败", e);
+    rows = loadLocalRows();
+    render();
   }
-}
-
-function loadOrderCustomerMapFromLocal() {
-  const raw = localStorage.getItem(ORDER_STORAGE_KEY);
-  if (!raw) return;
-  try {
-    const rows = JSON.parse(raw);
-    if (!Array.isArray(rows)) return;
-
-    const map = new Map();
-    const serialCandidates = new Map();
-    rows.forEach((row) => {
-      const orderNo = String(row?.orderNo || row?.order_no || "").trim().toUpperCase();
-      const customer = String(row?.customer || "").trim();
-      if (!orderNo) return;
-      map.set(orderNo, customer);
-      const serial = orderNo.slice(-3);
-      if (/^\d{3}$/.test(serial)) {
-        const set = serialCandidates.get(serial) || new Set();
-        set.add(orderNo);
-        serialCandidates.set(serial, set);
-      }
-    });
-
-    const serialMap = new Map();
-    serialCandidates.forEach((set, serial) => {
-      if (set.size !== 1) return;
-      serialMap.set(serial, Array.from(set)[0]);
-    });
-
-    orderCustomerMap = map;
-    serialOrderNoMap = serialMap;
-  } catch (e) {
-    console.warn("读取本地订单缓存失败", e);
-  }
-}
-
-async function syncInheritedOrderRows() {
-  if (!ORDER_SYNC_ENABLED) return;
-  if (!Array.isArray(materials)) return;
-
-  const changedById = new Map();
-
-  const markChanged = (item) => {
-    if (!item?.id) return;
-    changedById.set(item.id, item);
-  };
-
-  materials.forEach((item) => {
-    const key = String(item.orderNo || "").trim().toUpperCase();
-    if (item.orderNo !== key) {
-      item.orderNo = key;
-      markChanged(item);
-    }
-    if (!key) return;
-
-    const inheritedCustomer = orderCustomerMap.get(key);
-    if (!inheritedCustomer) return;
-    if (String(item.customer || "").trim() === inheritedCustomer) return;
-    item.customer = inheritedCustomer;
-    markChanged(item);
-  });
-
-  const changed = Array.from(changedById.values());
-  if (changed.length > 0) {
-    await persist({ changed, notifyAuth: false });
-  }
-}
-
-function isPlaceholderRow(item) {
-  if (!item) return false;
-  const material = String(item.material || "").trim();
-  const spec = String(item.spec || "").trim();
-  const isReady = String(item.isReady || "").trim();
-  const quantity = item.quantity == null ? "" : String(item.quantity).trim();
-  const amount = item.amount == null ? "" : String(item.amount).trim();
-  return material === "" && spec === "" && isReady === "" && quantity === "" && amount === "";
-}
-
-function materialRowSignature(item) {
-  const orderNo = String(item?.orderNo || "").trim().toUpperCase();
-  const customer = String(item?.customer || "").trim();
-  const material = String(item?.material || "").trim();
-  const spec = String(item?.spec || "").trim();
-  const quantity = item?.quantity == null ? "" : String(item.quantity).trim();
-  const amount = item?.amount == null ? "" : String(item.amount).trim();
-  const isReady = String(item?.isReady || "").trim();
-  return `${orderNo}|${customer}|${material}|${spec}|${quantity}|${amount}|${isReady}`;
-}
-
-async function removeDuplicateOrderRows(notify = false) {
-  if (!Array.isArray(materials) || materials.length === 0) {
-    if (notify) alert("当前没有可清理的数据。");
-    return;
-  }
-
-  const sorted = materials
-    .slice()
-    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
-  const seen = new Set();
-  const deletedIds = [];
-
-  sorted.forEach((item) => {
-    const sig = materialRowSignature(item);
-    if (!sig || sig === "||||||") return;
-    if (!seen.has(sig)) {
-      seen.add(sig);
-      return;
-    }
-    deletedIds.push(item.id);
-  });
-
-  if (deletedIds.length === 0) {
-    if (notify) alert("没有发现重复订单行。");
-    return;
-  }
-
-  const deletedIdSet = new Set(deletedIds);
-  materials = materials.filter((item) => !deletedIdSet.has(item.id));
-  await persist({ deletedIds });
-  render();
-  syncQuickCustomer();
-  if (notify) alert(`已删除 ${deletedIds.length} 行重复订单记录。`);
 }
 
 function handleRemoteError(prefix, err) {
-  if (pageUnloading || isAbortLikeError(err)) return;
-  console.error(prefix, err);
   remoteOnline = false;
   setModeText("本地模式（云连接失败）");
   scheduleReconnect();
-  if (!remoteErrorNotified) {
-    remoteErrorNotified = true;
-    const detail = err?.message || err?.error_description || "未知错误";
-    alert(`${prefix}：${detail}\n已自动切换本地模式。`);
-  }
-}
-
-function isAbortLikeError(err) {
-  const code = String(err?.name || err?.code || "").toUpperCase();
-  const msg = String(err?.message || err?.error_description || "").toUpperCase();
-  return code.includes("ABORT") || code.includes("CANCEL") || msg.includes("ABORT") || msg.includes("CANCEL");
-}
-
-function isAuthError(err) {
-  const code = String(err?.status || err?.code || "").toUpperCase();
-  const msg = String(err?.message || err?.error_description || "").toUpperCase();
-  return code === "401" || code === "403" || code === "PGRST301" || msg.includes("JWT") || msg.includes("AUTH");
+  showInfo(`${prefix}：${err?.message || err?.error_description || "未知错误"}`, "提示");
 }
 
 function scheduleReconnect() {
   if (!REMOTE_ENABLED || remoteOnline || reconnectTimer) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    void tryReconnectRemote(false);
-  }, reconnectDelayMs);
+  reconnectTimer = setTimeout(() => { reconnectTimer = 0; void tryReconnect(false); }, reconnectDelayMs);
   reconnectDelayMs = Math.min(reconnectDelayMs * 2, 60000);
 }
 
-async function tryReconnectRemote(manual = false) {
+async function tryReconnect(manual) {
   if (!REMOTE_ENABLED) return;
   try {
     const { error } = await db.from("mes_materials").select("id").limit(1);
     if (error) throw error;
     remoteOnline = true;
     reconnectDelayMs = 5000;
-    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemote(false);
-    if (manual) alert("云端连接已恢复");
+    if (manual) showInfo("云端连接已恢复。", "提示");
   } catch (e) {
     remoteOnline = false;
     setModeText("本地模式（云连接失败）");
     scheduleReconnect();
-    if (manual) {
-      const detail = e?.message || e?.error_description || "未知错误";
-      alert(`重连失败：${detail}`);
+    if (manual) showInfo(`重连失败：${e?.message || "未知错误"}`, "提示");
+  }
+}
+
+async function refreshOrderCustomerMap() {
+  if (REMOTE_ENABLED && remoteOnline) {
+    try {
+      const { data, error } = await db.from("mes_orders").select("order_no,customer,updated_at").neq("order_no", "").order("updated_at", { ascending: true });
+      if (error) throw error;
+      const map = new Map();
+      (data || []).forEach((item) => {
+        const key = String(item.order_no || "").trim().toUpperCase();
+        if (!key) return;
+        map.set(key, String(item.customer || "").trim());
+      });
+      orderCustomerMap = map;
+      await syncCustomerFromOrderMap();
+      return;
+    } catch {
+      // fallback
     }
   }
-}
-
-function toDbRow(item, updatedAtOverride = "") {
-  return {
-    id: item.id,
-    order_no: item.orderNo || "",
-    customer: item.customer || "",
-    material: item.material || "",
-    spec: item.spec || "",
-    quantity: toFiniteOrNull(item.quantity),
-    amount: toFiniteOrNull(item.amount),
-    is_ready: item.isReady || "",
-    created_at: item.createdAt || updatedAtOverride || new Date().toISOString(),
-    updated_at: updatedAtOverride || new Date().toISOString(),
-  };
-}
-
-function fromDbRow(row) {
-  return {
-    id: row.id || crypto.randomUUID(),
-    createdAt: row.created_at || row.updated_at || new Date().toISOString(),
-    orderNo: row.order_no || "",
-    customer: row.customer || "",
-    material: row.material || "",
-    spec: row.spec || "",
-    quantity: row.quantity ?? "",
-    amount: row.amount ?? "",
-    isReady: row.is_ready || "",
-  };
-}
-
-function toFiniteOrNull(v) {
-  if (v == null || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function setupColumnResizers() {
-  ensureTableColGroup();
-  const headers = document.querySelectorAll("#orderTable thead th");
-  headers.forEach((th, index) => {
-    if (th.querySelector(".col-resizer")) return;
-    const handle = document.createElement("span");
-    handle.className = "col-resizer";
-    handle.addEventListener("mousedown", (e) => startResize(e, index + 1));
-    th.appendChild(handle);
-  });
-  applyColumnWidths();
-  queueStickyColumnOffsets();
-}
-
-function ensureTableColGroup() {
-  const table = document.getElementById("orderTable");
-  if (!table) return;
-  const headers = table.querySelectorAll("thead th");
-  if (headers.length === 0) return;
-
-  let colgroup = table.querySelector("colgroup");
-  if (!colgroup) {
-    colgroup = document.createElement("colgroup");
-    table.insertBefore(colgroup, table.firstChild);
-  }
-
-  const existing = colgroup.querySelectorAll("col").length;
-  if (existing !== headers.length) {
-    colgroup.innerHTML = "";
-    headers.forEach(() => {
-      colgroup.appendChild(document.createElement("col"));
-    });
-  }
-}
-
-function startResize(event, colIndex) {
-  event.preventDefault();
-  const header = document.querySelector(`#orderTable thead th:nth-child(${colIndex})`);
-  if (!header) return;
-  const startX = event.clientX;
-  const startWidth = header.getBoundingClientRect().width;
-
-  const onMove = (e) => {
-    const next = Math.max(48, Math.round(startWidth + (e.clientX - startX)));
-    columnWidths[String(colIndex)] = next;
-    setColumnWidth(colIndex, next);
-    queueStickyColumnOffsets();
-  };
-
-  const onUp = () => {
-    document.removeEventListener("mousemove", onMove);
-    document.removeEventListener("mouseup", onUp);
-    saveColumnWidths();
-  };
-
-  document.addEventListener("mousemove", onMove);
-  document.addEventListener("mouseup", onUp);
-}
-
-function setColumnWidth(colIndex, px) {
-  const col = document.querySelector(`#orderTable colgroup col:nth-child(${colIndex})`);
-  if (col) col.style.width = `${px}px`;
-
-  const cells = document.querySelectorAll(`#orderTable tr > *:nth-child(${colIndex})`);
-  cells.forEach((cell) => {
-    cell.style.width = `${px}px`;
-    cell.style.minWidth = `${px}px`;
-    cell.style.maxWidth = `${px}px`;
-  });
-}
-
-function applyColumnWidths() {
-  Object.keys(columnWidths).forEach((k) => {
-    const col = Number(k);
-    const px = Number(columnWidths[k]);
-    if (Number.isFinite(col) && Number.isFinite(px)) setColumnWidth(col, px);
-  });
-  queueStickyColumnOffsets();
-}
-
-function updateStickyColumnOffsets() {
-  const table = document.getElementById("orderTable");
-  if (!table) return;
-  const w1 = getColumnWidth(1);
-  const w2 = getColumnWidth(2);
-  const w3 = getColumnWidth(3);
-  table.style.setProperty("--sticky-left-1", "0px");
-  table.style.setProperty("--sticky-left-2", `${w1}px`);
-  table.style.setProperty("--sticky-left-3", `${w1 + w2}px`);
-  table.style.setProperty("--sticky-left-4", `${w1 + w2 + w3}px`);
-}
-
-function queueStickyColumnOffsets() {
-  if (stickyOffsetRaf) return;
-  stickyOffsetRaf = window.requestAnimationFrame(() => {
-    stickyOffsetRaf = 0;
-    updateStickyColumnOffsets();
-  });
-}
-
-function getColumnWidth(colIndex) {
-  const header = document.querySelector(`#orderTable thead th:nth-child(${colIndex})`);
-  if (!header) return 0;
-  return Math.round(header.getBoundingClientRect().width);
-}
-
-function saveColumnWidths() {
-  localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(columnWidths));
-}
-
-function loadColumnWidths() {
+  const raw = localStorage.getItem(ORDER_STORAGE_KEY);
+  if (!raw) return;
   try {
-    const raw = localStorage.getItem(COL_WIDTH_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
+    const list = JSON.parse(raw);
+    const map = new Map();
+    (Array.isArray(list) ? list : []).forEach((item) => {
+      const key = String(item?.orderNo || item?.order_no || "").trim().toUpperCase();
+      if (!key) return;
+      map.set(key, String(item?.customer || "").trim());
+    });
+    orderCustomerMap = map;
+    await syncCustomerFromOrderMap();
   } catch {
-    return {};
+    // ignore
   }
 }
+
+async function syncCustomerFromOrderMap() {
+  const changed = [];
+  rows.forEach((r) => {
+    const normalized = String(r.orderNo || "").trim().toUpperCase();
+    if (normalized !== r.orderNo) r.orderNo = normalized;
+    if (!normalized) return;
+    const customer = orderCustomerMap.get(normalized);
+    if (!customer) return;
+    if (String(r.customer || "").trim() === customer) return;
+    r.customer = customer;
+    changed.push(r);
+  });
+  if (changed.length > 0) await persist({ changed, notifyAuth: false });
+}
+
+function cleanupExtras() { const ids = new Set(rows.map((r) => r.id)); let changed = false; Object.keys(extras).forEach((id) => { if (!ids.has(id)) { delete extras[id]; changed = true; } }); if (changed) saveExtras(); }
+function normalizeOrderNo(input) {
+  const raw = String(input || "").trim().toUpperCase();
+  if (!raw) return "";
+  if (/^ZZ\d{7}$/.test(raw)) return raw;
+  if (!/^\d{1,3}$/.test(raw)) return "";
+  const serial = raw.padStart(3, "0");
+  const now = new Date();
+  return `ZZ${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, "0")}${serial}`;
+}
+function resolveCustomer(orderNo, fallback) { const key = String(orderNo || "").trim().toUpperCase(); return orderCustomerMap.get(key) || String(fallback || "").trim(); }
+
+function toDbRow(r, updatedAt) { return { id: r.id, order_no: r.orderNo || "", customer: r.customer || "", material: r.material || "", spec: r.spec || "", quantity: toFiniteOrNull(r.quantity), amount: toFiniteOrNull(r.amount), is_ready: r.isReady || "", created_at: r.createdAt || updatedAt || new Date().toISOString(), updated_at: updatedAt || new Date().toISOString() }; }
+function fromDbRow(row) { return { id: row.id || crypto.randomUUID(), createdAt: row.created_at || row.updated_at || new Date().toISOString(), orderNo: String(row.order_no || ""), customer: String(row.customer || ""), material: String(row.material || ""), spec: String(row.spec || ""), quantity: row.quantity == null ? "" : Number(row.quantity), amount: row.amount == null ? "" : Number(row.amount), isReady: String(row.is_ready || "") }; }
+function toFiniteOrNull(v) { if (v == null || v === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
+
+function saveLocalRows() { localStorage.setItem(STORAGE_KEY, JSON.stringify(rows)); }
+function loadLocalRows() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return [];
+  try { const list = JSON.parse(raw); if (!Array.isArray(list)) return []; return list.map((r, i) => ({ ...createEmptyRow(), ...r, createdAt: r.createdAt || new Date(Date.now() + i).toISOString() })); } catch { return []; }
+}
+function saveExtras() { localStorage.setItem(EXTRA_KEY, JSON.stringify(extras)); }
+function loadExtras() { const raw = localStorage.getItem(EXTRA_KEY); if (!raw) return {}; try { const parsed = JSON.parse(raw); return parsed && typeof parsed === "object" ? parsed : {}; } catch { return {}; } }
+
+function formatCurrency(value) {
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(safe);
+}
+function formatMmDd(dateText) { if (!dateText) return ""; const d = new Date(dateText); if (Number.isNaN(d.getTime())) return ""; return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+
+function showInfo(message, title = "提示") {
+  if (!el.infoDialog || !el.infoText) { alert(message); return; }
+  if (el.infoTitle) el.infoTitle.textContent = title;
+  el.infoText.textContent = String(message || "");
+  openDialog(el.infoDialog);
+}
+function closeInfo() { closeDialog(el.infoDialog); }
