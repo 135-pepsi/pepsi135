@@ -1,7 +1,7 @@
 ﻿const STORAGE_KEY = "mini_mes_materials_v1";
 const COL_WIDTH_KEY = "mini_mes_materials_col_widths_v1";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
-const ORDER_SYNC_ENABLED = false;
+const ORDER_SYNC_ENABLED = true;
 
 const READY_OPTIONS = ["是", "否"];
 const MES_CONFIG = window.MES_CONFIG || {};
@@ -61,16 +61,20 @@ async function init() {
   updateLayoutMetrics();
   if (REMOTE_ENABLED) {
     await initAuth();
+    await refreshOrderCustomerMap();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemote();
     setInterval(async () => {
       if (!syncing && remoteOnline) {
+        await refreshOrderCustomerMap();
         await refreshFromRemote(false);
       }
     }, AUTO_REFRESH_MS);
   } else {
+    await refreshOrderCustomerMap();
     setModeText("本地模式");
     materials = loadLocal();
+    await syncInheritedOrderRows();
     render();
     syncQuickCustomer();
     setLastSyncTime();
