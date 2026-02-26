@@ -7,7 +7,7 @@ const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工",
 const MACHINES = ["机台1", "机台2", "机台3", "机台4", "机台5"];
 const FIXED_COL_WIDTHS = { 12: 90 };
 const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
-const PROCESS_CRAFT_OPTIONS = ["下料", "车床", "CNC", "钳工", "热处理", "表面处理"];
+const PROCESS_CRAFT_OPTIONS = ["下料", "车床", "CNC", "钳工", "热处理", "表面处理", "外协"];
 const XLSX_COLUMNS = [
   { key: "orderNo", title: "订单号" },
   { key: "customer", title: "客户" },
@@ -1520,10 +1520,18 @@ function getProcessRoute(order) {
   return normalizeProcessRoute(order?.processName || "");
 }
 
+function getStatusProcessRoute(order) {
+  const route = getProcessRoute(order);
+  if (!route.length) return [];
+  const hasOutsource = route.some((item) => normalizeCraftNameFromRouteItem(item) === "外协");
+  if (hasOutsource) return ["外协"];
+  return route;
+}
+
 function getProcessStepName(order, stepValue) {
   const step = Number(normalizeStepValue(stepValue) || 0);
   if (!step) return "";
-  const route = getProcessRoute(order);
+  const route = getStatusProcessRoute(order);
   return route[step - 1] || `第${step}序`;
 }
 
@@ -2162,7 +2170,7 @@ async function saveNoteDialog() {
 }
 
 function getMaxProcessStep(order) {
-  const max = getProcessRoute(order).length;
+  const max = getStatusProcessRoute(order).length;
   if (Number.isFinite(max) && max >= 1) return Math.min(200, Math.floor(max));
   return 1;
 }
@@ -2182,7 +2190,7 @@ function rebuildStatusStepOptions(order, maxStep = 1) {
   blank.value = "";
   blank.textContent = "请选择";
   statusStepInput.appendChild(blank);
-  const route = getProcessRoute(order);
+  const route = getStatusProcessRoute(order);
   for (let i = 1; i <= maxStep; i += 1) {
     const option = document.createElement("option");
     option.value = String(i);
@@ -2218,7 +2226,7 @@ function openStatusDialog(orderId) {
     if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
     if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
     if (order.name) parts.push(`名称 ${order.name}`);
-    const route = getProcessRoute(order);
+    const route = getStatusProcessRoute(order);
     parts.push(route.length ? route.join(" -> ") : `最多第${maxStep}序`);
     statusSubTitle.textContent = parts.join(" · ");
   }
