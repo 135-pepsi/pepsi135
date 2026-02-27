@@ -769,15 +769,29 @@ function getMonthFromOrderNo(orderNo) {
   return no.slice(4, 6);
 }
 
+function getVisibleGroupEntries(row, extra) {
+  const groups = parseMaterialGroups(row, extra);
+  const entries = groups.map((group, index) => ({ group, index }));
+  const supplierNeed = String(filterState.supplier || "").trim();
+  const statusNeed = String(filterState.status || "").trim();
+  if (!supplierNeed && !statusNeed) return entries;
+  return entries.filter(({ group }) => {
+    const supplierText = normalizeSupplierSearchText(String(group?.supplier || extra?.supplier || ""));
+    const statusText = normalizeStatus(group?.status, row, extra);
+    const supplierOk = !supplierNeed || supplierText.includes(supplierNeed);
+    const statusOk = !statusNeed || statusText === statusNeed;
+    return supplierOk && statusOk;
+  });
+}
+
 function getFilteredRows() {
   return rows.filter((row) => {
     const extra = getExtra(row.id);
-    const status = getStatus(row, extra);
-    const supplierText = getSupplierFilterText(row, extra);
     const monthOk = !filterState.month || getMonthFromOrderNo(row.orderNo) === filterState.month;
-    const supplierOk = !filterState.supplier || supplierText.includes(filterState.supplier);
-    const statusOk = !filterState.status || status === filterState.status;
-    return monthOk && supplierOk && statusOk;
+    if (!monthOk) return false;
+    const hasGroupFilter = Boolean(filterState.supplier || filterState.status);
+    if (!hasGroupFilter) return true;
+    return getVisibleGroupEntries(row, extra).length > 0;
   });
 }
 
@@ -803,10 +817,12 @@ function formatDateTimeText(value) {
   return `${y}-${m}-${day} ${hh}:${mm}`;
 }
 
-function buildContentSummary(row, extra) {
+function buildContentSummary(row, extra, visibleEntries = null) {
   const orderNo = String(row.orderNo || "").trim();
   const customer = String(row.customer || "").trim();
-  const groups = parseMaterialGroups(row, extra);
+  const groups = Array.isArray(visibleEntries)
+    ? visibleEntries.map((entry) => entry.group)
+    : parseMaterialGroups(row, extra);
   const header = [
     `订单号: ${orderNo || "-"}`,
     `客户: ${customer || "-"}`,
@@ -858,6 +874,7 @@ function render() {
   el.tableBody.innerHTML = "";
   list.forEach((row) => {
     const extra = extraMap.get(row.id) || createDefaultExtra();
+    const visibleEntries = getVisibleGroupEntries(row, extra);
     const tr = document.createElement("tr");
     tr.addEventListener("click", () => {
       selectedRowId = row.id;
@@ -866,11 +883,11 @@ function render() {
     if (selectedRowId === row.id) tr.classList.add("material-row-selected");
     tr.appendChild(editCell(row, "orderNo"));
     tr.appendChild(textCell(row.customer || ""));
-    tr.appendChild(materialDetailCell(row, extra));
-    tr.appendChild(amountDetailCell(row, extra));
-    tr.appendChild(statusDetailCell(row, extra));
-    tr.appendChild(actionDetailCell(row, extra));
-    tr.appendChild(summaryCell(buildContentSummary(row, extra)));
+    tr.appendChild(materialDetailCell(row, extra, visibleEntries));
+    tr.appendChild(amountDetailCell(row, extra, visibleEntries));
+    tr.appendChild(statusDetailCell(row, extra, visibleEntries));
+    tr.appendChild(actionDetailCell(row, extra, visibleEntries));
+    tr.appendChild(summaryCell(buildContentSummary(row, extra, visibleEntries)));
     el.tableBody.appendChild(tr);
   });
   requestAnimationFrame(syncGroupHeights);
@@ -888,10 +905,12 @@ function summaryCell(text) {
   return td;
 }
 
-function amountDetailCell(row, extra) {
+function amountDetailCell(row, extra, visibleEntries = null) {
   const td = document.createElement("td");
   td.className = "material-amount-cell";
-  const groups = parseMaterialGroups(row, extra);
+  const groups = Array.isArray(visibleEntries)
+    ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
+    : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
   if (!groups.length) {
     td.textContent = "未填写";
     return td;
@@ -914,7 +933,7 @@ function amountDetailCell(row, extra) {
     editBtn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      void editGroupAmount(row.id, idx);
+      void editGroupAmount(row.id, Number(g.__sourceIndex ?? idx));
     });
     groupActions.appendChild(editBtn);
     group.appendChild(amountText);
@@ -970,10 +989,12 @@ async function saveAmountEditDialog() {
   render();
 }
 
-function statusDetailCell(row, extra) {
+function statusDetailCell(row, extra, visibleEntries = null) {
   const td = document.createElement("td");
   td.className = "material-status-cell";
-  const groups = parseMaterialGroups(row, extra);
+  const groups = Array.isArray(visibleEntries)
+    ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
+    : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
   if (!groups.length) {
     const empty = document.createElement("div");
     empty.className = "material-status-group";
@@ -995,7 +1016,7 @@ function statusDetailCell(row, extra) {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      void cycleGroupStatus(row.id, idx);
+      void cycleGroupStatus(row.id, Number(g.__sourceIndex ?? idx));
     });
     group.appendChild(btn);
     td.appendChild(group);
@@ -1033,11 +1054,13 @@ async function cycleGroupStatus(rowId, groupIndex) {
   render();
 }
 
-function materialDetailCell(row, extra) {
+function materialDetailCell(row, extra, visibleEntries = null) {
   const td = document.createElement("td");
   td.className = "material-detail-cell";
   td.dataset.id = row.id;
-  const groups = parseMaterialGroups(row, extra);
+  const groups = Array.isArray(visibleEntries)
+    ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
+    : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
   const hasContent = groups.some((g) => g.material || g.supplier || g.lines.some((x) => x.size || x.qty !== ""));
   if (!hasContent) {
     const empty = document.createElement("div");
@@ -1123,10 +1146,11 @@ function materialDetailCell(row, extra) {
         event.preventDefault();
         event.stopPropagation();
         const kind = String(g?.itemKind || "material");
+        const sourceIndex = Number(g.__sourceIndex ?? idx);
         if (kind === "other") {
-          openOtherItemDialog(row.id, { groupIndex: idx });
+          openOtherItemDialog(row.id, { groupIndex: sourceIndex });
         } else {
-          openMaterialItemDialog(row.id, { groupIndex: idx });
+          openMaterialItemDialog(row.id, { groupIndex: sourceIndex });
         }
       });
       groupActions.appendChild(editBtn);
@@ -1259,10 +1283,12 @@ function beginEdit(td) {
   });
 }
 
-function actionDetailCell(row, extra) {
+function actionDetailCell(row, extra, visibleEntries = null) {
   const td = document.createElement("td");
   td.className = "material-op-cell";
-  const groups = parseMaterialGroups(row, extra);
+  const groups = Array.isArray(visibleEntries)
+    ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
+    : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
   if (!groups.length) {
     const group = document.createElement("div");
     group.className = "material-op-group";
@@ -1286,7 +1312,7 @@ function actionDetailCell(row, extra) {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      void deleteMaterialGroup(row.id, idx);
+      void deleteMaterialGroup(row.id, Number(g.__sourceIndex ?? idx));
     });
     group.appendChild(btn);
     td.appendChild(group);
