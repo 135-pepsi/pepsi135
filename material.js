@@ -7,7 +7,7 @@ const SUPPLIER_CUSTOM_KEY = "mini_mes_supplier_options_v1";
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const IS_LOCAL_DEBUG = location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
-const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 20) * 1000);
+const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 5) * 1000);
 const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
@@ -172,10 +172,10 @@ async function init() {
   initSupplierFilterOptions();
   setFilterDefaults();
   rows = loadLocalRows();
-  await refreshOrderCustomerMap();
   if (REMOTE_ENABLED) {
     await initAuth();
     if (shouldUseLocalOnlyMode()) {
+      await refreshOrderCustomerMap();
       await ensureTestRowExists();
       setModeText("本地调试模式（未登录）");
       render();
@@ -189,6 +189,7 @@ async function init() {
       if (!syncing && remoteOnline && !shouldUseLocalOnlyMode()) void refreshFromRemote(false);
     }, AUTO_REFRESH_MS);
   } else {
+    await refreshOrderCustomerMap();
     await ensureTestRowExists();
     setModeText("本地模式");
     render();
@@ -1418,7 +1419,13 @@ function closeImagePreview() {
 
 function syncGroupHeights() {
   if (!el.tableBody) return;
+  const wrapRect = el.tableWrap?.getBoundingClientRect?.() || null;
+  const visiblePadding = 120;
   el.tableBody.querySelectorAll("tr").forEach((tr) => {
+    if (wrapRect) {
+      const rect = tr.getBoundingClientRect();
+      if (rect.bottom < wrapRect.top - visiblePadding || rect.top > wrapRect.bottom + visiblePadding) return;
+    }
     const materialGroups = tr.querySelectorAll("td:nth-child(3) .material-detail-group");
     const amountGroups = tr.querySelectorAll("td:nth-child(4) .material-amount-group");
     const statusGroups = tr.querySelectorAll("td:nth-child(5) .material-status-group");
