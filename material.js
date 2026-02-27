@@ -1071,6 +1071,19 @@ function materialDetailCell(row, extra) {
       head.className = "material-detail-head";
       head.textContent = [g.material, g.supplier].filter(Boolean).join(" / ");
       if (head.textContent) group.appendChild(head);
+      const linkText = String(g?.supplierLink || "").trim();
+      if (linkText) {
+        const linkWrap = document.createElement("div");
+        linkWrap.className = "material-detail-link";
+        const link = document.createElement("a");
+        link.href = linkText;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = linkText;
+        link.addEventListener("click", (event) => event.stopPropagation());
+        linkWrap.appendChild(link);
+        group.appendChild(linkWrap);
+      }
       g.lines.forEach((line) => {
         const item = document.createElement("div");
         item.className = "material-detail-line";

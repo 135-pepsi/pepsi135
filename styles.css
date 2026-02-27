@@ -899,6 +899,22 @@ body:not(.material-page) .kpi-grid {
   margin-top: 2px;
 }
 
+.material-detail-link {
+  margin-bottom: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.material-detail-link a {
+  color: #8fd0ff;
+  text-decoration: underline;
+}
+
+.material-detail-link a:hover {
+  color: #b4e2ff;
+}
+
 .material-detail-line {
   padding: 0;
   display: grid;
