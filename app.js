@@ -225,12 +225,16 @@ function setLastSyncTime() {
   lastSyncTime.textContent = `最近同步 ${t}`;
 }
 
-function getErrorKey(orderId, key) {
+function makeOrderFieldKey(orderId, key) {
   return `${orderId || ""}:${key || ""}`;
 }
 
+function getErrorKey(orderId, key) {
+  return makeOrderFieldKey(orderId, key);
+}
+
 function getDirtyCellKey(orderId, key) {
-  return `${orderId || ""}:${key || ""}`;
+  return makeOrderFieldKey(orderId, key);
 }
 
 function setDirtyCellMark(orderId, key, dirty) {
@@ -2732,21 +2736,15 @@ function closeDeleteConfirmDialog() {
   if (!deleteConfirmDialog) return;
   deleteConfirmDialog.hidden = true;
   pendingDeleteOrderId = "";
-  if (attachmentDialog && !attachmentDialog.hidden) {
-    document.body.style.overflow = "hidden";
-  } else if (previewDialog && !previewDialog.hidden) {
-    document.body.style.overflow = "hidden";
-  } else if (processTimeDialog && !processTimeDialog.hidden) {
-    document.body.style.overflow = "hidden";
-  } else if (statusDialog && !statusDialog.hidden) {
-    document.body.style.overflow = "hidden";
-  } else if (dateDialog && !dateDialog.hidden) {
-    document.body.style.overflow = "hidden";
-  } else if (surfaceDialog && !surfaceDialog.hidden) {
-    document.body.style.overflow = "hidden";
-  } else {
-    document.body.style.overflow = "";
-  }
+  const hasOpenDialog = [
+    attachmentDialog,
+    previewDialog,
+    processTimeDialog,
+    statusDialog,
+    dateDialog,
+    surfaceDialog,
+  ].some((dialogEl) => dialogEl && !dialogEl.hidden);
+  document.body.style.overflow = hasOpenDialog ? "hidden" : "";
 }
 
 async function confirmDeleteOrder() {
@@ -2767,9 +2765,8 @@ function getFilteredOrders() {
       );
     const effectiveOrderNo = getEffectiveOrderNoForMonthFilter(arr, idx);
     const monthOk = !filters.month || getMonthFromOrderNo(effectiveOrderNo) === filters.month;
-    const effectiveSearchOrderNo = getEffectiveOrderNoForMonthFilter(arr, idx);
     const orderNoOk =
-      !filters.orderNo || String(effectiveSearchOrderNo || "").toLowerCase().includes(filters.orderNo);
+      !filters.orderNo || String(effectiveOrderNo || "").toLowerCase().includes(filters.orderNo);
     const statusColorOk = !filters.statusColor || isStatusColorMatch(o.status, filters.statusColor);
     const mOk = !filters.machine || o.machine === filters.machine;
     const sOk = !filters.status || o.status === filters.status;

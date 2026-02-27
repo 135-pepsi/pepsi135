@@ -9,6 +9,23 @@ const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS ||
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
 const STATUS_LIST = ["待请购", "待下单", "在途", "部分到货", "已到货", "异常"];
+const DEFAULT_EXTRA = Object.freeze({
+  supplier: "",
+  status: "待请购",
+  machine: "机台1",
+  safetyStock: 0,
+  inTransit: 0,
+  allocated: 0,
+  dailyUse: 0,
+  leadDays: 7,
+  promiseDate: "",
+  actualDate: "",
+  lastOrderQty: 0,
+  lastOrderPrice: 0,
+  abnormalReason: "",
+  abnormalAltMaterial: "",
+  abnormalRecoverDate: "",
+});
 
 let rows = [];
 let extras = loadExtras();
@@ -186,10 +203,11 @@ function bindActionDialog(dialogEl, closeButtons, saveFn, saveBtn) {
 
 function setFilterDefaults() { if (el.filterMonth) el.filterMonth.value = filterState.month; }
 function createEmptyRow() { return { id: crypto.randomUUID(), createdAt: new Date().toISOString(), orderNo: "", customer: "", material: "", spec: "", quantity: "", amount: "", isReady: "" }; }
-function createDefaultExtra() { return { supplier: "", status: "待请购", machine: "机台1", safetyStock: 0, inTransit: 0, allocated: 0, dailyUse: 0, leadDays: 7, promiseDate: "", actualDate: "", lastOrderQty: 0, lastOrderPrice: 0, abnormalReason: "", abnormalAltMaterial: "", abnormalRecoverDate: "" }; }
+function createDefaultExtra() { return { ...DEFAULT_EXTRA }; }
 function getExtra(id) { return { ...createDefaultExtra(), ...(extras[id] || {}) }; }
 function saveExtra(id, patch) { extras[id] = { ...getExtra(id), ...patch }; saveExtras(); }
 function deleteExtra(id) { if (extras[id]) { delete extras[id]; saveExtras(); } }
+function buildExtraMap(list) { const map = new Map(); list.forEach((row) => map.set(row.id, getExtra(row.id))); return map; }
 
 function getCurrentStock(row) { const n = Number(row.quantity); return Number.isFinite(n) ? n : 0; }
 function getAvailable(row, extra) { return getCurrentStock(row) + Number(extra.inTransit || 0) - Number(extra.allocated || 0); }
@@ -241,12 +259,13 @@ function getFilteredRows() {
 function render() {
   cleanupExtras();
   const list = getFilteredRows();
-  renderKpi(list);
-  renderWarnings(list);
+  const extraMap = buildExtraMap(list);
+  renderKpi(list, extraMap);
+  renderWarnings(list, extraMap);
   if (!el.tableBody) return;
   el.tableBody.innerHTML = "";
   list.forEach((row) => {
-    const extra = getExtra(row.id);
+    const extra = extraMap.get(row.id) || createDefaultExtra();
     const tr = document.createElement("tr");
     tr.appendChild(editCell(row, "orderNo"));
     tr.appendChild(textCell(row.customer || ""));
@@ -263,13 +282,14 @@ function render() {
   });
 }
 
-function renderKpi(list) {
-  const needOrder = list.filter((r) => getStatus(r, getExtra(r.id)) === "待下单").length;
-  const inTransit = list.filter((r) => ["在途", "部分到货"].includes(getStatus(r, getExtra(r.id)))).length;
-  const overdue = list.filter((r) => isOverdue(r, getExtra(r.id))).length;
-  const risk3d = list.filter((r) => isRisk3d(r, getExtra(r.id))).length;
-  const totalAmount = list.reduce((sum, r) => { const e = getExtra(r.id); return sum + Number(e.lastOrderQty || 0) * Number(e.lastOrderPrice || 0); }, 0);
-  const impactOrders = new Set(list.filter((r) => isOverdue(r, getExtra(r.id)) || isRisk3d(r, getExtra(r.id))).map((r) => String(r.orderNo || "").trim()).filter(Boolean)).size;
+function renderKpi(list, extraMap = new Map()) {
+  const getRowExtra = (row) => extraMap.get(row.id) || createDefaultExtra();
+  const needOrder = list.filter((r) => getStatus(r, getRowExtra(r)) === "待下单").length;
+  const inTransit = list.filter((r) => ["在途", "部分到货"].includes(getStatus(r, getRowExtra(r)))).length;
+  const overdue = list.filter((r) => isOverdue(r, getRowExtra(r))).length;
+  const risk3d = list.filter((r) => isRisk3d(r, getRowExtra(r))).length;
+  const totalAmount = list.reduce((sum, r) => { const e = getRowExtra(r); return sum + Number(e.lastOrderQty || 0) * Number(e.lastOrderPrice || 0); }, 0);
+  const impactOrders = new Set(list.filter((r) => isOverdue(r, getRowExtra(r)) || isRisk3d(r, getRowExtra(r))).map((r) => String(r.orderNo || "").trim()).filter(Boolean)).size;
   if (el.kpiNeedOrder) el.kpiNeedOrder.textContent = String(needOrder);
   if (el.kpiInTransit) el.kpiInTransit.textContent = String(inTransit);
   if (el.kpiOverdue) el.kpiOverdue.textContent = String(overdue);
@@ -278,10 +298,11 @@ function renderKpi(list) {
   if (el.kpiOrderImpact) el.kpiOrderImpact.textContent = String(impactOrders);
 }
 
-function renderWarnings(list) {
-  renderWarningList(el.warningOverdue, list.filter((r) => isOverdue(r, getExtra(r.id))));
-  renderWarningList(el.warningRisk, list.filter((r) => isRisk3d(r, getExtra(r.id))));
-  renderWarningList(el.warningSafety, list.filter((r) => { const ex = getExtra(r.id); return getAvailable(r, ex) <= Number(ex.safetyStock || 0); }));
+function renderWarnings(list, extraMap = new Map()) {
+  const getRowExtra = (row) => extraMap.get(row.id) || createDefaultExtra();
+  renderWarningList(el.warningOverdue, list.filter((r) => isOverdue(r, getRowExtra(r))));
+  renderWarningList(el.warningRisk, list.filter((r) => isRisk3d(r, getRowExtra(r))));
+  renderWarningList(el.warningSafety, list.filter((r) => { const ex = getRowExtra(r); return getAvailable(r, ex) <= Number(ex.safetyStock || 0); }));
 }
 
 function renderWarningList(container, list) {
