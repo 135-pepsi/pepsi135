@@ -628,10 +628,6 @@ body:not(.material-page) #orderTable {
   border-spacing: 0;
 }
 
-.material-page #orderTable th:nth-child(6),
-.material-page #orderTable td:nth-child(6) { min-width: 120px; width: 120px; max-width: 120px; }
-.material-page #orderTable th:nth-child(7),
-.material-page #orderTable td:nth-child(7) { min-width: 320px; width: 320px; max-width: 320px; }
 th,
 td {
   border: 1px solid #254670;

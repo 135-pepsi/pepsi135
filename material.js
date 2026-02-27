@@ -685,19 +685,6 @@ function getSupplierFilterText(row, extra) {
   return merged.join(" ").toLowerCase();
 }
 
-function getMaterialFilterText(row, extra) {
-  const groups = parseMaterialGroups(row, extra);
-  const parts = [];
-  groups.forEach((g) => {
-    if (g.material) parts.push(g.material);
-    g.lines.forEach((line) => {
-      if (line.size) parts.push(line.size);
-      if (line.qty !== "" && line.qty != null) parts.push(String(line.qty));
-    });
-  });
-  return parts.join(" ");
-}
-
 function render() {
   cleanupExtras();
   initSupplierFilterOptions();
@@ -1107,8 +1094,6 @@ function actionDetailCell(row, extra) {
   return td;
 }
 
-function actionButton(text, cls, click) { const b = document.createElement("button"); b.type = "button"; b.className = cls; b.textContent = text; b.addEventListener("click", click); return b; }
-
 async function deleteMaterialGroup(rowId, groupIndex) {
   const row = rows.find((r) => r.id === rowId);
   if (!row) return;
@@ -1136,28 +1121,6 @@ async function deleteMaterialGroup(rowId, groupIndex) {
     status: hasAbnormal ? "异常" : allArrived ? "到货" : hasPurchased ? "采购" : hasOrdered ? "下单" : "下单",
   });
   await persist({ changed: [row], notifyAuth: false });
-  render();
-}
-
-async function addBlankRow() {
-  const next = createEmptyRow();
-  rows.push(next);
-  saveExtra(next.id, createDefaultExtra());
-  await persist({ changed: [next], notifyAuth: false });
-  render();
-  openMaterialItemDialog(next.id);
-}
-
-async function addRowAfter(afterId) {
-  const idx = rows.findIndex((r) => r.id === afterId);
-  const next = createEmptyRow();
-  if (idx >= 0) {
-    next.orderNo = rows[idx].orderNo || "";
-    next.customer = rows[idx].customer || "";
-    rows.splice(idx + 1, 0, next);
-  } else rows.push(next);
-  saveExtra(next.id, createDefaultExtra());
-  await persist({ changed: [next], notifyAuth: false });
   render();
 }
 
