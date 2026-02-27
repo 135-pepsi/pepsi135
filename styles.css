@@ -824,11 +824,8 @@ body:not(.material-page) .kpi-grid {
 .material-detail-head {
   font-weight: 700;
   color: #f0f7ff;
-  margin-bottom: 6px;
-  padding: 6px 8px;
-  border: 1px solid #3a628f;
-  border-radius: 8px;
-  background: rgba(16, 41, 72, 0.7);
+  margin-bottom: 4px;
+  padding: 0;
 }
 
 .material-detail-line + .material-detail-line {
@@ -836,17 +833,7 @@ body:not(.material-page) .kpi-grid {
 }
 
 .material-detail-line {
-  padding: 5px 8px;
-  border: 1px solid #315880;
-  border-radius: 8px;
-  background: rgba(11, 33, 58, 0.62);
-}
-
-.material-detail-group {
-  border: 1px solid #4a719b;
-  border-radius: 12px;
-  padding: 8px;
-  background: rgba(9, 28, 49, 0.55);
+  padding: 0;
 }
 
 .material-detail-add-btn {

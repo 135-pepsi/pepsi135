@@ -464,21 +464,18 @@ function materialDetailCell(row, extra) {
   if (!material && !supplier && lines.length === 0) {
     td.textContent = "点击填写材质、尺寸、数量、供应商";
   } else {
-    const group = document.createElement("div");
-    group.className = "material-detail-group";
     const head = document.createElement("div");
     head.className = "material-detail-head";
     head.textContent = [material, supplier].filter(Boolean).join(" / ");
-    if (head.textContent) group.appendChild(head);
+    if (head.textContent) td.appendChild(head);
     lines.forEach((line) => {
       const item = document.createElement("div");
       item.className = "material-detail-line";
       const size = String(line.size || "").trim();
       const qty = String(line.qty ?? "").trim();
       item.textContent = qty ? `${size} x${qty}` : size;
-      group.appendChild(item);
+      td.appendChild(item);
     });
-    td.appendChild(group);
   }
   const addBtn = document.createElement("button");
   addBtn.type = "button";
@@ -487,12 +484,28 @@ function materialDetailCell(row, extra) {
   addBtn.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    openMaterialItemDialog(row.id);
+    void addMaterialForOrderRow(row.id);
   });
   td.appendChild(addBtn);
   td.title = "点击编辑物料明细";
   td.addEventListener("click", () => openMaterialItemDialog(row.id));
   return td;
+}
+
+async function addMaterialForOrderRow(sourceRowId) {
+  const idx = rows.findIndex((r) => r.id === sourceRowId);
+  const base = idx >= 0 ? rows[idx] : null;
+  const next = createEmptyRow();
+  if (base) {
+    next.orderNo = base.orderNo || "";
+    next.customer = base.customer || "";
+  }
+  if (idx >= 0) rows.splice(idx + 1, 0, next);
+  else rows.push(next);
+  saveExtra(next.id, createDefaultExtra());
+  await persist({ changed: [next], notifyAuth: false });
+  render();
+  openMaterialItemDialog(next.id);
 }
 
 function renderKpi(list, extraMap = new Map()) {
