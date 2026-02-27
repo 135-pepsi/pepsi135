@@ -842,7 +842,8 @@ function buildContentSummary(row, extra, visibleEntries = null) {
       })
       .filter(Boolean)
       .join("、");
-    const orderedAtText = `下单时间:${formatDateTimeText(g?.orderedAt) || "-"}`;
+    const orderedAtValue = g?.orderedAt || (status === "下单" ? (row?.createdAt || row?.updatedAt || "") : "");
+    const orderedAtText = `下单时间:${formatDateTimeText(orderedAtValue) || "-"}`;
     const purchasedAtText = `采购时间:${formatDateTimeText(g?.purchasedAt) || "-"}`;
     const arrivedAtText = status === "异常" ? "" : ` | 到货时间:${formatDateTimeText(g?.arrivedAt) || "-"}`;
     return `${idx + 1}.${[String(g.material || "").trim(), lineText].filter(Boolean).join(" ")} | 金额:${amount} | 状态:${status} | ${orderedAtText} | ${purchasedAtText}${arrivedAtText}`;
@@ -1938,7 +1939,7 @@ function parseMaterialGroups(row, extra) {
             itemKind: String(g?.itemKind || "material"),
             amount: g?.amount === "" || g?.amount == null ? "" : Math.max(0, Number(g.amount) || 0),
             status: normalizeStatus(g?.status, row, extra),
-            orderedAt: String(g?.orderedAt || g?.pendingAt || ""),
+            orderedAt: String(g?.orderedAt || g?.pendingAt || (normalizeStatus(g?.status, row, extra) === "下单" ? (row?.createdAt || row?.updatedAt || "") : "")),
             purchasedAt: String(g?.purchasedAt || ""),
             arrivedAt: String(g?.arrivedAt || ""),
             screenshot: String(g?.screenshot || ""),
@@ -1968,7 +1969,19 @@ function parseMaterialGroups(row, extra) {
   const fallbackAmount = row?.amount == null || row?.amount === "" ? "" : Math.max(0, Number(row.amount) || 0);
   const fallbackStatus = normalizeStatus(extra?.status, row, extra);
   if (!fallbackMaterial && !fallbackSupplier && fallbackLines.length === 0 && fallbackAmount === "") return [];
-  return [{ itemKind: "material", material: fallbackMaterial, supplier: fallbackSupplier, supplierLink: "", amount: fallbackAmount, status: fallbackStatus, orderedAt: "", purchasedAt: "", arrivedAt: "", screenshot: "", lines: fallbackLines }];
+  return [{
+    itemKind: "material",
+    material: fallbackMaterial,
+    supplier: fallbackSupplier,
+    supplierLink: "",
+    amount: fallbackAmount,
+    status: fallbackStatus,
+    orderedAt: fallbackStatus === "下单" ? String(row?.createdAt || row?.updatedAt || "") : "",
+    purchasedAt: "",
+    arrivedAt: "",
+    screenshot: "",
+    lines: fallbackLines,
+  }];
 }
 
 function serializeMaterialGroups(groups = []) {
