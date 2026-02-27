@@ -148,6 +148,7 @@ const el = {
   otherClear: document.getElementById("otherItemClearBtn"),
   otherNameInput: document.getElementById("otherItemName"),
   otherSupplierInput: document.getElementById("otherItemSupplier"),
+  otherSupplierLinkInput: document.getElementById("otherItemSupplierLink"),
   otherLineList: document.getElementById("otherLineList"),
   otherLineAddBtn: document.getElementById("otherLineAddBtn"),
   otherScreenshotInput: document.getElementById("otherScreenshotInput"),
@@ -423,6 +424,7 @@ function ensureOtherItemDialog() {
     el.otherClear = document.getElementById("otherItemClearBtn");
     el.otherNameInput = document.getElementById("otherItemName");
     el.otherSupplierInput = document.getElementById("otherItemSupplier");
+    el.otherSupplierLinkInput = document.getElementById("otherItemSupplierLink");
     el.otherLineList = document.getElementById("otherLineList");
     el.otherLineAddBtn = document.getElementById("otherLineAddBtn");
     el.otherScreenshotInput = document.getElementById("otherScreenshotInput");
@@ -447,13 +449,14 @@ function ensureOtherItemDialog() {
         <div class="material-item-col material-item-col-fixed">
           <label class="auth-login-field"><span>名称</span><input id="otherItemName" type="text" placeholder="请输入名称" /></label>
           <label class="auth-login-field"><span>供应商（自定义）</span><input id="otherItemSupplier" type="text" placeholder="请输入供应商" /></label>
-        </div>
-        <div class="material-item-col material-item-col-lines">
+          <label class="auth-login-field"><span>供应商链接</span><input id="otherItemSupplierLink" type="text" placeholder="https://..." /></label>
           <div class="auth-login-field">
             <span>规格与数量</span>
             <div id="otherLineList" class="material-line-list"></div>
             <button id="otherLineAddBtn" class="btn btn-secondary" type="button">新增规格行</button>
           </div>
+        </div>
+        <div class="material-item-col material-item-col-lines">
           <div class="auth-login-field">
             <span>截图</span>
             <input id="otherScreenshotInput" type="file" accept="image/*" />
@@ -480,6 +483,7 @@ function ensureOtherItemDialog() {
   el.otherClear = document.getElementById("otherItemClearBtn");
   el.otherNameInput = document.getElementById("otherItemName");
   el.otherSupplierInput = document.getElementById("otherItemSupplier");
+  el.otherSupplierLinkInput = document.getElementById("otherItemSupplierLink");
   el.otherLineList = document.getElementById("otherLineList");
   el.otherLineAddBtn = document.getElementById("otherLineAddBtn");
   el.otherScreenshotInput = document.getElementById("otherScreenshotInput");
@@ -1481,7 +1485,7 @@ function clearMaterialItemDetail() {
 }
 
 function createEmptyMaterialGroup(kind = "material") {
-  return { itemKind: kind, material: "", supplier: "", amount: "", status: "下单", purchasedAt: "", arrivedAt: "", screenshot: "", lines: [{ size: "", qty: "" }] };
+  return { itemKind: kind, material: "", supplier: "", supplierLink: "", amount: "", status: "下单", purchasedAt: "", arrivedAt: "", screenshot: "", lines: [{ size: "", qty: "" }] };
 }
 
 function appendMaterialLineRow(size = "", qty = "") {
@@ -1606,6 +1610,7 @@ function openOtherItemDialog(rowId, options = {}) {
   materialItemEditingGroups = groups;
   if (el.otherNameInput) el.otherNameInput.value = String(currentGroup.material || "");
   if (el.otherSupplierInput) el.otherSupplierInput.value = String(currentGroup.supplier || "");
+  if (el.otherSupplierLinkInput) el.otherSupplierLinkInput.value = String(currentGroup.supplierLink || "");
   otherScreenshotDataUrl = String(currentGroup.screenshot || "");
   void renderOtherScreenshotPreview();
   if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
@@ -1617,6 +1622,7 @@ function openOtherItemDialog(rowId, options = {}) {
 function clearOtherItemDetail() {
   if (el.otherNameInput) el.otherNameInput.value = "";
   if (el.otherSupplierInput) el.otherSupplierInput.value = "";
+  if (el.otherSupplierLinkInput) el.otherSupplierLinkInput.value = "";
   clearOtherScreenshot();
   renderOtherLineRows([{ size: "", qty: "" }]);
 }
@@ -1877,6 +1883,7 @@ function parseMaterialGroups(row, extra) {
           .map((g) => ({
             material: String(g?.material || "").trim(),
             supplier: String(g?.supplier || "").trim(),
+            supplierLink: String(g?.supplierLink || g?.link || "").trim(),
             itemKind: String(g?.itemKind || "material"),
             amount: g?.amount === "" || g?.amount == null ? "" : Math.max(0, Number(g.amount) || 0),
             status: normalizeStatus(g?.status, row, extra),
@@ -1909,7 +1916,7 @@ function parseMaterialGroups(row, extra) {
   const fallbackAmount = row?.amount == null || row?.amount === "" ? "" : Math.max(0, Number(row.amount) || 0);
   const fallbackStatus = normalizeStatus(extra?.status, row, extra);
   if (!fallbackMaterial && !fallbackSupplier && fallbackLines.length === 0 && fallbackAmount === "") return [];
-  return [{ itemKind: "material", material: fallbackMaterial, supplier: fallbackSupplier, amount: fallbackAmount, status: fallbackStatus, purchasedAt: "", arrivedAt: "", screenshot: "", lines: fallbackLines }];
+  return [{ itemKind: "material", material: fallbackMaterial, supplier: fallbackSupplier, supplierLink: "", amount: fallbackAmount, status: fallbackStatus, purchasedAt: "", arrivedAt: "", screenshot: "", lines: fallbackLines }];
 }
 
 function serializeMaterialGroups(groups = []) {
@@ -1917,6 +1924,7 @@ function serializeMaterialGroups(groups = []) {
     .map((g) => ({
       material: String(g?.material || "").trim(),
       supplier: String(g?.supplier || "").trim(),
+      supplierLink: String(g?.supplierLink || "").trim(),
       itemKind: String(g?.itemKind || "material"),
       amount: g?.amount === "" || g?.amount == null ? "" : Number(Number(g.amount).toFixed(2)),
       status: normalizeStatus(g?.status),
@@ -1988,7 +1996,8 @@ async function saveMaterialItemDetail() {
   const existingPurchasedAt = String(currentGroups[materialItemEditingGroupIndex]?.purchasedAt || "");
   const existingArrivedAt = String(currentGroups[materialItemEditingGroupIndex]?.arrivedAt || "");
   const existingScreenshot = String(currentGroups[materialItemEditingGroupIndex]?.screenshot || "");
-  currentGroups[materialItemEditingGroupIndex] = { itemKind: "material", material, supplier, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: existingScreenshot, lines };
+  const existingSupplierLink = String(currentGroups[materialItemEditingGroupIndex]?.supplierLink || "");
+  currentGroups[materialItemEditingGroupIndex] = { itemKind: "material", material, supplier, supplierLink: existingSupplierLink, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: existingScreenshot, lines };
   const serializedGroups = serializeMaterialGroups(currentGroups);
   row.material = serializedGroups.material;
   row.spec = serializedGroups.spec;
@@ -2008,6 +2017,7 @@ async function saveOtherItemDetail() {
   if (!row) return;
   const material = String(el.otherNameInput?.value || "").trim();
   const supplier = String(el.otherSupplierInput?.value || "").trim();
+  const supplierLink = String(el.otherSupplierLinkInput?.value || "").trim();
   const lines = collectOtherLineRows();
   if (!material) {
     showInfo("请填写名称。", "校验失败");
@@ -2029,7 +2039,7 @@ async function saveOtherItemDetail() {
   const existingStatus = normalizeStatus(currentGroups[otherItemEditingGroupIndex]?.status);
   const existingPurchasedAt = String(currentGroups[otherItemEditingGroupIndex]?.purchasedAt || "");
   const existingArrivedAt = String(currentGroups[otherItemEditingGroupIndex]?.arrivedAt || "");
-  currentGroups[otherItemEditingGroupIndex] = { itemKind: "other", material, supplier, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: otherScreenshotDataUrl, lines };
+  currentGroups[otherItemEditingGroupIndex] = { itemKind: "other", material, supplier, supplierLink, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: otherScreenshotDataUrl, lines };
   const serializedGroups = serializeMaterialGroups(currentGroups);
   row.material = serializedGroups.material;
   row.spec = serializedGroups.spec;
