@@ -7,7 +7,7 @@ const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工",
 const MACHINES = ["机台1", "机台2", "机台3", "机台4", "机台5"];
 const FIXED_COL_WIDTHS = { 12: 90 };
 const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
-const PROCESS_SEQUENCE_CRAFT = "工序";
+const PROCESS_SEQUENCE_CRAFT = "CNC";
 const PROCESS_SEQUENCE_MAX = 10;
 const PROCESS_CRAFT_OPTIONS = ["下料", "车床", PROCESS_SEQUENCE_CRAFT, "钳工", "热处理", "表面处理", "外协"];
 const XLSX_COLUMNS = [
@@ -1823,7 +1823,7 @@ function initProcessTimeOptions() {
   }
   if (processCncStepWrap) {
     const label = processCncStepWrap.querySelector("span");
-    if (label) label.textContent = "工序总序数";
+    if (label) label.textContent = "CNC总序数";
   }
   syncProcessCraftPreview();
   if (processMachineInput) {
