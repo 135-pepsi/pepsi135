@@ -2,6 +2,7 @@
 const STORAGE_KEY = "mini_mes_materials_v2";
 const EXTRA_KEY = "mini_mes_materials_extra_v2";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
+const SUPPLIER_CUSTOM_KEY = "mini_mes_supplier_options_v1";
 
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
@@ -9,13 +10,16 @@ const IS_LOCAL_DEBUG = location.protocol === "file:" || location.hostname === "l
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 20) * 1000);
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
-const STATUS_LIST = ["待请购", "待下单", "在途", "部分到货", "材料齐备", "异常"];
-const MATERIAL_OPTIONS = ["", "45#钢", "40Cr", "铝6061", "铝7075", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
-const SUPPLIER_OPTIONS = ["", "供应商A", "供应商B", "供应商C", "供应商D"];
+const STATUS_LIST = ["下单", "采购", "到货", "异常"];
+const MATERIAL_OPTIONS = ["", "45#钢", "40Cr", "铝6061", "铝7075", "铝2A12", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
+const SUPPLIER_BASE_OPTIONS = [""];
+const SUPPLIER_BLOCKLIST = new Set(["供应商A", "供应商B", "供应商C", "供应商D", "sdf"]);
+let supplierOptions = buildSupplierOptions(loadCustomSupplierOptions());
 const SPEC_LINES_PREFIX = "@LINES:";
+const MATERIAL_GROUPS_PREFIX = "@MATS:";
 const DEFAULT_EXTRA = Object.freeze({
   supplier: "",
-  status: "待请购",
+  status: "下单",
   machine: "机台1",
   safetyStock: 0,
   inTransit: 0,
@@ -34,6 +38,7 @@ const DEFAULT_EXTRA = Object.freeze({
 let rows = [];
 let extras = loadExtras();
 let orderCustomerMap = new Map();
+let orderSummaryMap = new Map();
 let authSession = null;
 let remoteOnline = REMOTE_ENABLED;
 let syncing = false;
@@ -43,13 +48,17 @@ let pageUnloading = false;
 let activeRowId = "";
 let orderHintListEl = null;
 let materialItemEditingRowId = "";
+let materialItemEditingGroups = [];
+let materialItemEditingGroupIndex = 0;
+let amountEditingRowId = "";
+let amountEditingGroupIndex = -1;
+let selectedRowId = "";
+let supplierCustomBound = false;
 
 const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
   supplier: "",
   status: "",
-  overdueOnly: false,
-  keyword: "",
 };
 
 const el = {
@@ -66,8 +75,6 @@ const el = {
   filterMonth: document.getElementById("materialFilterMonth"),
   filterSupplier: document.getElementById("materialFilterSupplier"),
   filterStatus: document.getElementById("materialFilterStatus"),
-  filterOverdueOnly: document.getElementById("materialFilterOverdueOnly"),
-  searchInput: document.getElementById("searchInput"),
 
   kpiNeedOrder: document.getElementById("materialKpiNeedOrder"),
   kpiInTransit: document.getElementById("materialKpiInTransit"),
@@ -115,6 +122,12 @@ const el = {
   infoText: document.getElementById("infoDialogText"),
   infoClose: document.getElementById("infoDialogCloseBtn"),
   infoOk: document.getElementById("infoDialogOkBtn"),
+
+  amountDialog: document.getElementById("amountEditDialog"),
+  amountClose: document.getElementById("amountEditDialogCloseBtn"),
+  amountCancel: document.getElementById("amountEditCancelBtn"),
+  amountSave: document.getElementById("amountEditSaveBtn"),
+  amountInput: document.getElementById("amountEditInput"),
 };
 
 init().catch((e) => {
@@ -127,18 +140,27 @@ async function init() {
   setupOrderHintPanel();
   syncProcurementTableHeader();
   ensureMaterialItemDialog();
+  ensureAmountEditDialog();
   bindEvents();
   initStatusFilterOptions();
+  initSupplierFilterOptions();
   setFilterDefaults();
   rows = loadLocalRows();
   await refreshOrderCustomerMap();
   if (REMOTE_ENABLED) {
     await initAuth();
-    await refreshFromRemote();
-    const testAdded = await ensureTestRowExists();
-    if (testAdded) render();
+    if (shouldUseLocalOnlyMode()) {
+      await ensureTestRowExists();
+      setModeText("本地调试模式（未登录）");
+      render();
+      setLastSyncTime();
+    } else {
+      await refreshFromRemote();
+      const testAdded = await ensureTestRowExists();
+      if (testAdded) render();
+    }
     setInterval(() => {
-      if (!syncing && remoteOnline) void refreshFromRemote(false);
+      if (!syncing && remoteOnline && !shouldUseLocalOnlyMode()) void refreshFromRemote(false);
     }, AUTO_REFRESH_MS);
   } else {
     await ensureTestRowExists();
@@ -146,6 +168,10 @@ async function init() {
     render();
     setLastSyncTime();
   }
+}
+
+function shouldUseLocalOnlyMode() {
+  return IS_LOCAL_DEBUG && !authSession;
 }
 
 async function ensureTestRowExists() {
@@ -165,6 +191,7 @@ function bindEvents() {
   bindFilterEvents();
   bindAuthEvents();
   bindDialogEvents();
+  bindHeaderActions();
   if (el.reconnectBtn) el.reconnectBtn.addEventListener("click", () => void tryReconnect(true));
 
   if (el.backTopBtn) {
@@ -185,8 +212,21 @@ function bindEvents() {
       closeDialog(el.arrivalDialog);
       closeDialog(el.abnormalDialog);
       closeDialog(el.materialItemDialog);
+      closeDialog(el.amountDialog);
       closeInfo();
     }
+  });
+}
+
+function bindHeaderActions() {
+  const addBtn = document.getElementById("materialHeaderAddBtn");
+  if (!addBtn) return;
+  addBtn.addEventListener("click", () => {
+    if (!selectedRowId) {
+      showInfo("请先点击一行，再使用表头添加。", "提示");
+      return;
+    }
+    void addMaterialForOrderRow(selectedRowId);
   });
 }
 
@@ -196,9 +236,11 @@ function syncProcurementTableHeader() {
   headRow.innerHTML = `
     <th>订单号</th>
     <th>客户</th>
-    <th>物料</th>
+    <th><div class="material-head-cell"><span>物料</span><button id="materialHeaderAddBtn" class="action-btn-secondary" type="button">添加</button></div></th>
+    <th>金额</th>
     <th>状态</th>
     <th>操作</th>
+    <th>内容简介</th>
   `;
 }
 
@@ -217,6 +259,7 @@ function ensureMaterialItemDialog() {
     el.materialLineList = document.getElementById("materialLineList");
     el.materialLineAddBtn = document.getElementById("materialLineAddBtn");
     populateMaterialItemSelects();
+    bindSupplierCustomAdd();
     return;
   }
   const dialog = document.createElement("div");
@@ -262,6 +305,47 @@ function ensureMaterialItemDialog() {
   el.materialLineList = document.getElementById("materialLineList");
   el.materialLineAddBtn = document.getElementById("materialLineAddBtn");
   populateMaterialItemSelects();
+  bindSupplierCustomAdd();
+}
+
+function ensureAmountEditDialog() {
+  const existing = document.getElementById("amountEditDialog");
+  if (existing) {
+    el.amountDialog = existing;
+    el.amountClose = document.getElementById("amountEditDialogCloseBtn");
+    el.amountCancel = document.getElementById("amountEditCancelBtn");
+    el.amountSave = document.getElementById("amountEditSaveBtn");
+    el.amountInput = document.getElementById("amountEditInput");
+    return;
+  }
+  const dialog = document.createElement("div");
+  dialog.id = "amountEditDialog";
+  dialog.className = "dialog-backdrop";
+  dialog.hidden = true;
+  dialog.innerHTML = `
+    <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="amountEditDialogTitle">
+      <header class="dialog-head">
+        <h3 id="amountEditDialogTitle">编辑金额</h3>
+        <button id="amountEditDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <div class="auth-login-form">
+        <label class="auth-login-field">
+          <span>购买金额（元）</span>
+          <input id="amountEditInput" type="number" min="0" step="0.01" placeholder="请输入金额" />
+        </label>
+      </div>
+      <div class="auth-login-actions">
+        <button id="amountEditCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="amountEditSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  `;
+  document.body.appendChild(dialog);
+  el.amountDialog = dialog;
+  el.amountClose = document.getElementById("amountEditDialogCloseBtn");
+  el.amountCancel = document.getElementById("amountEditCancelBtn");
+  el.amountSave = document.getElementById("amountEditSaveBtn");
+  el.amountInput = document.getElementById("amountEditInput");
 }
 
 function populateMaterialItemSelects() {
@@ -276,12 +360,72 @@ function populateMaterialItemSelects() {
   }
   if (el.materialSupplierInput) {
     el.materialSupplierInput.innerHTML = "";
-    SUPPLIER_OPTIONS.forEach((name, idx) => {
+    supplierOptions.forEach((name, idx) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = idx === 0 ? "请选择供应商" : name;
       el.materialSupplierInput.appendChild(option);
     });
+    const customOption = document.createElement("option");
+    customOption.value = "__custom__";
+    customOption.textContent = "＋ 自定义供应商";
+    el.materialSupplierInput.appendChild(customOption);
+  }
+}
+
+function bindSupplierCustomAdd() {
+  if (!el.materialSupplierInput || supplierCustomBound) return;
+  supplierCustomBound = true;
+  el.materialSupplierInput.addEventListener("change", () => {
+    if (el.materialSupplierInput.value !== "__custom__") return;
+    const input = prompt("请输入新的供应商名称");
+    const name = String(input || "").trim();
+    if (!name) {
+      el.materialSupplierInput.value = "";
+      return;
+    }
+    addCustomSupplierOption(name);
+    populateMaterialItemSelects();
+    setSelectValueWithFallback(el.materialSupplierInput, name, "请选择供应商");
+  });
+}
+
+function loadCustomSupplierOptions() {
+  const raw = localStorage.getItem(SUPPLIER_CUSTOM_KEY);
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw);
+    return Array.isArray(list)
+      ? list
+        .map((x) => String(x || "").trim())
+        .filter((x) => x && !SUPPLIER_BLOCKLIST.has(x))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomSupplierOptions() {
+  const custom = supplierOptions.filter((name) => name && !SUPPLIER_BASE_OPTIONS.includes(name) && !SUPPLIER_BLOCKLIST.has(name));
+  localStorage.setItem(SUPPLIER_CUSTOM_KEY, JSON.stringify(custom));
+}
+
+function buildSupplierOptions(customList = []) {
+  const set = new Set(SUPPLIER_BASE_OPTIONS);
+  customList.forEach((name) => {
+    const v = String(name || "").trim();
+    if (v && !SUPPLIER_BLOCKLIST.has(v)) set.add(v);
+  });
+  return Array.from(set);
+}
+
+function addCustomSupplierOption(name) {
+  const v = String(name || "").trim();
+  if (!v) return;
+  if (SUPPLIER_BLOCKLIST.has(v)) return;
+  if (!supplierOptions.includes(v)) {
+    supplierOptions.push(v);
+    saveCustomSupplierOptions();
   }
 }
 
@@ -324,6 +468,40 @@ function initStatusFilterOptions() {
   el.filterStatus.value = STATUS_LIST.includes(current) ? current : "";
 }
 
+function collectSupplierFilterOptions() {
+  const set = new Set();
+  supplierOptions.forEach((name) => {
+    const v = String(name || "").trim();
+    if (v) set.add(v);
+  });
+  rows.forEach((row) => {
+    const extra = getExtra(row.id);
+    const merged = [String(extra?.supplier || "").trim()];
+    parseMaterialGroups(row, extra).forEach((g) => merged.push(String(g?.supplier || "").trim()));
+    merged.forEach((v) => { if (v) set.add(v); });
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function initSupplierFilterOptions() {
+  if (!el.filterSupplier) return;
+  const current = String(el.filterSupplier.value || "").trim();
+  const list = collectSupplierFilterOptions();
+  el.filterSupplier.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "全部";
+  el.filterSupplier.appendChild(all);
+  list.forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    el.filterSupplier.appendChild(option);
+  });
+  el.filterSupplier.value = list.includes(current) ? current : "";
+  filterState.supplier = String(el.filterSupplier.value || "").trim().toLowerCase();
+}
+
 function setupOrderHintPanel() {
   if (el.orderHintList) {
     orderHintListEl = el.orderHintList;
@@ -347,10 +525,8 @@ function setupOrderHintPanel() {
 
 function bindFilterEvents() {
   if (el.filterMonth) el.filterMonth.addEventListener("change", (e) => { filterState.month = String(e.target.value || ""); render(); });
-  if (el.filterSupplier) el.filterSupplier.addEventListener("input", (e) => { filterState.supplier = String(e.target.value || "").trim().toLowerCase(); render(); });
+  if (el.filterSupplier) el.filterSupplier.addEventListener("change", (e) => { filterState.supplier = String(e.target.value || "").trim().toLowerCase(); render(); });
   if (el.filterStatus) el.filterStatus.addEventListener("change", (e) => { filterState.status = String(e.target.value || ""); render(); });
-  if (el.filterOverdueOnly) el.filterOverdueOnly.addEventListener("change", (e) => { filterState.overdueOnly = Boolean(e.target.checked); render(); });
-  if (el.searchInput) el.searchInput.addEventListener("input", (e) => { filterState.keyword = String(e.target.value || "").trim().toLowerCase(); render(); });
 }
 function bindAuthEvents() {
   if (el.loginBtn) el.loginBtn.addEventListener("click", openAuthDialog);
@@ -367,6 +543,7 @@ function bindDialogEvents() {
   bindActionDialog(el.arrivalDialog, [el.arrivalClose, el.arrivalCancel], () => void saveArrival(), el.arrivalSave);
   bindActionDialog(el.abnormalDialog, [el.abnormalClose, el.abnormalCancel], () => void saveAbnormal(), el.abnormalSave);
   bindActionDialog(el.materialItemDialog, [el.materialItemClose, el.materialItemCancel], () => void saveMaterialItemDetail(), el.materialItemSave);
+  bindActionDialog(el.amountDialog, [el.amountClose, el.amountCancel], () => void saveAmountEditDialog(), el.amountSave);
   if (el.materialItemClear) el.materialItemClear.addEventListener("click", clearMaterialItemDetail);
   if (el.materialLineAddBtn) el.materialLineAddBtn.addEventListener("click", () => appendMaterialLineRow("", ""));
   if (el.infoClose) el.infoClose.addEventListener("click", closeInfo);
@@ -395,14 +572,32 @@ function getSuggestedQty(row, extra) {
   const target = Math.max(0, Number(extra.dailyUse || 0)) * Math.max(0, Number(extra.leadDays || 0)) * 1.2 + Math.max(0, Number(extra.safetyStock || 0));
   return Math.max(0, Math.ceil(target - available));
 }
+
+function normalizeStatus(value, row, extra) {
+  const raw = String(value || "").trim();
+  if (raw === "下单" || raw === "采购" || raw === "到货" || raw === "异常") return raw;
+  if (raw === "待采购") return "下单";
+  if (raw === "发货中") return "采购";
+  if (raw === "已到货") return "到货";
+  if (raw === "待请购" || raw === "待下单") return "下单";
+  if (raw === "在途" || raw === "部分到货") return "采购";
+  if (raw === "材料齐备") return "到货";
+  if (String(row?.isReady || "").trim() === "是") return "到货";
+  if (Number(extra?.inTransit || 0) > 0) return "采购";
+  return "下单";
+}
+
 function getStatus(row, extra) {
-  if (STATUS_LIST.includes(extra.status)) return extra.status;
-  if (String(row.isReady || "").trim() === "是") return "材料齐备";
-  if (Number(extra.inTransit || 0) > 0) return "在途";
-  return "待请购";
+  const groups = parseMaterialGroups(row, extra);
+  if (!groups.length) return normalizeStatus(extra?.status, row, extra);
+  const statuses = groups.map((g) => normalizeStatus(g?.status, row, extra));
+  if (statuses.some((s) => s === "异常")) return "异常";
+  if (statuses.every((s) => s === "到货")) return "到货";
+  if (statuses.some((s) => s === "采购")) return "采购";
+  return "下单";
 }
 function isOverdue(row, extra) {
-  if (getStatus(row, extra) === "材料齐备") return false;
+  if (getStatus(row, extra) === "到货") return false;
   if (!extra.promiseDate) return false;
   const d = new Date(extra.promiseDate);
   if (Number.isNaN(d.getTime())) return false;
@@ -423,19 +618,89 @@ function getFilteredRows() {
   return rows.filter((row) => {
     const extra = getExtra(row.id);
     const status = getStatus(row, extra);
+    const supplierText = getSupplierFilterText(row, extra);
     const monthOk = !filterState.month || getMonthFromOrderNo(row.orderNo) === filterState.month;
-    const supplierOk = !filterState.supplier || String(extra.supplier || "").toLowerCase().includes(filterState.supplier);
+    const supplierOk = !filterState.supplier || supplierText.split(/\s+/).includes(filterState.supplier);
     const statusOk = !filterState.status || status === filterState.status;
-    const overdueOk = !filterState.overdueOnly || isOverdue(row, extra);
-    if (!(monthOk && supplierOk && statusOk && overdueOk)) return false;
-    if (!filterState.keyword) return true;
-    const hay = [row.orderNo, row.customer, row.material, row.spec, extra.supplier, status].join(" ").toLowerCase();
-    return hay.includes(filterState.keyword);
+    return monthOk && supplierOk && statusOk;
   });
+}
+
+function getOrderSummary(orderNo, fallback = "") {
+  const key = String(orderNo || "").trim().toUpperCase();
+  const mapped = key ? String(orderSummaryMap.get(key) || "").trim() : "";
+  return mapped || String(fallback || "").trim();
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function formatDateTimeText(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hh}:${mm}`;
+}
+
+function buildContentSummary(row, extra) {
+  const orderNo = String(row.orderNo || "").trim();
+  const customer = String(row.customer || "").trim();
+  const groups = parseMaterialGroups(row, extra);
+  const header = [
+    `订单号: ${orderNo || "-"}`,
+    `客户: ${customer || "-"}`,
+  ];
+  if (!groups.length) {
+    const fallback = getOrderSummary(row.orderNo, row.summary || "");
+    return [...header, `物料内容: ${fallback || "-"}`].join(" | ");
+  }
+  const body = groups.map((g, idx) => {
+    const status = normalizeStatus(g?.status, row, extra);
+    const amount = g?.amount === "" || g?.amount == null ? "-" : formatCurrency(g.amount);
+    const lineText = (Array.isArray(g.lines) ? g.lines : [])
+      .map((line) => {
+        const size = String(line?.size || "").trim();
+        const qty = line?.qty === "" || line?.qty == null ? "" : `${line.qty}件`;
+        return [size, qty].filter(Boolean).join(" ");
+      })
+      .filter(Boolean)
+      .join("、");
+    const purchasedAtText = `采购时间:${formatDateTimeText(g?.purchasedAt) || "-"}`;
+    const arrivedAtText = status === "异常" ? "" : ` | 到货时间:${formatDateTimeText(g?.arrivedAt) || "-"}`;
+    return `${idx + 1}.${[String(g.material || "").trim(), lineText].filter(Boolean).join(" ")} | 金额:${amount} | 状态:${status} | ${purchasedAtText}${arrivedAtText}`;
+  });
+  return [...header, ...body].join("\n");
+}
+
+function getSupplierFilterText(row, extra) {
+  const groups = parseMaterialGroups(row, extra);
+  const supplierList = groups.map((g) => String(g.supplier || "").trim()).filter(Boolean);
+  const merged = [String(extra?.supplier || "").trim(), ...supplierList].filter(Boolean);
+  return merged.join(" ").toLowerCase();
+}
+
+function getMaterialFilterText(row, extra) {
+  const groups = parseMaterialGroups(row, extra);
+  const parts = [];
+  groups.forEach((g) => {
+    if (g.material) parts.push(g.material);
+    g.lines.forEach((line) => {
+      if (line.size) parts.push(line.size);
+      if (line.qty !== "" && line.qty != null) parts.push(String(line.qty));
+    });
+  });
+  return parts.join(" ");
 }
 
 function render() {
   cleanupExtras();
+  initSupplierFilterOptions();
   const list = getFilteredRows();
   const extraMap = buildExtraMap(list);
   renderOrderHints();
@@ -444,74 +709,261 @@ function render() {
   list.forEach((row) => {
     const extra = extraMap.get(row.id) || createDefaultExtra();
     const tr = document.createElement("tr");
+    tr.addEventListener("click", () => {
+      selectedRowId = row.id;
+      render();
+    });
+    if (selectedRowId === row.id) tr.classList.add("material-row-selected");
     tr.appendChild(editCell(row, "orderNo"));
     tr.appendChild(textCell(row.customer || ""));
     tr.appendChild(materialDetailCell(row, extra));
-    tr.appendChild(textCell(getStatus(row, extra)));
-    tr.appendChild(actionCell(row));
+    tr.appendChild(amountDetailCell(row, extra));
+    tr.appendChild(statusDetailCell(row, extra));
+    tr.appendChild(actionDetailCell(row, extra));
+    tr.appendChild(summaryCell(buildContentSummary(row, extra)));
     el.tableBody.appendChild(tr);
   });
+  requestAnimationFrame(syncGroupHeights);
+}
+
+function summaryCell(text) {
+  const td = document.createElement("td");
+  td.className = "material-summary-cell";
+  td.textContent = String(text || "");
+  return td;
+}
+
+function amountDetailCell(row, extra) {
+  const td = document.createElement("td");
+  td.className = "material-amount-cell";
+  const groups = parseMaterialGroups(row, extra);
+  if (!groups.length) {
+    td.textContent = "未填写";
+    return td;
+  }
+  groups.forEach((g, idx) => {
+    const group = document.createElement("div");
+    group.className = "material-amount-group";
+    if (idx > 0) group.classList.add("is-group-gap");
+    const value = Number(g.amount);
+    const amountText = document.createElement("div");
+    amountText.className = "material-amount-value";
+    amountText.textContent = Number.isFinite(value) && value >= 0 ? formatCurrency(value) : "未填写";
+    const groupActions = document.createElement("div");
+    groupActions.className = "material-detail-group-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "material-icon-btn";
+    editBtn.setAttribute("aria-label", "编辑");
+    editBtn.title = "编辑";
+    editBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void editGroupAmount(row.id, idx);
+    });
+    groupActions.appendChild(editBtn);
+    group.appendChild(amountText);
+    group.appendChild(groupActions);
+    td.appendChild(group);
+  });
+  return td;
+}
+
+async function editGroupAmount(rowId, groupIndex) {
+  const row = rows.find((r) => r.id === rowId);
+  if (!row) return;
+  const extra = getExtra(rowId);
+  const groups = parseMaterialGroups(row, extra);
+  if (!groups[groupIndex]) return;
+  amountEditingRowId = rowId;
+  amountEditingGroupIndex = groupIndex;
+  if (el.amountInput) {
+    const current = groups[groupIndex].amount == null || groups[groupIndex].amount === "" ? "" : String(groups[groupIndex].amount);
+    el.amountInput.value = current;
+  }
+  openDialog(el.amountDialog);
+  if (el.amountInput) el.amountInput.focus();
+}
+
+async function saveAmountEditDialog() {
+  const row = rows.find((r) => r.id === amountEditingRowId);
+  if (!row) return;
+  const extra = getExtra(amountEditingRowId);
+  const groups = parseMaterialGroups(row, extra);
+  if (!groups[amountEditingGroupIndex]) return;
+  const trimmed = String(el.amountInput?.value || "").trim();
+  if (!trimmed) {
+    groups[amountEditingGroupIndex].amount = "";
+  } else {
+    const value = Number(trimmed);
+    if (!Number.isFinite(value) || value < 0) {
+      showInfo("金额必须是大于等于 0 的数字。", "校验失败");
+      return;
+    }
+    groups[amountEditingGroupIndex].amount = Number(value.toFixed(2));
+  }
+  const serialized = serializeMaterialGroups(groups);
+  row.material = serialized.material;
+  row.spec = serialized.spec;
+  row.quantity = serialized.quantity;
+  row.amount = serialized.amount;
+  saveExtra(row.id, { supplier: serialized.supplier });
+  await persist({ changed: [row] });
+  amountEditingRowId = "";
+  amountEditingGroupIndex = -1;
+  closeDialog(el.amountDialog);
+  render();
+}
+
+function statusDetailCell(row, extra) {
+  const td = document.createElement("td");
+  td.className = "material-status-cell";
+  const groups = parseMaterialGroups(row, extra);
+  if (!groups.length) {
+    const empty = document.createElement("div");
+    empty.className = "material-status-group";
+    empty.textContent = "下单";
+    td.appendChild(empty);
+    return td;
+  }
+  groups.forEach((g, idx) => {
+    const group = document.createElement("div");
+    group.className = "material-status-group";
+    if (idx > 0) group.classList.add("is-group-gap");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "action-btn-secondary material-status-btn";
+    const statusText = normalizeStatus(g?.status, row, extra);
+    btn.textContent = statusText;
+    btn.dataset.status = statusText;
+    btn.title = "点击切换状态";
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void cycleGroupStatus(row.id, idx);
+    });
+    group.appendChild(btn);
+    td.appendChild(group);
+  });
+  return td;
+}
+
+async function cycleGroupStatus(rowId, groupIndex) {
+  const row = rows.find((r) => r.id === rowId);
+  if (!row) return;
+  const extra = getExtra(row.id);
+  const groups = parseMaterialGroups(row, extra);
+  if (!groups[groupIndex]) return;
+  const current = normalizeStatus(groups[groupIndex]?.status, row, extra);
+  const idx = STATUS_LIST.indexOf(current);
+  const next = STATUS_LIST[(idx + 1) % STATUS_LIST.length] || STATUS_LIST[0];
+  groups[groupIndex].status = next;
+  if (next === "采购" && !groups[groupIndex].purchasedAt) groups[groupIndex].purchasedAt = nowIso();
+  if (next === "到货") groups[groupIndex].arrivedAt = nowIso();
+  const serialized = serializeMaterialGroups(groups);
+  row.material = serialized.material;
+  row.spec = serialized.spec;
+  row.quantity = serialized.quantity;
+  row.amount = serialized.amount;
+  const allArrived = groups.every((g) => normalizeStatus(g?.status, row, extra) === "到货");
+  row.isReady = allArrived ? "是" : "否";
+  const hasAbnormal = groups.some((g) => normalizeStatus(g?.status, row, extra) === "异常");
+  const hasPurchased = groups.some((g) => normalizeStatus(g?.status, row, extra) === "采购");
+  const hasOrdered = groups.some((g) => normalizeStatus(g?.status, row, extra) === "下单");
+  saveExtra(row.id, {
+    supplier: serialized.supplier,
+    status: hasAbnormal ? "异常" : allArrived ? "到货" : hasPurchased ? "采购" : hasOrdered ? "下单" : "下单",
+  });
+  await persist({ changed: [row], notifyAuth: false });
+  render();
 }
 
 function materialDetailCell(row, extra) {
   const td = document.createElement("td");
   td.className = "material-detail-cell";
   td.dataset.id = row.id;
-  const parsed = parseSpecLines(row.spec, row.quantity);
-  const material = String(row.material || "").trim();
-  const supplier = String(extra?.supplier || "").trim();
-  const lines = parsed.lines.filter((x) => String(x.size || "").trim() || String(x.qty || "").trim());
-  if (!material && !supplier && lines.length === 0) {
-    td.textContent = "点击填写材质、尺寸、数量、供应商";
+  const groups = parseMaterialGroups(row, extra);
+  const hasContent = groups.some((g) => g.material || g.supplier || g.lines.some((x) => x.size || x.qty !== ""));
+  if (!hasContent) {
+    const empty = document.createElement("div");
+    empty.className = "material-detail-group";
+    const emptyLine = document.createElement("div");
+    emptyLine.className = "material-detail-line";
+    emptyLine.textContent = "点击填写材质、尺寸、数量、供应商";
+    empty.appendChild(emptyLine);
+    const groupActions = document.createElement("div");
+    groupActions.className = "material-detail-group-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "material-icon-btn";
+    editBtn.setAttribute("aria-label", "编辑");
+    editBtn.title = "编辑";
+    editBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openMaterialItemDialog(row.id, { groupIndex: 0 });
+    });
+    groupActions.appendChild(editBtn);
+    empty.appendChild(groupActions);
+    td.appendChild(empty);
   } else {
-    const head = document.createElement("div");
-    head.className = "material-detail-head";
-    head.textContent = [material, supplier].filter(Boolean).join(" / ");
-    if (head.textContent) td.appendChild(head);
-    lines.forEach((line) => {
-      const item = document.createElement("div");
-      item.className = "material-detail-line";
-      const size = String(line.size || "").trim();
-      const qty = String(line.qty ?? "").trim();
-      item.textContent = qty ? `${size} x${qty}` : size;
-      td.appendChild(item);
+    groups.forEach((g, idx) => {
+      const group = document.createElement("div");
+      group.className = "material-detail-group";
+      const head = document.createElement("div");
+      head.className = "material-detail-head";
+      head.textContent = [g.material, g.supplier].filter(Boolean).join(" / ");
+      if (head.textContent) group.appendChild(head);
+      g.lines.forEach((line) => {
+        const item = document.createElement("div");
+        item.className = "material-detail-line";
+        const size = String(line.size || "").trim();
+        const qty = String(line.qty ?? "").trim();
+        const sizeText = document.createElement("span");
+        sizeText.className = "material-detail-size";
+        sizeText.textContent = size;
+        item.appendChild(sizeText);
+        const qtyTag = document.createElement("span");
+        qtyTag.className = "material-detail-qty";
+        if (qty) {
+          qtyTag.textContent = `${qty}件`;
+        } else {
+          qtyTag.classList.add("is-empty");
+          qtyTag.textContent = "-";
+        }
+        item.appendChild(qtyTag);
+        group.appendChild(item);
+      });
+      const groupActions = document.createElement("div");
+      groupActions.className = "material-detail-group-actions";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "material-icon-btn";
+      editBtn.setAttribute("aria-label", "编辑");
+      editBtn.title = "编辑";
+      editBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openMaterialItemDialog(row.id, { groupIndex: idx });
+      });
+      groupActions.appendChild(editBtn);
+      group.appendChild(groupActions);
+      if (idx > 0) group.classList.add("is-group-gap");
+      td.appendChild(group);
     });
   }
-  const addBtn = document.createElement("button");
-  addBtn.type = "button";
-  addBtn.className = "material-detail-add-btn action-btn-secondary";
-  addBtn.textContent = "添加";
-  addBtn.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void addMaterialForOrderRow(row.id);
-  });
-  td.appendChild(addBtn);
-  td.title = "点击编辑物料明细";
-  td.addEventListener("click", () => openMaterialItemDialog(row.id));
+  td.title = "";
   return td;
 }
 
 async function addMaterialForOrderRow(sourceRowId) {
-  const idx = rows.findIndex((r) => r.id === sourceRowId);
-  const base = idx >= 0 ? rows[idx] : null;
-  const next = createEmptyRow();
-  if (base) {
-    next.orderNo = base.orderNo || "";
-    next.customer = base.customer || "";
-  }
-  if (idx >= 0) rows.splice(idx + 1, 0, next);
-  else rows.push(next);
-  saveExtra(next.id, createDefaultExtra());
-  await persist({ changed: [next], notifyAuth: false });
-  render();
-  openMaterialItemDialog(next.id);
+  openMaterialItemDialog(sourceRowId, { appendGroup: true });
 }
 
 function renderKpi(list, extraMap = new Map()) {
   const getRowExtra = (row) => extraMap.get(row.id) || createDefaultExtra();
-  const needOrder = list.filter((r) => getStatus(r, getRowExtra(r)) === "待下单").length;
-  const inTransit = list.filter((r) => ["在途", "部分到货"].includes(getStatus(r, getRowExtra(r)))).length;
+  const needOrder = list.filter((r) => getStatus(r, getRowExtra(r)) === "下单").length;
+  const inTransit = list.filter((r) => getStatus(r, getRowExtra(r)) === "采购").length;
   const overdue = list.filter((r) => isOverdue(r, getRowExtra(r))).length;
   const risk3d = list.filter((r) => isRisk3d(r, getRowExtra(r))).length;
   const totalAmount = list.reduce((sum, r) => { const e = getRowExtra(r); return sum + Number(e.lastOrderQty || 0) * Number(e.lastOrderPrice || 0); }, 0);
@@ -620,22 +1072,72 @@ function beginEdit(td) {
   });
 }
 
-function actionCell(row) {
+function actionDetailCell(row, extra) {
   const td = document.createElement("td");
-  td.className = "op-cell";
-  const wrap = document.createElement("div");
-  wrap.className = "op-actions";
-  wrap.append(
-    actionButton("下单", "action-btn-secondary", () => openPoDialog(row.id)),
-    actionButton("到货", "action-btn-secondary", () => openArrivalDialog(row.id)),
-    actionButton("异常", "action-btn-secondary", () => openAbnormalDialog(row.id)),
-    actionButton("删除", "action-btn", () => void deleteRow(row.id))
-  );
-  td.appendChild(wrap);
+  td.className = "material-op-cell";
+  const groups = parseMaterialGroups(row, extra);
+  if (!groups.length) {
+    const group = document.createElement("div");
+    group.className = "material-op-group";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "action-btn";
+    btn.textContent = "删除";
+    btn.addEventListener("click", () => void deleteRow(row.id));
+    group.appendChild(btn);
+    td.appendChild(group);
+    return td;
+  }
+  groups.forEach((g, idx) => {
+    const group = document.createElement("div");
+    group.className = "material-op-group";
+    if (idx > 0) group.classList.add("is-group-gap");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "action-btn";
+    btn.textContent = "删除";
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void deleteMaterialGroup(row.id, idx);
+    });
+    group.appendChild(btn);
+    td.appendChild(group);
+  });
   return td;
 }
 
 function actionButton(text, cls, click) { const b = document.createElement("button"); b.type = "button"; b.className = cls; b.textContent = text; b.addEventListener("click", click); return b; }
+
+async function deleteMaterialGroup(rowId, groupIndex) {
+  const row = rows.find((r) => r.id === rowId);
+  if (!row) return;
+  const extra = getExtra(row.id);
+  const groups = parseMaterialGroups(row, extra);
+  if (!groups[groupIndex]) return;
+  if (!confirm("确认删除该物料分组吗？")) return;
+  groups.splice(groupIndex, 1);
+  if (!groups.length) {
+    await deleteRow(row.id);
+    return;
+  }
+  const serialized = serializeMaterialGroups(groups);
+  row.material = serialized.material;
+  row.spec = serialized.spec;
+  row.quantity = serialized.quantity;
+  row.amount = serialized.amount;
+  const allArrived = groups.every((g) => normalizeStatus(g?.status, row, extra) === "到货");
+  const hasAbnormal = groups.some((g) => normalizeStatus(g?.status, row, extra) === "异常");
+  const hasPurchased = groups.some((g) => normalizeStatus(g?.status, row, extra) === "采购");
+  const hasOrdered = groups.some((g) => normalizeStatus(g?.status, row, extra) === "下单");
+  row.isReady = allArrived ? "是" : "否";
+  saveExtra(row.id, {
+    supplier: serialized.supplier,
+    status: hasAbnormal ? "异常" : allArrived ? "到货" : hasPurchased ? "采购" : hasOrdered ? "下单" : "下单",
+  });
+  await persist({ changed: [row], notifyAuth: false });
+  render();
+}
 
 async function addBlankRow() {
   const next = createEmptyRow();
@@ -683,15 +1185,25 @@ async function savePo() {
   const qty = Math.max(0, Number(el.poQty?.value || 0));
   const price = Math.max(0, Number(el.poPrice?.value || 0));
   const old = getExtra(row.id);
+  const extra = getExtra(row.id);
+  const groups = parseMaterialGroups(row, extra);
+  groups.forEach((g) => {
+    g.status = "采购";
+    if (!g.purchasedAt) g.purchasedAt = nowIso();
+  });
+  const serialized = serializeMaterialGroups(groups);
+  row.material = serialized.material;
+  row.spec = serialized.spec;
+  row.quantity = serialized.quantity;
+  row.amount = serialized.amount;
   saveExtra(row.id, {
     supplier: String(el.poSupplier?.value || "").trim(),
     promiseDate: String(el.poPromise?.value || "").trim(),
     inTransit: Math.max(0, Number(old.inTransit || 0) + qty),
     lastOrderQty: qty,
     lastOrderPrice: price,
-    status: qty > 0 ? "在途" : "待下单",
+    status: "采购",
   });
-  row.amount = qty > 0 && price > 0 ? Number((qty * price).toFixed(2)) : row.amount;
   await persist({ changed: [row] });
   closeDialog(el.poDialog);
   render();
@@ -705,10 +1217,21 @@ async function saveArrival() {
   if (qty <= 0) { showInfo("请填写大于 0 的到货数量。", "校验失败"); return; }
   const e = getExtra(row.id);
   const left = Math.max(0, Number(e.inTransit || 0) - qty);
-  const status = left > 0 ? "部分到货" : "材料齐备";
+  const status = left > 0 ? "采购" : "到货";
+  const extra = getExtra(row.id);
+  const groups = parseMaterialGroups(row, extra);
+  groups.forEach((g) => {
+    g.status = status;
+    if (status === "到货") g.arrivedAt = nowIso();
+  });
+  const serialized = serializeMaterialGroups(groups);
+  row.material = serialized.material;
+  row.spec = serialized.spec;
+  row.quantity = serialized.quantity;
+  row.amount = serialized.amount;
   saveExtra(row.id, { inTransit: left, actualDate: String(el.arrivalDate?.value || "").trim(), status });
   row.quantity = getCurrentStock(row) + qty;
-  row.isReady = status === "材料齐备" ? "是" : "否";
+  row.isReady = status === "到货" ? "是" : "否";
   await persist({ changed: [row] });
   closeDialog(el.arrivalDialog);
   render();
@@ -718,6 +1241,15 @@ function openAbnormalDialog(id) { activeRowId = id; const e = getExtra(id); if (
 async function saveAbnormal() {
   const row = rows.find((r) => r.id === activeRowId);
   if (!row) return;
+  const extra = getExtra(row.id);
+  const groups = parseMaterialGroups(row, extra);
+  groups.forEach((g) => { g.status = "异常"; });
+  const serialized = serializeMaterialGroups(groups);
+  row.material = serialized.material;
+  row.spec = serialized.spec;
+  row.quantity = serialized.quantity;
+  row.amount = serialized.amount;
+  row.isReady = "否";
   saveExtra(row.id, { abnormalReason: String(el.abnormalReason?.value || "").trim(), abnormalAltMaterial: String(el.abnormalAlt?.value || "").trim(), abnormalRecoverDate: String(el.abnormalRecover?.value || "").trim(), status: "异常" });
   await persist({ changed: [row], notifyAuth: false });
   closeDialog(el.abnormalDialog);
@@ -726,17 +1258,52 @@ async function saveAbnormal() {
 
 function openDialog(d) { if (!d) return; d.hidden = false; document.body.style.overflow = "hidden"; }
 function closeDialog(d) { if (!d) return; d.hidden = true; refreshBodyOverflow(); }
-function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.infoDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
+function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.amountDialog, el.infoDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
 
-function openMaterialItemDialog(rowId) {
+function syncGroupHeights() {
+  if (!el.tableBody) return;
+  el.tableBody.querySelectorAll("tr").forEach((tr) => {
+    const materialGroups = tr.querySelectorAll("td:nth-child(3) .material-detail-group");
+    const amountGroups = tr.querySelectorAll("td:nth-child(4) .material-amount-group");
+    const statusGroups = tr.querySelectorAll("td:nth-child(5) .material-status-group");
+    const opGroups = tr.querySelectorAll("td:nth-child(6) .material-op-group");
+    if (!materialGroups.length || !amountGroups.length || !statusGroups.length || !opGroups.length) return;
+    const count = Math.min(materialGroups.length, amountGroups.length, statusGroups.length, opGroups.length);
+    for (let i = 0; i < count; i += 1) {
+      const m = materialGroups[i];
+      const a = amountGroups[i];
+      const s = statusGroups[i];
+      const o = opGroups[i];
+      m.style.minHeight = "";
+      a.style.minHeight = "";
+      s.style.minHeight = "";
+      o.style.minHeight = "";
+      const height = Math.max(m.offsetHeight, a.offsetHeight, s.offsetHeight, o.offsetHeight);
+      m.style.minHeight = `${height}px`;
+      a.style.minHeight = `${height}px`;
+      s.style.minHeight = `${height}px`;
+      o.style.minHeight = `${height}px`;
+    }
+  });
+}
+
+function openMaterialItemDialog(rowId, options = {}) {
   const row = rows.find((r) => r.id === rowId);
   if (!row || !el.materialItemDialog) return;
   const extra = getExtra(rowId);
   materialItemEditingRowId = rowId;
-  setSelectValueWithFallback(el.materialInput, String(row.material || ""), "请选择材质");
-  const parsed = parseSpecLines(row.spec, row.quantity);
-  renderMaterialLineRows(parsed.lines);
-  setSelectValueWithFallback(el.materialSupplierInput, String(extra.supplier || ""), "请选择供应商");
+  const groups = parseMaterialGroups(row, extra);
+  materialItemEditingGroups = groups.map((g) => ({ ...g, lines: g.lines.map((line) => ({ ...line })) }));
+  if (options.appendGroup) {
+    materialItemEditingGroups.push(createEmptyMaterialGroup());
+    materialItemEditingGroupIndex = materialItemEditingGroups.length - 1;
+  } else {
+    materialItemEditingGroupIndex = Math.min(Math.max(0, Number(options.groupIndex || 0)), Math.max(0, materialItemEditingGroups.length - 1));
+  }
+  const currentGroup = materialItemEditingGroups[materialItemEditingGroupIndex] || createEmptyMaterialGroup();
+  setSelectValueWithFallback(el.materialInput, String(currentGroup.material || ""), "请选择材质");
+  renderMaterialLineRows(currentGroup.lines);
+  setSelectValueWithFallback(el.materialSupplierInput, String(currentGroup.supplier || ""), "请选择供应商");
   openDialog(el.materialItemDialog);
   if (el.materialInput) el.materialInput.focus();
 }
@@ -745,6 +1312,10 @@ function clearMaterialItemDetail() {
   if (el.materialInput) el.materialInput.value = "";
   renderMaterialLineRows([{ size: "", qty: "" }]);
   if (el.materialSupplierInput) el.materialSupplierInput.value = "";
+}
+
+function createEmptyMaterialGroup() {
+  return { material: "", supplier: "", amount: "", status: "下单", purchasedAt: "", arrivedAt: "", lines: [{ size: "", qty: "" }] };
 }
 
 function appendMaterialLineRow(size = "", qty = "") {
@@ -825,6 +1396,83 @@ function parseSpecLines(specValue, qtyValue) {
   };
 }
 
+function parseMaterialGroups(row, extra) {
+  const rawSpec = String(row?.spec || "").trim();
+  if (rawSpec.startsWith(MATERIAL_GROUPS_PREFIX)) {
+    try {
+      const parsed = JSON.parse(rawSpec.slice(MATERIAL_GROUPS_PREFIX.length));
+      if (Array.isArray(parsed)) {
+        const mapped = parsed
+          .map((g) => ({
+            material: String(g?.material || "").trim(),
+            supplier: String(g?.supplier || "").trim(),
+            amount: g?.amount === "" || g?.amount == null ? "" : Math.max(0, Number(g.amount) || 0),
+            status: normalizeStatus(g?.status, row, extra),
+            purchasedAt: String(g?.purchasedAt || g?.pendingAt || ""),
+            arrivedAt: String(g?.arrivedAt || ""),
+            lines: Array.isArray(g?.lines)
+              ? g.lines
+                .map((line) => ({
+                  size: String(line?.size || "").trim(),
+                  qty: line?.qty === "" || line?.qty == null ? "" : Math.max(0, Math.floor(Number(line.qty) || 0)),
+                }))
+                .filter((line) => line.size || line.qty !== "")
+              : [],
+          }))
+          .filter((g) => g.material || g.supplier || g.lines.length > 0 || g.amount !== "");
+        const rowAmount = row?.amount == null || row?.amount === "" ? "" : Math.max(0, Number(row.amount) || 0);
+        if (mapped.length > 0 && rowAmount !== "" && !mapped.some((g) => g.amount !== "")) {
+          mapped[0].amount = rowAmount;
+        }
+        return mapped;
+      }
+    } catch {
+      // ignore legacy fallback
+    }
+  }
+  const fallbackLines = parseSpecLines(row?.spec, row?.quantity).lines;
+  const fallbackMaterial = String(row?.material || "").trim();
+  const fallbackSupplier = String(extra?.supplier || "").trim();
+  const fallbackAmount = row?.amount == null || row?.amount === "" ? "" : Math.max(0, Number(row.amount) || 0);
+  const fallbackStatus = normalizeStatus(extra?.status, row, extra);
+  if (!fallbackMaterial && !fallbackSupplier && fallbackLines.length === 0 && fallbackAmount === "") return [];
+  return [{ material: fallbackMaterial, supplier: fallbackSupplier, amount: fallbackAmount, status: fallbackStatus, purchasedAt: "", arrivedAt: "", lines: fallbackLines }];
+}
+
+function serializeMaterialGroups(groups = []) {
+  const normalized = groups
+    .map((g) => ({
+      material: String(g?.material || "").trim(),
+      supplier: String(g?.supplier || "").trim(),
+      amount: g?.amount === "" || g?.amount == null ? "" : Number(Number(g.amount).toFixed(2)),
+      status: normalizeStatus(g?.status),
+      purchasedAt: String(g?.purchasedAt || ""),
+      arrivedAt: String(g?.arrivedAt || ""),
+      lines: (Array.isArray(g?.lines) ? g.lines : [])
+        .map((line) => ({
+          size: String(line?.size || "").trim(),
+          qty: line?.qty === "" || line?.qty == null ? "" : Math.max(0, Math.floor(Number(line.qty) || 0)),
+        }))
+        .filter((line) => line.size || line.qty !== ""),
+    }))
+    .filter((g) => g.material || g.supplier || g.lines.length > 0 || g.amount !== "");
+  if (!normalized.length) return { material: "", spec: "", quantity: "", supplier: "", amount: "" };
+  const qtyTotal = normalized.reduce((sum, g) => {
+    const groupQty = g.lines.reduce((sub, line) => sub + (line.qty === "" ? 0 : Number(line.qty)), 0);
+    return sum + groupQty;
+  }, 0);
+  const amountTotal = normalized.reduce((sum, g) => sum + (g.amount === "" ? 0 : Number(g.amount)), 0);
+  const materialText = normalized.map((g) => g.material).filter(Boolean).join(" / ");
+  const primarySupplier = normalized.find((g) => g.supplier)?.supplier || "";
+  return {
+    material: materialText,
+    spec: `${MATERIAL_GROUPS_PREFIX}${JSON.stringify(normalized)}`,
+    quantity: qtyTotal > 0 ? String(qtyTotal) : "",
+    supplier: primarySupplier,
+    amount: amountTotal > 0 ? Number(amountTotal.toFixed(2)) : "",
+  };
+}
+
 function serializeSpecLines(lines) {
   const normalized = lines
     .map((x) => ({ size: String(x.size || "").trim(), qty: x.qty == null ? "" : x.qty }))
@@ -852,13 +1500,25 @@ async function saveMaterialItemDetail() {
     showInfo("每行都需要填写有效的尺寸和数量。", "校验失败");
     return;
   }
-  const serialized = serializeSpecLines(lines);
-  row.material = material;
-  row.spec = serialized.spec;
-  row.quantity = serialized.quantity;
-  saveExtra(row.id, { supplier });
+  const currentGroups = materialItemEditingGroups.length
+    ? materialItemEditingGroups
+    : parseMaterialGroups(row, getExtra(row.id));
+  while (currentGroups.length <= materialItemEditingGroupIndex) currentGroups.push(createEmptyMaterialGroup());
+  const existingAmount = currentGroups[materialItemEditingGroupIndex]?.amount ?? "";
+  const existingStatus = normalizeStatus(currentGroups[materialItemEditingGroupIndex]?.status);
+  const existingPurchasedAt = String(currentGroups[materialItemEditingGroupIndex]?.purchasedAt || "");
+  const existingArrivedAt = String(currentGroups[materialItemEditingGroupIndex]?.arrivedAt || "");
+  currentGroups[materialItemEditingGroupIndex] = { material, supplier, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, lines };
+  const serializedGroups = serializeMaterialGroups(currentGroups);
+  row.material = serializedGroups.material;
+  row.spec = serializedGroups.spec;
+  row.quantity = serializedGroups.quantity;
+  row.amount = serializedGroups.amount;
+  saveExtra(row.id, { supplier: serializedGroups.supplier });
   await persist({ changed: [row] });
   materialItemEditingRowId = "";
+  materialItemEditingGroups = [];
+  materialItemEditingGroupIndex = 0;
   closeDialog(el.materialItemDialog);
   render();
 }
@@ -869,7 +1529,20 @@ async function initAuth() {
   if (!REMOTE_ENABLED || !db?.auth) return;
   try { const { data, error } = await db.auth.getSession(); if (error) throw error; authSession = data?.session || null; } catch { authSession = null; }
   updateAuthUi();
-  db.auth.onAuthStateChange((_e, session) => { authSession = session || null; updateAuthUi(); setModeText(authSession ? "云端共享模式" : "云端只读（未登录）"); });
+  db.auth.onAuthStateChange(async (_e, session) => {
+    authSession = session || null;
+    updateAuthUi();
+    if (shouldUseLocalOnlyMode()) {
+      rows = loadLocalRows();
+      await ensureTestRowExists();
+      setModeText("本地调试模式（未登录）");
+      render();
+      setLastSyncTime();
+      return;
+    }
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
+    if (remoteOnline) await refreshFromRemote(false);
+  });
 }
 
 function updateAuthUi() { if (el.authUser) el.authUser.textContent = authSession?.user?.email || "未登录"; if (el.loginBtn) el.loginBtn.style.display = authSession ? "none" : "inline-flex"; if (el.logoutBtn) el.logoutBtn.style.display = authSession ? "inline-flex" : "none"; }
@@ -927,6 +1600,14 @@ async function persist({ changed = [], deletedId = "", notifyAuth = true } = {})
 }
 async function refreshFromRemote(showAlert = false) {
   if (!REMOTE_ENABLED || !remoteOnline) return;
+  if (shouldUseLocalOnlyMode()) {
+    rows = loadLocalRows();
+    await ensureTestRowExists();
+    setModeText("本地调试模式（未登录）");
+    render();
+    setLastSyncTime();
+    return;
+  }
   try {
     await refreshOrderCustomerMap(false);
     const { data, error } = await db.from("mes_materials").select("*").order("updated_at", { ascending: true });
@@ -980,15 +1661,23 @@ async function tryReconnect(manual) {
 async function refreshOrderCustomerMap(syncRows = true) {
   if (REMOTE_ENABLED && remoteOnline) {
     try {
-      const { data, error } = await db.from("mes_orders").select("order_no,customer,updated_at").neq("order_no", "").order("updated_at", { ascending: true });
+      const { data, error } = await db
+        .from("mes_orders")
+        .select("order_no,customer,item_name,drawing_no,note,updated_at")
+        .neq("order_no", "")
+        .order("updated_at", { ascending: true });
       if (error) throw error;
-      const map = new Map();
+      const customerMap = new Map();
+      const summaryMap = new Map();
       (data || []).forEach((item) => {
         const key = String(item.order_no || "").trim().toUpperCase();
         if (!key) return;
-        map.set(key, String(item.customer || "").trim());
+        customerMap.set(key, String(item.customer || "").trim());
+        const summary = String(item.item_name || item.drawing_no || item.note || "").trim();
+        if (summary) summaryMap.set(key, summary);
       });
-      orderCustomerMap = map;
+      orderCustomerMap = customerMap;
+      orderSummaryMap = summaryMap;
       if (syncRows) await syncCustomerFromOrderMap();
       renderOrderHints();
       return;
@@ -1000,13 +1689,17 @@ async function refreshOrderCustomerMap(syncRows = true) {
   if (!raw) return;
   try {
     const list = JSON.parse(raw);
-    const map = new Map();
+    const customerMap = new Map();
+    const summaryMap = new Map();
     (Array.isArray(list) ? list : []).forEach((item) => {
       const key = String(item?.orderNo || item?.order_no || "").trim().toUpperCase();
       if (!key) return;
-      map.set(key, String(item?.customer || "").trim());
+      customerMap.set(key, String(item?.customer || "").trim());
+      const summary = String(item?.itemName || item?.item_name || item?.drawingNo || item?.drawing_no || item?.note || "").trim();
+      if (summary) summaryMap.set(key, summary);
     });
-    orderCustomerMap = map;
+    orderCustomerMap = customerMap;
+    orderSummaryMap = summaryMap;
     if (syncRows) await syncCustomerFromOrderMap();
     renderOrderHints();
   } catch {
