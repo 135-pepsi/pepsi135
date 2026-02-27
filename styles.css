@@ -814,6 +814,17 @@ body:not(.material-page) .kpi-grid {
   background: rgba(33, 77, 122, 0.45);
 }
 
+.material-item-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.material-item-col {
+  display: grid;
+  gap: 8px;
+}
+
 body:not(.material-page) .order-filters {
   position: static;
   top: auto;

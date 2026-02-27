@@ -9,6 +9,8 @@ const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS ||
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
 const STATUS_LIST = ["待请购", "待下单", "在途", "部分到货", "材料齐备", "异常"];
+const MATERIAL_OPTIONS = ["", "45#钢", "40Cr", "铝6061", "铝7075", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
+const SUPPLIER_OPTIONS = ["", "供应商A", "供应商B", "供应商C", "供应商D"];
 const DEFAULT_EXTRA = Object.freeze({
   supplier: "",
   status: "待请购",
@@ -198,6 +200,7 @@ function ensureMaterialItemDialog() {
     el.materialSpecInput = document.getElementById("materialItemSpec");
     el.materialQtyInput = document.getElementById("materialItemQty");
     el.materialSupplierInput = document.getElementById("materialItemSupplier");
+    populateMaterialItemSelects();
     return;
   }
   const dialog = document.createElement("div");
@@ -210,11 +213,15 @@ function ensureMaterialItemDialog() {
         <h3 id="materialItemDialogTitle">物料明细</h3>
         <button id="materialItemDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
-      <div class="auth-login-form">
-        <label class="auth-login-field"><span>材质</span><input id="materialItemMaterial" type="text" /></label>
-        <label class="auth-login-field"><span>尺寸</span><input id="materialItemSpec" type="text" /></label>
-        <label class="auth-login-field"><span>数量</span><input id="materialItemQty" type="number" min="0" step="1" /></label>
-        <label class="auth-login-field"><span>供应商</span><input id="materialItemSupplier" type="text" /></label>
+      <div class="material-item-grid">
+        <div class="material-item-col">
+          <label class="auth-login-field"><span>材质</span><select id="materialItemMaterial"></select></label>
+          <label class="auth-login-field"><span>供应商</span><select id="materialItemSupplier"></select></label>
+        </div>
+        <div class="material-item-col">
+          <label class="auth-login-field"><span>尺寸</span><input id="materialItemSpec" type="text" /></label>
+          <label class="auth-login-field"><span>数量</span><input id="materialItemQty" type="number" min="0" step="1" /></label>
+        </div>
       </div>
       <div class="auth-login-actions">
         <button id="materialItemCancelBtn" class="btn btn-secondary" type="button">取消</button>
@@ -233,6 +240,45 @@ function ensureMaterialItemDialog() {
   el.materialSpecInput = document.getElementById("materialItemSpec");
   el.materialQtyInput = document.getElementById("materialItemQty");
   el.materialSupplierInput = document.getElementById("materialItemSupplier");
+  populateMaterialItemSelects();
+}
+
+function populateMaterialItemSelects() {
+  if (el.materialInput) {
+    el.materialInput.innerHTML = "";
+    MATERIAL_OPTIONS.forEach((name, idx) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = idx === 0 ? "请选择材质" : name;
+      el.materialInput.appendChild(option);
+    });
+  }
+  if (el.materialSupplierInput) {
+    el.materialSupplierInput.innerHTML = "";
+    SUPPLIER_OPTIONS.forEach((name, idx) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = idx === 0 ? "请选择供应商" : name;
+      el.materialSupplierInput.appendChild(option);
+    });
+  }
+}
+
+function setSelectValueWithFallback(selectEl, value, placeholderText = "请选择") {
+  if (!selectEl) return;
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    selectEl.value = "";
+    return;
+  }
+  const exists = Array.from(selectEl.options).some((opt) => opt.value === normalized);
+  if (!exists) {
+    const option = document.createElement("option");
+    option.value = normalized;
+    option.textContent = normalized || placeholderText;
+    selectEl.appendChild(option);
+  }
+  selectEl.value = normalized;
 }
 
 function syncPageActionLabels() {
@@ -629,10 +675,10 @@ function openMaterialItemDialog(rowId) {
   if (!row || !el.materialItemDialog) return;
   const extra = getExtra(rowId);
   materialItemEditingRowId = rowId;
-  if (el.materialInput) el.materialInput.value = String(row.material || "");
+  setSelectValueWithFallback(el.materialInput, String(row.material || ""), "请选择材质");
   if (el.materialSpecInput) el.materialSpecInput.value = String(row.spec || "");
   if (el.materialQtyInput) el.materialQtyInput.value = row.quantity === "" ? "" : String(row.quantity);
-  if (el.materialSupplierInput) el.materialSupplierInput.value = String(extra.supplier || "");
+  setSelectValueWithFallback(el.materialSupplierInput, String(extra.supplier || ""), "请选择供应商");
   openDialog(el.materialItemDialog);
   if (el.materialInput) el.materialInput.focus();
 }
