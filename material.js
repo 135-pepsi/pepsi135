@@ -8,6 +8,8 @@ const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const IS_LOCAL_DEBUG = location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 5) * 1000);
+const STORAGE_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET || "material-screenshots").trim();
+const STORAGE_SIGNED_EXPIRES = Math.max(60, Number(MES_CONFIG.SUPABASE_STORAGE_SIGNED_EXPIRES || 3600));
 const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
@@ -1710,21 +1712,21 @@ async function setOtherScreenshotFromFile(file) {
   }
 
   const row = rows.find((r) => r.id === otherItemEditingRowId);
-  if (UPLOAD_API_BASE && row) {
+  if (REMOTE_ENABLED && db && STORAGE_BUCKET && row && authSession?.user?.id) {
     try {
-      const uploadedRef = await uploadScreenshotToNas(row, file);
+      const uploadedRef = await uploadScreenshotToSupabase(row, file);
       if (uploadedRef) {
         otherScreenshotDataUrl = uploadedRef;
         await renderOtherScreenshotPreview();
         return;
       }
     } catch (e) {
-      console.warn("截图上传 NAS 失败，将回退本地预览", e);
-      showInfo("NAS 上传失败，已临时保存到本地。", "提示");
+      console.warn("截图上传 Supabase Storage 失败，将回退本地预览", e);
+      showInfo("Storage 上传失败，已临时保存到本地。", "提示");
     }
   }
-  if (!UPLOAD_API_BASE) {
-    showInfo("未配置 NAS 上传服务，截图将仅保存在当前浏览器。", "提示");
+  if (!(REMOTE_ENABLED && db && STORAGE_BUCKET && authSession?.user?.id)) {
+    showInfo("未登录或未配置 Storage bucket，截图将仅保存在当前浏览器。", "提示");
   }
 
   const dataUrl = await readFileAsDataUrl(file);
@@ -1741,19 +1743,29 @@ async function readFileAsDataUrl(file) {
   }).catch(() => "");
 }
 
-async function uploadScreenshotToNas(row, file) {
-  if (!UPLOAD_API_BASE) return "";
-  const form = new FormData();
-  form.append("orderId", String(row.id || ""));
-  form.append("lineId", String(row.id || ""));
-  form.append("orderNo", String(row.orderNo || ""));
-  form.append("drawingNo", "");
-  form.append("partName", String(row.material || "其他采购截图"));
-  form.append("file", file);
-  const data = await apiFetchJson("/api/files/upload", { method: "POST", body: form });
-  const ref = extractNasFileRef(data);
-  if (!ref) throw new Error("上传成功但未返回文件引用");
-  return ref;
+async function uploadScreenshotToSupabase(row, file) {
+  if (!db || !STORAGE_BUCKET) return "";
+  const userId = String(authSession?.user?.id || "").trim();
+  if (!userId) throw new Error("未登录，无法上传到 Storage");
+  const ext = (() => {
+    const byName = `.${(String(file.name || "").split(".").pop() || "").toLowerCase()}`;
+    if (/^\.[a-z0-9]+$/i.test(byName) && byName.length <= 10) return byName;
+    const byType = String(file.type || "").toLowerCase();
+    if (byType.includes("png")) return ".png";
+    if (byType.includes("jpeg") || byType.includes("jpg")) return ".jpg";
+    if (byType.includes("webp")) return ".webp";
+    return ".png";
+  })();
+  const datePart = new Date().toISOString().slice(0, 10);
+  const orderNoSafe = String(row.orderNo || "no-order").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 48);
+  const path = `${userId}/${datePart}/${orderNoSafe}_${String(row.id || "").slice(0, 8)}_${Date.now()}${ext}`;
+  const { error } = await db.storage.from(STORAGE_BUCKET).upload(path, file, {
+    upsert: true,
+    contentType: String(file.type || "image/png"),
+    cacheControl: "3600",
+  });
+  if (error) throw error;
+  return `sb:${STORAGE_BUCKET}/${path}`;
 }
 
 function extractNasFileRef(data) {
@@ -1793,6 +1805,26 @@ async function resolveScreenshotPreviewSrc(rawValue) {
   const raw = String(rawValue || "").trim();
   if (!raw) return "";
   if (/^(data:image|blob:|https?:\/\/)/i.test(raw)) return raw;
+  if (raw.startsWith("sb:")) {
+    const full = raw.slice(3);
+    const slashIndex = full.indexOf("/");
+    if (slashIndex <= 0 || !db) return "";
+    const bucket = full.slice(0, slashIndex);
+    const path = full.slice(slashIndex + 1);
+    const cacheKey = `sb:${bucket}/${path}`;
+    if (screenshotObjectUrlCache.has(cacheKey)) return screenshotObjectUrlCache.get(cacheKey);
+    try {
+      const { data, error } = await db.storage.from(bucket).createSignedUrl(path, STORAGE_SIGNED_EXPIRES);
+      if (error) throw error;
+      const signed = String(data?.signedUrl || "").trim();
+      if (!signed) return "";
+      screenshotObjectUrlCache.set(cacheKey, signed);
+      return signed;
+    } catch (e) {
+      console.warn("加载 Storage 截图失败", e);
+      return "";
+    }
+  }
   if (raw.startsWith("nas:")) {
     const fileId = raw.slice(4).trim();
     if (!fileId || !UPLOAD_API_BASE) return "";
