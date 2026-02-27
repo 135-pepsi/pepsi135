@@ -8,6 +8,7 @@ const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const IS_LOCAL_DEBUG = location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 5) * 1000);
+const SUMMARY_SELECTION_HOLD_MS = Math.max(5000, Number(MES_CONFIG.SUMMARY_SELECTION_HOLD_SECONDS || 15) * 1000);
 const STORAGE_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET || "material-screenshots").trim();
 const STORAGE_SIGNED_EXPIRES = Math.max(60, Number(MES_CONFIG.SUPABASE_STORAGE_SIGNED_EXPIRES || 3600));
 const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
@@ -59,6 +60,7 @@ let otherItemEditingGroupIndex = 0;
 let amountEditingRowId = "";
 let amountEditingGroupIndex = -1;
 let selectedRowId = "";
+let summarySelectionHoldUntil = 0;
 let supplierCustomBound = false;
 let otherScreenshotDataUrl = "";
 let screenshotPreviewRenderToken = 0;
@@ -171,6 +173,9 @@ async function init() {
   ensureAmountEditDialog();
   ensureImagePreviewDialog();
   bindEvents();
+  document.addEventListener("selectionchange", () => {
+    if (hasActiveSummarySelection()) extendSummarySelectionHold();
+  });
   initStatusFilterOptions();
   initSupplierFilterOptions();
   setFilterDefaults();
@@ -189,6 +194,7 @@ async function init() {
       if (testAdded) render();
     }
     setInterval(() => {
+      if (Date.now() < summarySelectionHoldUntil || hasActiveSummarySelection()) return;
       if (!syncing && remoteOnline && !shouldUseLocalOnlyMode()) void refreshFromRemote(false);
     }, AUTO_REFRESH_MS);
   } else {
@@ -202,6 +208,25 @@ async function init() {
 
 function shouldUseLocalOnlyMode() {
   return IS_LOCAL_DEBUG && !authSession;
+}
+
+function isInSummaryCell(node) {
+  let cur = node;
+  while (cur) {
+    if (cur.nodeType === 1 && cur.classList?.contains("material-summary-cell")) return true;
+    cur = cur.parentNode;
+  }
+  return false;
+}
+
+function hasActiveSummarySelection() {
+  const sel = window.getSelection?.();
+  if (!sel || sel.isCollapsed) return false;
+  return isInSummaryCell(sel.anchorNode) || isInSummaryCell(sel.focusNode);
+}
+
+function extendSummarySelectionHold(ms = SUMMARY_SELECTION_HOLD_MS) {
+  summarySelectionHoldUntil = Math.max(summarySelectionHoldUntil, Date.now() + ms);
 }
 
 async function ensureTestRowExists() {
