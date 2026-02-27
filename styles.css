@@ -661,16 +661,18 @@ body:not(.material-page) .kpi-grid {
   top: auto;
 }
 
-.material-page .material-kpi-grid {
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
-}
-
 .material-layout {
   margin-top: 12px;
   display: grid;
-  grid-template-columns: 240px 1fr 260px;
+  grid-template-columns: 260px 1fr;
   gap: 12px;
   align-items: start;
+}
+
+.material-left-col {
+  display: grid;
+  gap: 12px;
+  align-content: start;
 }
 
 .material-side-card,
@@ -1767,9 +1769,6 @@ body.compact-mode {
   }
   .order-control-right {
     justify-content: flex-end;
-  }
-  .material-page .material-kpi-grid {
-    grid-template-columns: repeat(3, minmax(120px, 1fr));
   }
   .material-layout {
     grid-template-columns: 1fr;

@@ -26,74 +26,67 @@
   </header>
 
   <main>
-    <section class="kpi-grid material-kpi-grid">
-      <article class="kpi-card kpi-a"><span>待下单数</span><strong id="materialKpiNeedOrder">0</strong></article>
-      <article class="kpi-card kpi-b"><span>在途数</span><strong id="materialKpiInTransit">0</strong></article>
-      <article class="kpi-card kpi-c"><span>超期未到货</span><strong id="materialKpiOverdue">0</strong></article>
-      <article class="kpi-card kpi-d"><span>3天缺料风险</span><strong id="materialKpiRisk3d">0</strong></article>
-      <article class="kpi-card kpi-a"><span>总采购金额</span><strong id="materialKpiAmount">¥0.00</strong></article>
-      <article class="kpi-card kpi-b"><span>影响订单数</span><strong id="materialKpiOrderImpact">0</strong></article>
-    </section>
-
     <section class="material-layout">
-      <aside class="material-side-card">
-        <h3>筛选</h3>
-        <div class="material-filter-grid">
-          <label>
-            <span>按月</span>
-            <select id="materialFilterMonth">
-              <option value="">全部</option>
-              <option value="01">01月</option>
-              <option value="02">02月</option>
-              <option value="03">03月</option>
-              <option value="04">04月</option>
-              <option value="05">05月</option>
-              <option value="06">06月</option>
-              <option value="07">07月</option>
-              <option value="08">08月</option>
-              <option value="09">09月</option>
-              <option value="10">10月</option>
-              <option value="11">11月</option>
-              <option value="12">12月</option>
-            </select>
-          </label>
-          <label>
-            <span>供应商</span>
-            <input id="materialFilterSupplier" placeholder="输入供应商" />
-          </label>
-          <label>
-            <span>状态</span>
-            <select id="materialFilterStatus">
-              <option value="">全部</option>
-              <option value="待请购">待请购</option>
-              <option value="待下单">待下单</option>
-              <option value="在途">在途</option>
-              <option value="部分到货">部分到货</option>
-              <option value="材料齐备">材料齐备</option>
-              <option value="异常">异常</option>
-            </select>
-          </label>
-          <label>
-            <span>机台</span>
-            <select id="materialFilterMachine">
-              <option value="">全部</option>
-              <option value="机台1">机台1</option>
-              <option value="机台2">机台2</option>
-              <option value="机台3">机台3</option>
-              <option value="机台4">机台4</option>
-              <option value="机台5">机台5</option>
-            </select>
-          </label>
-          <label class="check-row">
-            <input id="materialFilterOverdueOnly" type="checkbox" />
-            <span>仅看超期</span>
-          </label>
-          <label>
-            <span>关键字</span>
-            <input id="searchInput" placeholder="订单号/客户/物料/规格" />
-          </label>
-        </div>
-      </aside>
+      <div class="material-left-col">
+        <aside class="material-side-card" id="orderHintCard">
+          <h3>新订单提示</h3>
+          <p class="order-hint-desc">订单明细出现新订单号后，会在这里提示并显示客户。</p>
+          <ul id="orderHintList" class="order-hint-list"></ul>
+        </aside>
+
+        <aside class="material-side-card">
+          <h3>筛选</h3>
+          <div class="material-filter-grid">
+            <label>
+              <span>按月</span>
+              <select id="materialFilterMonth">
+                <option value="">全部</option>
+                <option value="01">01月</option>
+                <option value="02">02月</option>
+                <option value="03">03月</option>
+                <option value="04">04月</option>
+                <option value="05">05月</option>
+                <option value="06">06月</option>
+                <option value="07">07月</option>
+                <option value="08">08月</option>
+                <option value="09">09月</option>
+                <option value="10">10月</option>
+                <option value="11">11月</option>
+                <option value="12">12月</option>
+              </select>
+            </label>
+            <label>
+              <span>供应商</span>
+              <input id="materialFilterSupplier" placeholder="输入供应商" />
+            </label>
+            <label>
+              <span>状态</span>
+              <select id="materialFilterStatus">
+                <option value="">全部</option>
+              </select>
+            </label>
+            <label>
+              <span>机台</span>
+              <select id="materialFilterMachine">
+                <option value="">全部</option>
+                <option value="机台1">机台1</option>
+                <option value="机台2">机台2</option>
+                <option value="机台3">机台3</option>
+                <option value="机台4">机台4</option>
+                <option value="机台5">机台5</option>
+              </select>
+            </label>
+            <label class="check-row">
+              <input id="materialFilterOverdueOnly" type="checkbox" />
+              <span>仅看超期</span>
+            </label>
+            <label>
+              <span>关键字</span>
+              <input id="searchInput" placeholder="订单号/客户/物料/规格" />
+            </label>
+          </div>
+        </aside>
+      </div>
 
       <section class="material-main-card">
         <div class="material-main-head">
@@ -121,12 +114,6 @@
           </table>
         </div>
       </section>
-
-      <aside class="material-side-card" id="orderHintCard">
-        <h3>新订单提示</h3>
-        <p class="order-hint-desc">订单明细出现新订单号后，会在这里提示并显示客户。</p>
-        <ul id="orderHintList" class="order-hint-list"></ul>
-      </aside>
     </section>
 
     <p class="hint">提示：双击可编辑基础字段；采购操作请使用“下单 / 到货 / 异常”按钮。</p>
