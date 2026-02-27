@@ -50,10 +50,13 @@ let orderHintListEl = null;
 let materialItemEditingRowId = "";
 let materialItemEditingGroups = [];
 let materialItemEditingGroupIndex = 0;
+let otherItemEditingRowId = "";
+let otherItemEditingGroupIndex = 0;
 let amountEditingRowId = "";
 let amountEditingGroupIndex = -1;
 let selectedRowId = "";
 let supplierCustomBound = false;
+let otherScreenshotDataUrl = "";
 
 const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
@@ -122,12 +125,29 @@ const el = {
   infoText: document.getElementById("infoDialogText"),
   infoClose: document.getElementById("infoDialogCloseBtn"),
   infoOk: document.getElementById("infoDialogOkBtn"),
+  imagePreviewDialog: document.getElementById("imagePreviewDialog"),
+  imagePreviewClose: document.getElementById("imagePreviewCloseBtn"),
+  imagePreviewBody: document.getElementById("imagePreviewBody"),
 
   amountDialog: document.getElementById("amountEditDialog"),
   amountClose: document.getElementById("amountEditDialogCloseBtn"),
   amountCancel: document.getElementById("amountEditCancelBtn"),
   amountSave: document.getElementById("amountEditSaveBtn"),
   amountInput: document.getElementById("amountEditInput"),
+
+  otherDialog: document.getElementById("otherItemDialog"),
+  otherClose: document.getElementById("otherItemDialogCloseBtn"),
+  otherCancel: document.getElementById("otherItemCancelBtn"),
+  otherSave: document.getElementById("otherItemSaveBtn"),
+  otherClear: document.getElementById("otherItemClearBtn"),
+  otherNameInput: document.getElementById("otherItemName"),
+  otherSupplierInput: document.getElementById("otherItemSupplier"),
+  otherLineList: document.getElementById("otherLineList"),
+  otherLineAddBtn: document.getElementById("otherLineAddBtn"),
+  otherScreenshotInput: document.getElementById("otherScreenshotInput"),
+  otherScreenshotPreview: document.getElementById("otherScreenshotPreview"),
+  otherScreenshotClearBtn: document.getElementById("otherScreenshotClearBtn"),
+  otherScreenshotCaptureBtn: document.getElementById("otherScreenshotCaptureBtn"),
 };
 
 init().catch((e) => {
@@ -140,7 +160,9 @@ async function init() {
   setupOrderHintPanel();
   syncProcurementTableHeader();
   ensureMaterialItemDialog();
+  ensureOtherItemDialog();
   ensureAmountEditDialog();
+  ensureImagePreviewDialog();
   bindEvents();
   initStatusFilterOptions();
   initSupplierFilterOptions();
@@ -212,21 +234,30 @@ function bindEvents() {
       closeDialog(el.arrivalDialog);
       closeDialog(el.abnormalDialog);
       closeDialog(el.materialItemDialog);
+      closeDialog(el.otherDialog);
       closeDialog(el.amountDialog);
       closeInfo();
+      closeImagePreview();
     }
   });
 }
 
 function bindHeaderActions() {
-  const addBtn = document.getElementById("materialHeaderAddBtn");
-  if (!addBtn) return;
-  addBtn.addEventListener("click", () => {
+  const addMaterialBtn = document.getElementById("materialHeaderAddMaterialBtn");
+  const addOtherBtn = document.getElementById("materialHeaderAddOtherBtn");
+  if (addMaterialBtn) addMaterialBtn.addEventListener("click", () => {
     if (!selectedRowId) {
       showInfo("请先点击一行，再使用表头添加。", "提示");
       return;
     }
     void addMaterialForOrderRow(selectedRowId);
+  });
+  if (addOtherBtn) addOtherBtn.addEventListener("click", () => {
+    if (!selectedRowId) {
+      showInfo("请先点击一行，再使用表头添加。", "提示");
+      return;
+    }
+    void addOtherForOrderRow(selectedRowId);
   });
 }
 
@@ -236,7 +267,7 @@ function syncProcurementTableHeader() {
   headRow.innerHTML = `
     <th>订单号</th>
     <th>客户</th>
-    <th><div class="material-head-cell"><span>物料</span><button id="materialHeaderAddBtn" class="action-btn-secondary" type="button">添加</button></div></th>
+    <th><div class="material-head-cell"><span>物料</span><div class="material-head-actions"><button id="materialHeaderAddMaterialBtn" class="action-btn-secondary" type="button">添加物料</button><button id="materialHeaderAddOtherBtn" class="action-btn-secondary" type="button">添加其他</button></div></div></th>
     <th>金额</th>
     <th>状态</th>
     <th>操作</th>
@@ -347,6 +378,111 @@ function ensureAmountEditDialog() {
   el.amountSave = document.getElementById("amountEditSaveBtn");
   el.amountInput = document.getElementById("amountEditInput");
 }
+
+function ensureImagePreviewDialog() {
+  const existing = document.getElementById("imagePreviewDialog");
+  if (existing) {
+    el.imagePreviewDialog = existing;
+    el.imagePreviewClose = document.getElementById("imagePreviewCloseBtn");
+    el.imagePreviewBody = document.getElementById("imagePreviewBody");
+    return;
+  }
+  const dialog = document.createElement("div");
+  dialog.id = "imagePreviewDialog";
+  dialog.className = "dialog-backdrop";
+  dialog.hidden = true;
+  dialog.innerHTML = `
+    <section class="dialog-panel image-preview-panel" role="dialog" aria-modal="true" aria-labelledby="imagePreviewTitle">
+      <header class="dialog-head">
+        <h3 id="imagePreviewTitle">截图预览</h3>
+        <button id="imagePreviewCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <div id="imagePreviewBody" class="image-preview-body"></div>
+    </section>
+  `;
+  document.body.appendChild(dialog);
+  el.imagePreviewDialog = dialog;
+  el.imagePreviewClose = document.getElementById("imagePreviewCloseBtn");
+  el.imagePreviewBody = document.getElementById("imagePreviewBody");
+}
+
+function ensureOtherItemDialog() {
+  const existing = document.getElementById("otherItemDialog");
+  if (existing) {
+    el.otherDialog = existing;
+    el.otherClose = document.getElementById("otherItemDialogCloseBtn");
+    el.otherCancel = document.getElementById("otherItemCancelBtn");
+    el.otherSave = document.getElementById("otherItemSaveBtn");
+    el.otherClear = document.getElementById("otherItemClearBtn");
+    el.otherNameInput = document.getElementById("otherItemName");
+    el.otherSupplierInput = document.getElementById("otherItemSupplier");
+    el.otherLineList = document.getElementById("otherLineList");
+    el.otherLineAddBtn = document.getElementById("otherLineAddBtn");
+    el.otherScreenshotInput = document.getElementById("otherScreenshotInput");
+    el.otherScreenshotPreview = document.getElementById("otherScreenshotPreview");
+    el.otherScreenshotClearBtn = document.getElementById("otherScreenshotClearBtn");
+    el.otherScreenshotCaptureBtn = document.getElementById("otherScreenshotCaptureBtn");
+    populateMaterialItemSelects();
+    bindSupplierCustomAdd();
+    return;
+  }
+  const dialog = document.createElement("div");
+  dialog.id = "otherItemDialog";
+  dialog.className = "dialog-backdrop";
+  dialog.hidden = true;
+  dialog.innerHTML = `
+    <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="otherItemDialogTitle">
+      <header class="dialog-head">
+        <h3 id="otherItemDialogTitle">其他采购项</h3>
+        <button id="otherItemDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <div class="material-item-grid">
+        <div class="material-item-col material-item-col-fixed">
+          <label class="auth-login-field"><span>名称</span><input id="otherItemName" type="text" placeholder="请输入名称" /></label>
+          <label class="auth-login-field"><span>供应商（自定义）</span><input id="otherItemSupplier" type="text" placeholder="请输入供应商" /></label>
+        </div>
+        <div class="material-item-col material-item-col-lines">
+          <div class="auth-login-field">
+            <span>规格与数量</span>
+            <div id="otherLineList" class="material-line-list"></div>
+            <button id="otherLineAddBtn" class="btn btn-secondary" type="button">新增规格行</button>
+          </div>
+          <div class="auth-login-field">
+            <span>截图</span>
+            <input id="otherScreenshotInput" type="file" accept="image/*" />
+            <div id="otherScreenshotPreview" class="other-screenshot-preview">未上传截图</div>
+            <div class="other-screenshot-actions">
+              <button id="otherScreenshotCaptureBtn" class="btn btn-secondary" type="button">截屏</button>
+              <button id="otherScreenshotClearBtn" class="btn btn-secondary" type="button">清除截图</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="auth-login-actions">
+        <button id="otherItemCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="otherItemClearBtn" class="btn btn-secondary" type="button">清空</button>
+        <button id="otherItemSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  `;
+  document.body.appendChild(dialog);
+  el.otherDialog = dialog;
+  el.otherClose = document.getElementById("otherItemDialogCloseBtn");
+  el.otherCancel = document.getElementById("otherItemCancelBtn");
+  el.otherSave = document.getElementById("otherItemSaveBtn");
+  el.otherClear = document.getElementById("otherItemClearBtn");
+  el.otherNameInput = document.getElementById("otherItemName");
+  el.otherSupplierInput = document.getElementById("otherItemSupplier");
+  el.otherLineList = document.getElementById("otherLineList");
+  el.otherLineAddBtn = document.getElementById("otherLineAddBtn");
+  el.otherScreenshotInput = document.getElementById("otherScreenshotInput");
+  el.otherScreenshotPreview = document.getElementById("otherScreenshotPreview");
+  el.otherScreenshotClearBtn = document.getElementById("otherScreenshotClearBtn");
+  el.otherScreenshotCaptureBtn = document.getElementById("otherScreenshotCaptureBtn");
+  populateMaterialItemSelects();
+  bindSupplierCustomAdd();
+}
+
 
 function populateMaterialItemSelects() {
   if (el.materialInput) {
@@ -543,12 +679,20 @@ function bindDialogEvents() {
   bindActionDialog(el.arrivalDialog, [el.arrivalClose, el.arrivalCancel], () => void saveArrival(), el.arrivalSave);
   bindActionDialog(el.abnormalDialog, [el.abnormalClose, el.abnormalCancel], () => void saveAbnormal(), el.abnormalSave);
   bindActionDialog(el.materialItemDialog, [el.materialItemClose, el.materialItemCancel], () => void saveMaterialItemDetail(), el.materialItemSave);
+  bindActionDialog(el.otherDialog, [el.otherClose, el.otherCancel], () => void saveOtherItemDetail(), el.otherSave);
   bindActionDialog(el.amountDialog, [el.amountClose, el.amountCancel], () => void saveAmountEditDialog(), el.amountSave);
   if (el.materialItemClear) el.materialItemClear.addEventListener("click", clearMaterialItemDetail);
+  if (el.otherClear) el.otherClear.addEventListener("click", clearOtherItemDetail);
   if (el.materialLineAddBtn) el.materialLineAddBtn.addEventListener("click", () => appendMaterialLineRow("", ""));
+  if (el.otherLineAddBtn) el.otherLineAddBtn.addEventListener("click", () => appendOtherLineRow("", ""));
+  if (el.otherScreenshotInput) el.otherScreenshotInput.addEventListener("change", () => void handleOtherScreenshotChange());
+  if (el.otherScreenshotClearBtn) el.otherScreenshotClearBtn.addEventListener("click", clearOtherScreenshot);
+  if (el.otherScreenshotCaptureBtn) el.otherScreenshotCaptureBtn.addEventListener("click", () => void captureOtherScreenshot());
   if (el.infoClose) el.infoClose.addEventListener("click", closeInfo);
   if (el.infoOk) el.infoOk.addEventListener("click", closeInfo);
   if (el.infoDialog) el.infoDialog.addEventListener("click", (e) => { if (e.target === el.infoDialog) closeInfo(); });
+  if (el.imagePreviewClose) el.imagePreviewClose.addEventListener("click", closeImagePreview);
+  if (el.imagePreviewDialog) el.imagePreviewDialog.addEventListener("click", (e) => { if (e.target === el.imagePreviewDialog) closeImagePreview(); });
 }
 
 function bindActionDialog(dialogEl, closeButtons, saveFn, saveBtn) {
@@ -717,6 +861,11 @@ function summaryCell(text) {
   const td = document.createElement("td");
   td.className = "material-summary-cell";
   td.textContent = String(text || "");
+  td.title = "可选中后复制";
+  // Keep text selection stable: avoid row click re-render when selecting/copying summary text.
+  ["mousedown", "mouseup", "click", "dblclick"].forEach((evt) => {
+    td.addEventListener(evt, (event) => event.stopPropagation());
+  });
   return td;
 }
 
@@ -897,6 +1046,16 @@ function materialDetailCell(row, extra) {
     groups.forEach((g, idx) => {
       const group = document.createElement("div");
       group.className = "material-detail-group";
+      const screenshot = String(g?.screenshot || "").trim();
+      if (screenshot) {
+        group.classList.add("is-clickable");
+        group.title = "点击预览截图";
+        group.addEventListener("click", (event) => {
+          const target = event.target;
+          if (target instanceof HTMLElement && target.closest(".material-detail-group-actions")) return;
+          openImagePreview(screenshot);
+        });
+      }
       const head = document.createElement("div");
       head.className = "material-detail-head";
       head.textContent = [g.material, g.supplier].filter(Boolean).join(" / ");
@@ -931,7 +1090,12 @@ function materialDetailCell(row, extra) {
       editBtn.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        openMaterialItemDialog(row.id, { groupIndex: idx });
+        const kind = String(g?.itemKind || "material");
+        if (kind === "other") {
+          openOtherItemDialog(row.id, { groupIndex: idx });
+        } else {
+          openMaterialItemDialog(row.id, { groupIndex: idx });
+        }
       });
       groupActions.appendChild(editBtn);
       group.appendChild(groupActions);
@@ -945,6 +1109,10 @@ function materialDetailCell(row, extra) {
 
 async function addMaterialForOrderRow(sourceRowId) {
   openMaterialItemDialog(sourceRowId, { appendGroup: true });
+}
+
+async function addOtherForOrderRow(sourceRowId) {
+  openOtherItemDialog(sourceRowId, { appendGroup: true });
 }
 
 function renderKpi(list, extraMap = new Map()) {
@@ -1221,7 +1389,25 @@ async function saveAbnormal() {
 
 function openDialog(d) { if (!d) return; d.hidden = false; document.body.style.overflow = "hidden"; }
 function closeDialog(d) { if (!d) return; d.hidden = true; refreshBodyOverflow(); }
-function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.amountDialog, el.infoDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
+function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.otherDialog, el.amountDialog, el.infoDialog, el.imagePreviewDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
+
+function openImagePreview(dataUrl) {
+  if (!el.imagePreviewDialog || !el.imagePreviewBody) return;
+  const src = String(dataUrl || "").trim();
+  if (!src) return;
+  el.imagePreviewBody.innerHTML = "";
+  const img = document.createElement("img");
+  img.src = src;
+  img.alt = "截图预览";
+  img.loading = "lazy";
+  el.imagePreviewBody.appendChild(img);
+  openDialog(el.imagePreviewDialog);
+}
+
+function closeImagePreview() {
+  if (el.imagePreviewBody) el.imagePreviewBody.innerHTML = "";
+  closeDialog(el.imagePreviewDialog);
+}
 
 function syncGroupHeights() {
   if (!el.tableBody) return;
@@ -1258,13 +1444,14 @@ function openMaterialItemDialog(rowId, options = {}) {
   const groups = parseMaterialGroups(row, extra);
   materialItemEditingGroups = groups.map((g) => ({ ...g, lines: g.lines.map((line) => ({ ...line })) }));
   if (options.appendGroup) {
-    materialItemEditingGroups.push(createEmptyMaterialGroup());
+    materialItemEditingGroups.push(createEmptyMaterialGroup("material"));
     materialItemEditingGroupIndex = materialItemEditingGroups.length - 1;
   } else {
     materialItemEditingGroupIndex = Math.min(Math.max(0, Number(options.groupIndex || 0)), Math.max(0, materialItemEditingGroups.length - 1));
   }
   const currentGroup = materialItemEditingGroups[materialItemEditingGroupIndex] || createEmptyMaterialGroup();
-  setSelectValueWithFallback(el.materialInput, String(currentGroup.material || ""), "请选择材质");
+  const currentMaterial = String(currentGroup.material || "");
+  setSelectValueWithFallback(el.materialInput, currentMaterial, "请选择材质");
   renderMaterialLineRows(currentGroup.lines);
   setSelectValueWithFallback(el.materialSupplierInput, String(currentGroup.supplier || ""), "请选择供应商");
   openDialog(el.materialItemDialog);
@@ -1277,8 +1464,8 @@ function clearMaterialItemDetail() {
   if (el.materialSupplierInput) el.materialSupplierInput.value = "";
 }
 
-function createEmptyMaterialGroup() {
-  return { material: "", supplier: "", amount: "", status: "下单", purchasedAt: "", arrivedAt: "", lines: [{ size: "", qty: "" }] };
+function createEmptyMaterialGroup(kind = "material") {
+  return { itemKind: kind, material: "", supplier: "", amount: "", status: "下单", purchasedAt: "", arrivedAt: "", screenshot: "", lines: [{ size: "", qty: "" }] };
 }
 
 function appendMaterialLineRow(size = "", qty = "") {
@@ -1334,6 +1521,172 @@ function collectMaterialLineRows() {
   return lines;
 }
 
+function appendOtherLineRow(size = "", qty = "") {
+  if (!el.otherLineList) return;
+  const row = document.createElement("div");
+  row.className = "material-line-row";
+  const sizeInput = document.createElement("input");
+  sizeInput.type = "text";
+  sizeInput.className = "other-line-size";
+  sizeInput.placeholder = "规格";
+  sizeInput.value = String(size || "");
+  const qtyInput = document.createElement("input");
+  qtyInput.type = "number";
+  qtyInput.min = "0";
+  qtyInput.step = "1";
+  qtyInput.className = "other-line-qty";
+  qtyInput.placeholder = "数量";
+  qtyInput.value = qty === "" ? "" : String(qty);
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "action-btn";
+  removeBtn.textContent = "删除";
+  removeBtn.addEventListener("click", () => {
+    row.remove();
+    if (!el.otherLineList?.children.length) appendOtherLineRow("", "");
+  });
+  row.appendChild(sizeInput);
+  row.appendChild(qtyInput);
+  row.appendChild(removeBtn);
+  el.otherLineList.appendChild(row);
+}
+
+function renderOtherLineRows(lines = []) {
+  if (!el.otherLineList) return;
+  el.otherLineList.innerHTML = "";
+  if (!lines.length) {
+    appendOtherLineRow("", "");
+    return;
+  }
+  lines.forEach((line) => appendOtherLineRow(line.size, line.qty));
+}
+
+function collectOtherLineRows() {
+  if (!el.otherLineList) return [];
+  const lines = [];
+  el.otherLineList.querySelectorAll(".material-line-row").forEach((rowEl) => {
+    const size = String(rowEl.querySelector(".other-line-size")?.value || "").trim();
+    const qtyRaw = String(rowEl.querySelector(".other-line-qty")?.value || "").trim();
+    const qtyNum = qtyRaw === "" ? NaN : Number(qtyRaw);
+    if (!size && !qtyRaw) return;
+    lines.push({ size, qty: Number.isFinite(qtyNum) && qtyNum >= 0 ? Math.floor(qtyNum) : null });
+  });
+  return lines;
+}
+
+function openOtherItemDialog(rowId, options = {}) {
+  const row = rows.find((r) => r.id === rowId);
+  if (!row || !el.otherDialog) return;
+  const extra = getExtra(rowId);
+  const groups = parseMaterialGroups(row, extra).map((g) => ({ ...g, lines: g.lines.map((line) => ({ ...line })) }));
+  if (options.appendGroup) {
+    groups.push(createEmptyMaterialGroup("other"));
+    otherItemEditingGroupIndex = groups.length - 1;
+  } else {
+    otherItemEditingGroupIndex = Math.min(Math.max(0, Number(options.groupIndex || 0)), Math.max(0, groups.length - 1));
+  }
+  const currentGroup = groups[otherItemEditingGroupIndex] || createEmptyMaterialGroup("other");
+  otherItemEditingRowId = rowId;
+  materialItemEditingGroups = groups;
+  if (el.otherNameInput) el.otherNameInput.value = String(currentGroup.material || "");
+  if (el.otherSupplierInput) el.otherSupplierInput.value = String(currentGroup.supplier || "");
+  otherScreenshotDataUrl = String(currentGroup.screenshot || "");
+  renderOtherScreenshotPreview();
+  if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
+  renderOtherLineRows(currentGroup.lines);
+  openDialog(el.otherDialog);
+  if (el.otherNameInput) el.otherNameInput.focus();
+}
+
+function clearOtherItemDetail() {
+  if (el.otherNameInput) el.otherNameInput.value = "";
+  if (el.otherSupplierInput) el.otherSupplierInput.value = "";
+  clearOtherScreenshot();
+  renderOtherLineRows([{ size: "", qty: "" }]);
+}
+
+async function handleOtherScreenshotChange() {
+  const file = el.otherScreenshotInput?.files?.[0];
+  if (!file) return;
+  if (!String(file.type || "").startsWith("image/")) {
+    showInfo("请上传图片文件。", "校验失败");
+    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
+    return;
+  }
+  const maxBytes = 2 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    showInfo("截图大小不能超过 2MB。", "校验失败");
+    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
+    return;
+  }
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("读取截图失败"));
+    reader.readAsDataURL(file);
+  }).catch(() => "");
+  otherScreenshotDataUrl = String(dataUrl || "");
+  renderOtherScreenshotPreview();
+}
+
+async function captureOtherScreenshot() {
+  if (!window.isSecureContext) {
+    showInfo("当前环境不支持截屏，请使用文件上传。", "功能受限");
+    return;
+  }
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    showInfo("当前浏览器不支持截屏，请使用文件上传。", "功能受限");
+    return;
+  }
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always" }, audio: false });
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    await video.play();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) throw new Error("截图尺寸无效");
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("截图上下文创建失败");
+    ctx.drawImage(video, 0, 0, width, height);
+    otherScreenshotDataUrl = canvas.toDataURL("image/png");
+    renderOtherScreenshotPreview();
+    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
+  } catch (e) {
+    const name = String(e?.name || "");
+    if (name !== "NotAllowedError" && name !== "AbortError") {
+      showInfo("截屏失败，请重试或使用文件上传。", "错误");
+    }
+  } finally {
+    if (stream) stream.getTracks().forEach((track) => track.stop());
+  }
+}
+
+function clearOtherScreenshot() {
+  otherScreenshotDataUrl = "";
+  if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
+  renderOtherScreenshotPreview();
+}
+
+function renderOtherScreenshotPreview() {
+  if (!el.otherScreenshotPreview) return;
+  el.otherScreenshotPreview.innerHTML = "";
+  if (!otherScreenshotDataUrl) {
+    el.otherScreenshotPreview.textContent = "未上传截图";
+    return;
+  }
+  const img = document.createElement("img");
+  img.src = otherScreenshotDataUrl;
+  img.alt = "截图预览";
+  img.loading = "lazy";
+  el.otherScreenshotPreview.appendChild(img);
+}
+
 function parseSpecLines(specValue, qtyValue) {
   const raw = String(specValue || "").trim();
   if (!raw) return { lines: [] };
@@ -1369,10 +1722,12 @@ function parseMaterialGroups(row, extra) {
           .map((g) => ({
             material: String(g?.material || "").trim(),
             supplier: String(g?.supplier || "").trim(),
+            itemKind: String(g?.itemKind || "material"),
             amount: g?.amount === "" || g?.amount == null ? "" : Math.max(0, Number(g.amount) || 0),
             status: normalizeStatus(g?.status, row, extra),
             purchasedAt: String(g?.purchasedAt || g?.pendingAt || ""),
             arrivedAt: String(g?.arrivedAt || ""),
+            screenshot: String(g?.screenshot || ""),
             lines: Array.isArray(g?.lines)
               ? g.lines
                 .map((line) => ({
@@ -1399,7 +1754,7 @@ function parseMaterialGroups(row, extra) {
   const fallbackAmount = row?.amount == null || row?.amount === "" ? "" : Math.max(0, Number(row.amount) || 0);
   const fallbackStatus = normalizeStatus(extra?.status, row, extra);
   if (!fallbackMaterial && !fallbackSupplier && fallbackLines.length === 0 && fallbackAmount === "") return [];
-  return [{ material: fallbackMaterial, supplier: fallbackSupplier, amount: fallbackAmount, status: fallbackStatus, purchasedAt: "", arrivedAt: "", lines: fallbackLines }];
+  return [{ itemKind: "material", material: fallbackMaterial, supplier: fallbackSupplier, amount: fallbackAmount, status: fallbackStatus, purchasedAt: "", arrivedAt: "", screenshot: "", lines: fallbackLines }];
 }
 
 function serializeMaterialGroups(groups = []) {
@@ -1407,10 +1762,12 @@ function serializeMaterialGroups(groups = []) {
     .map((g) => ({
       material: String(g?.material || "").trim(),
       supplier: String(g?.supplier || "").trim(),
+      itemKind: String(g?.itemKind || "material"),
       amount: g?.amount === "" || g?.amount == null ? "" : Number(Number(g.amount).toFixed(2)),
       status: normalizeStatus(g?.status),
       purchasedAt: String(g?.purchasedAt || ""),
       arrivedAt: String(g?.arrivedAt || ""),
+      screenshot: String(g?.screenshot || ""),
       lines: (Array.isArray(g?.lines) ? g.lines : [])
         .map((line) => ({
           size: String(line?.size || "").trim(),
@@ -1455,12 +1812,16 @@ async function saveMaterialItemDetail() {
   const material = String(el.materialInput?.value || "").trim();
   const supplier = String(el.materialSupplierInput?.value || "").trim();
   const lines = collectMaterialLineRows();
+  if (!material) {
+    showInfo("请选择材质。", "校验失败");
+    return;
+  }
   if (!lines.length) {
-    showInfo("请至少填写一行尺寸和数量。", "校验失败");
+    showInfo("请至少填写一行规格和数量。", "校验失败");
     return;
   }
   if (lines.some((line) => !line.size || line.qty == null)) {
-    showInfo("每行都需要填写有效的尺寸和数量。", "校验失败");
+    showInfo("每行都需要填写有效的规格和数量。", "校验失败");
     return;
   }
   const currentGroups = materialItemEditingGroups.length
@@ -1471,7 +1832,8 @@ async function saveMaterialItemDetail() {
   const existingStatus = normalizeStatus(currentGroups[materialItemEditingGroupIndex]?.status);
   const existingPurchasedAt = String(currentGroups[materialItemEditingGroupIndex]?.purchasedAt || "");
   const existingArrivedAt = String(currentGroups[materialItemEditingGroupIndex]?.arrivedAt || "");
-  currentGroups[materialItemEditingGroupIndex] = { material, supplier, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, lines };
+  const existingScreenshot = String(currentGroups[materialItemEditingGroupIndex]?.screenshot || "");
+  currentGroups[materialItemEditingGroupIndex] = { itemKind: "material", material, supplier, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: existingScreenshot, lines };
   const serializedGroups = serializeMaterialGroups(currentGroups);
   row.material = serializedGroups.material;
   row.spec = serializedGroups.spec;
@@ -1483,6 +1845,47 @@ async function saveMaterialItemDetail() {
   materialItemEditingGroups = [];
   materialItemEditingGroupIndex = 0;
   closeDialog(el.materialItemDialog);
+  render();
+}
+
+async function saveOtherItemDetail() {
+  const row = rows.find((r) => r.id === otherItemEditingRowId);
+  if (!row) return;
+  const material = String(el.otherNameInput?.value || "").trim();
+  const supplier = String(el.otherSupplierInput?.value || "").trim();
+  const lines = collectOtherLineRows();
+  if (!material) {
+    showInfo("请填写名称。", "校验失败");
+    return;
+  }
+  if (!lines.length) {
+    showInfo("请至少填写一行规格和数量。", "校验失败");
+    return;
+  }
+  if (lines.some((line) => !line.size || line.qty == null)) {
+    showInfo("每行都需要填写有效的规格和数量。", "校验失败");
+    return;
+  }
+  const currentGroups = materialItemEditingGroups.length
+    ? materialItemEditingGroups
+    : parseMaterialGroups(row, getExtra(row.id));
+  while (currentGroups.length <= otherItemEditingGroupIndex) currentGroups.push(createEmptyMaterialGroup("other"));
+  const existingAmount = currentGroups[otherItemEditingGroupIndex]?.amount ?? "";
+  const existingStatus = normalizeStatus(currentGroups[otherItemEditingGroupIndex]?.status);
+  const existingPurchasedAt = String(currentGroups[otherItemEditingGroupIndex]?.purchasedAt || "");
+  const existingArrivedAt = String(currentGroups[otherItemEditingGroupIndex]?.arrivedAt || "");
+  currentGroups[otherItemEditingGroupIndex] = { itemKind: "other", material, supplier, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: otherScreenshotDataUrl, lines };
+  const serializedGroups = serializeMaterialGroups(currentGroups);
+  row.material = serializedGroups.material;
+  row.spec = serializedGroups.spec;
+  row.quantity = serializedGroups.quantity;
+  row.amount = serializedGroups.amount;
+  saveExtra(row.id, { supplier: serializedGroups.supplier });
+  await persist({ changed: [row] });
+  otherItemEditingRowId = "";
+  otherItemEditingGroupIndex = 0;
+  materialItemEditingGroups = [];
+  closeDialog(el.otherDialog);
   render();
 }
 
