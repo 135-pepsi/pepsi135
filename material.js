@@ -842,9 +842,10 @@ function buildContentSummary(row, extra, visibleEntries = null) {
       })
       .filter(Boolean)
       .join("、");
+    const orderedAtText = `下单时间:${formatDateTimeText(g?.orderedAt) || "-"}`;
     const purchasedAtText = `采购时间:${formatDateTimeText(g?.purchasedAt) || "-"}`;
     const arrivedAtText = status === "异常" ? "" : ` | 到货时间:${formatDateTimeText(g?.arrivedAt) || "-"}`;
-    return `${idx + 1}.${[String(g.material || "").trim(), lineText].filter(Boolean).join(" ")} | 金额:${amount} | 状态:${status} | ${purchasedAtText}${arrivedAtText}`;
+    return `${idx + 1}.${[String(g.material || "").trim(), lineText].filter(Boolean).join(" ")} | 金额:${amount} | 状态:${status} | ${orderedAtText} | ${purchasedAtText}${arrivedAtText}`;
   });
   return [...header, ...body].join("\n");
 }
@@ -1034,6 +1035,7 @@ async function cycleGroupStatus(rowId, groupIndex) {
   const idx = STATUS_LIST.indexOf(current);
   const next = STATUS_LIST[(idx + 1) % STATUS_LIST.length] || STATUS_LIST[0];
   groups[groupIndex].status = next;
+  if (next === "下单" && !groups[groupIndex].orderedAt) groups[groupIndex].orderedAt = nowIso();
   if (next === "采购" && !groups[groupIndex].purchasedAt) groups[groupIndex].purchasedAt = nowIso();
   if (next === "到货") groups[groupIndex].arrivedAt = nowIso();
   const serialized = serializeMaterialGroups(groups);
@@ -1377,6 +1379,7 @@ async function savePo() {
   const extra = getExtra(row.id);
   const groups = parseMaterialGroups(row, extra);
   groups.forEach((g) => {
+    if (!g.orderedAt) g.orderedAt = nowIso();
     g.status = "采购";
     if (!g.purchasedAt) g.purchasedAt = nowIso();
   });
@@ -1410,6 +1413,7 @@ async function saveArrival() {
   const extra = getExtra(row.id);
   const groups = parseMaterialGroups(row, extra);
   groups.forEach((g) => {
+    if (!g.orderedAt) g.orderedAt = nowIso();
     g.status = status;
     if (status === "到货") g.arrivedAt = nowIso();
   });
@@ -1532,7 +1536,7 @@ function clearMaterialItemDetail() {
 }
 
 function createEmptyMaterialGroup(kind = "material") {
-  return { itemKind: kind, material: "", supplier: "", supplierLink: "", amount: "", status: "下单", purchasedAt: "", arrivedAt: "", screenshot: "", lines: [{ size: "", qty: "" }] };
+  return { itemKind: kind, material: "", supplier: "", supplierLink: "", amount: "", status: "下单", orderedAt: "", purchasedAt: "", arrivedAt: "", screenshot: "", lines: [{ size: "", qty: "" }] };
 }
 
 function appendMaterialLineRow(size = "", qty = "") {
@@ -1934,7 +1938,8 @@ function parseMaterialGroups(row, extra) {
             itemKind: String(g?.itemKind || "material"),
             amount: g?.amount === "" || g?.amount == null ? "" : Math.max(0, Number(g.amount) || 0),
             status: normalizeStatus(g?.status, row, extra),
-            purchasedAt: String(g?.purchasedAt || g?.pendingAt || ""),
+            orderedAt: String(g?.orderedAt || g?.pendingAt || ""),
+            purchasedAt: String(g?.purchasedAt || ""),
             arrivedAt: String(g?.arrivedAt || ""),
             screenshot: String(g?.screenshot || ""),
             lines: Array.isArray(g?.lines)
@@ -1963,7 +1968,7 @@ function parseMaterialGroups(row, extra) {
   const fallbackAmount = row?.amount == null || row?.amount === "" ? "" : Math.max(0, Number(row.amount) || 0);
   const fallbackStatus = normalizeStatus(extra?.status, row, extra);
   if (!fallbackMaterial && !fallbackSupplier && fallbackLines.length === 0 && fallbackAmount === "") return [];
-  return [{ itemKind: "material", material: fallbackMaterial, supplier: fallbackSupplier, supplierLink: "", amount: fallbackAmount, status: fallbackStatus, purchasedAt: "", arrivedAt: "", screenshot: "", lines: fallbackLines }];
+  return [{ itemKind: "material", material: fallbackMaterial, supplier: fallbackSupplier, supplierLink: "", amount: fallbackAmount, status: fallbackStatus, orderedAt: "", purchasedAt: "", arrivedAt: "", screenshot: "", lines: fallbackLines }];
 }
 
 function serializeMaterialGroups(groups = []) {
@@ -1975,6 +1980,7 @@ function serializeMaterialGroups(groups = []) {
       itemKind: String(g?.itemKind || "material"),
       amount: g?.amount === "" || g?.amount == null ? "" : Number(Number(g.amount).toFixed(2)),
       status: normalizeStatus(g?.status),
+      orderedAt: String(g?.orderedAt || ""),
       purchasedAt: String(g?.purchasedAt || ""),
       arrivedAt: String(g?.arrivedAt || ""),
       screenshot: String(g?.screenshot || ""),
@@ -2040,11 +2046,12 @@ async function saveMaterialItemDetail() {
   while (currentGroups.length <= materialItemEditingGroupIndex) currentGroups.push(createEmptyMaterialGroup());
   const existingAmount = currentGroups[materialItemEditingGroupIndex]?.amount ?? "";
   const existingStatus = normalizeStatus(currentGroups[materialItemEditingGroupIndex]?.status);
+  const existingOrderedAt = String(currentGroups[materialItemEditingGroupIndex]?.orderedAt || "");
   const existingPurchasedAt = String(currentGroups[materialItemEditingGroupIndex]?.purchasedAt || "");
   const existingArrivedAt = String(currentGroups[materialItemEditingGroupIndex]?.arrivedAt || "");
   const existingScreenshot = String(currentGroups[materialItemEditingGroupIndex]?.screenshot || "");
   const existingSupplierLink = String(currentGroups[materialItemEditingGroupIndex]?.supplierLink || "");
-  currentGroups[materialItemEditingGroupIndex] = { itemKind: "material", material, supplier, supplierLink: existingSupplierLink, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: existingScreenshot, lines };
+  currentGroups[materialItemEditingGroupIndex] = { itemKind: "material", material, supplier, supplierLink: existingSupplierLink, amount: existingAmount, status: existingStatus, orderedAt: existingOrderedAt || nowIso(), purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: existingScreenshot, lines };
   const serializedGroups = serializeMaterialGroups(currentGroups);
   row.material = serializedGroups.material;
   row.spec = serializedGroups.spec;
@@ -2076,9 +2083,10 @@ async function saveOtherItemDetail() {
   while (currentGroups.length <= otherItemEditingGroupIndex) currentGroups.push(createEmptyMaterialGroup("other"));
   const existingAmount = currentGroups[otherItemEditingGroupIndex]?.amount ?? "";
   const existingStatus = normalizeStatus(currentGroups[otherItemEditingGroupIndex]?.status);
+  const existingOrderedAt = String(currentGroups[otherItemEditingGroupIndex]?.orderedAt || "");
   const existingPurchasedAt = String(currentGroups[otherItemEditingGroupIndex]?.purchasedAt || "");
   const existingArrivedAt = String(currentGroups[otherItemEditingGroupIndex]?.arrivedAt || "");
-  currentGroups[otherItemEditingGroupIndex] = { itemKind: "other", material, supplier, supplierLink, amount: existingAmount, status: existingStatus, purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: otherScreenshotDataUrl, lines };
+  currentGroups[otherItemEditingGroupIndex] = { itemKind: "other", material, supplier, supplierLink, amount: existingAmount, status: existingStatus, orderedAt: existingOrderedAt || nowIso(), purchasedAt: existingPurchasedAt, arrivedAt: existingArrivedAt, screenshot: otherScreenshotDataUrl, lines };
   const serializedGroups = serializeMaterialGroups(currentGroups);
   row.material = serializedGroups.material;
   row.spec = serializedGroups.spec;
