@@ -32,6 +32,7 @@ const XLSX_COLUMNS = [
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
+const STORAGE_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET || "order-attachments").trim();
 const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar");
@@ -3163,13 +3164,12 @@ function closePreviewDialog() {
 async function openLinePreview(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order) return;
-  if (!UPLOAD_API_BASE) {
-    alert("未配置上传服务地址，请先设置 config.js 的 UPLOAD_API_BASE。");
+  if (!canUseStorageAttachments()) {
+    alert("未登录或未配置 Storage bucket，请先设置 config.js 的 SUPABASE_STORAGE_BUCKET。");
     return;
   }
   try {
-    const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
-    const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+    const items = await storageListOrderFiles(orderId);
     setAttachmentStateFromItems(orderId, items);
     if (items.length === 0) {
       alert("该零件暂无图纸，请先上传。");
@@ -3216,10 +3216,10 @@ function renderAttachmentList() {
   if (!attachmentList) return;
   attachmentList.innerHTML = "";
 
-  if (!UPLOAD_API_BASE) {
+  if (!canUseStorageAttachments()) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "未配置上传服务地址，请在 config.js 中设置 UPLOAD_API_BASE。";
+    empty.textContent = "未登录或未配置 Storage bucket，请在 config.js 中设置 SUPABASE_STORAGE_BUCKET。";
     attachmentList.appendChild(empty);
     return;
   }
@@ -3290,7 +3290,7 @@ function renderAttachmentList() {
 
 async function loadOrderFiles(orderId) {
   if (!orderId) return;
-  if (!UPLOAD_API_BASE) {
+  if (!canUseStorageAttachments()) {
     attachmentLoading = false;
     renderAttachmentList();
     return;
@@ -3298,8 +3298,7 @@ async function loadOrderFiles(orderId) {
   attachmentLoading = true;
   renderAttachmentList();
   try {
-    const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
-    attachmentItems = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+    attachmentItems = await storageListOrderFiles(orderId);
     setAttachmentStateFromItems(orderId, attachmentItems);
   } catch (e) {
     const detail = e?.message || "未知错误";
@@ -3320,8 +3319,8 @@ async function uploadAttachmentFromInput(event) {
 
 async function uploadAttachmentFile(orderId, file, refreshDialogList = false) {
   if (!file || !orderId) return;
-  if (!UPLOAD_API_BASE) {
-    alert("未配置上传服务地址，请先设置 config.js 的 UPLOAD_API_BASE。");
+  if (!canUseStorageAttachments()) {
+    alert("未登录或未配置 Storage bucket，请先设置 config.js 的 SUPABASE_STORAGE_BUCKET。");
     return;
   }
   const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
@@ -3337,15 +3336,7 @@ async function uploadAttachmentFile(orderId, file, refreshDialogList = false) {
   }
 
   try {
-    const form = new FormData();
-    const order = orders.find((x) => x.id === orderId);
-    form.append("orderId", orderId);
-    form.append("lineId", orderId);
-    form.append("orderNo", order?.orderNo || "");
-    form.append("drawingNo", order?.drawingNo || "");
-    form.append("partName", order?.name || "");
-    form.append("file", file);
-    await apiFetchJson("/api/files/upload", { method: "POST", body: form });
+    await storageUploadOrderFile(orderId, file);
     setAttachmentState(orderId, true);
     if (refreshDialogList && attachmentPanelOrderId === orderId) {
       await loadOrderFiles(orderId);
@@ -3407,12 +3398,12 @@ async function captureAndUploadScreenshot(orderId) {
 }
 
 async function deleteOrderFile(item) {
-  const id = item?.id;
-  if (!id) return;
+  const path = String(item?.path || "");
+  if (!path) return;
   if (!confirm(`确认删除附件“${getAttachmentName(item)}”吗？`)) return;
   try {
-    await apiFetchJson(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
-    attachmentItems = attachmentItems.filter((x) => x.id !== id);
+    await storageDeleteOrderFile(path);
+    attachmentItems = attachmentItems.filter((x) => String(x?.path || "") !== path);
     setAttachmentStateFromItems(attachmentPanelOrderId, attachmentItems);
     renderAttachmentList();
     render();
@@ -3423,10 +3414,10 @@ async function deleteOrderFile(item) {
 }
 
 async function downloadOrderFile(item) {
-  const id = item?.id;
-  if (!id) return;
+  const path = String(item?.path || "");
+  if (!path) return;
   try {
-    const blob = await apiFetchBlob(`/api/files/download/${encodeURIComponent(id)}`);
+    const blob = await storageDownloadOrderFile(path);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -3442,8 +3433,8 @@ async function downloadOrderFile(item) {
 }
 
 async function previewOrderFile(item, orderOverride = null) {
-  const id = item?.id;
-  if (!id || !previewDialog || !previewBody) return;
+  const path = String(item?.path || "");
+  if (!path || !previewDialog || !previewBody) return;
   const order = orderOverride || orders.find((x) => x.id === attachmentPanelOrderId) || null;
   if (previewTitle) previewTitle.textContent = "图纸预览";
   if (previewSubTitle) {
@@ -3462,7 +3453,7 @@ async function previewOrderFile(item, orderOverride = null) {
       URL.revokeObjectURL(previewObjectUrl);
       previewObjectUrl = "";
     }
-    const blob = await apiFetchBlob(`/api/files/download/${encodeURIComponent(id)}`);
+    const blob = await storageDownloadOrderFile(path);
     previewObjectUrl = URL.createObjectURL(blob);
     const kind = getPreviewKind(item, blob.type || "");
     previewBody.innerHTML = "";
@@ -3490,7 +3481,7 @@ async function previewOrderFile(item, orderOverride = null) {
 }
 
 function getAttachmentName(item) {
-  return item?.file_name || item?.name || item?.filename || "未命名附件";
+  return item?.display_name || item?.file_name || item?.name || item?.filename || "未命名附件";
 }
 
 function setAttachmentState(orderId, hasFiles) {
@@ -3550,7 +3541,7 @@ function syncPreviewUploadedTime(orderId, uploadedAt = "") {
 }
 
 async function warmupAttachmentStates(rows, forceAll = false) {
-  if (!UPLOAD_API_BASE) return;
+  if (!canUseStorageAttachments()) return;
   const targets = rows
     .map((row) => row.id)
     .filter((id) => id && (forceAll || !attachmentStateByLineId.has(id)) && !attachmentStateLoading.has(id))
@@ -3562,8 +3553,7 @@ async function warmupAttachmentStates(rows, forceAll = false) {
 async function fetchAndSetAttachmentState(orderId) {
   attachmentStateLoading.add(orderId);
   try {
-    const data = await apiFetchJson(`/api/files/list?orderId=${encodeURIComponent(orderId)}`, { method: "GET" });
-    const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+    const items = await storageListOrderFiles(orderId);
     setAttachmentStateFromItems(orderId, items);
   } catch (_e) {
     attachmentStateByLineId.set(orderId, false);
@@ -3607,6 +3597,77 @@ function formatDateTime(value) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mi = String(d.getMinutes()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+function canUseStorageAttachments() {
+  return Boolean(REMOTE_ENABLED && db && STORAGE_BUCKET && authSession?.user?.id);
+}
+
+function orderAttachmentFolder(orderId) {
+  return `orders/${orderId}`;
+}
+
+function sanitizeAttachmentFileName(name) {
+  const base = String(name || "").trim() || "unnamed";
+  return base.replace(/[^\w.\-()\u4e00-\u9fa5]+/g, "_").slice(0, 120);
+}
+
+function buildAttachmentItemFromStorage(folder, entry) {
+  const rawName = String(entry?.name || "");
+  const displayName = rawName.replace(/^\d+_[a-f0-9]{8}_/i, "") || rawName || "未命名附件";
+  const path = `${folder}/${rawName}`;
+  const size = Number(entry?.metadata?.size || entry?.metadata?.fileSize || entry?.size || 0) || 0;
+  const mime = String(entry?.metadata?.mimetype || entry?.metadata?.contentType || "");
+  return {
+    id: `sb:${STORAGE_BUCKET}/${path}`,
+    path,
+    name: rawName,
+    display_name: displayName,
+    file_name: displayName,
+    size_bytes: size,
+    mime_type: mime,
+    created_at: entry?.created_at || entry?.updated_at || "",
+  };
+}
+
+async function storageListOrderFiles(orderId) {
+  if (!db || !STORAGE_BUCKET) return [];
+  const folder = orderAttachmentFolder(orderId);
+  const { data, error } = await db.storage.from(STORAGE_BUCKET).list(folder, {
+    limit: 200,
+    offset: 0,
+    sortBy: { column: "name", order: "desc" },
+  });
+  if (error) throw error;
+  return (Array.isArray(data) ? data : [])
+    .filter((entry) => String(entry?.name || "") && String(entry?.name || "") !== ".emptyFolderPlaceholder")
+    .map((entry) => buildAttachmentItemFromStorage(folder, entry));
+}
+
+async function storageUploadOrderFile(orderId, file) {
+  if (!db || !STORAGE_BUCKET) throw new Error("Storage 未配置");
+  const folder = orderAttachmentFolder(orderId);
+  const safeName = sanitizeAttachmentFileName(file.name);
+  const path = `${folder}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}`;
+  const { error } = await db.storage.from(STORAGE_BUCKET).upload(path, file, {
+    upsert: false,
+    contentType: file.type || undefined,
+    cacheControl: "3600",
+  });
+  if (error) throw error;
+}
+
+async function storageDeleteOrderFile(path) {
+  if (!db || !STORAGE_BUCKET) throw new Error("Storage 未配置");
+  const { error } = await db.storage.from(STORAGE_BUCKET).remove([path]);
+  if (error) throw error;
+}
+
+async function storageDownloadOrderFile(path) {
+  if (!db || !STORAGE_BUCKET) throw new Error("Storage 未配置");
+  const { data, error } = await db.storage.from(STORAGE_BUCKET).download(path);
+  if (error) throw error;
+  return data;
 }
 
 function formatDateTimeShort(value) {
