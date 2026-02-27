@@ -646,7 +646,7 @@ function initSupplierFilterOptions() {
     el.filterSupplier.appendChild(option);
   });
   el.filterSupplier.value = list.includes(current) ? current : "";
-  filterState.supplier = String(el.filterSupplier.value || "").trim().toLowerCase();
+  filterState.supplier = normalizeSupplierSearchText(el.filterSupplier.value || "");
 }
 
 function setupOrderHintPanel() {
@@ -672,7 +672,7 @@ function setupOrderHintPanel() {
 
 function bindFilterEvents() {
   if (el.filterMonth) el.filterMonth.addEventListener("change", (e) => { filterState.month = String(e.target.value || ""); render(); });
-  if (el.filterSupplier) el.filterSupplier.addEventListener("change", (e) => { filterState.supplier = String(e.target.value || "").trim().toLowerCase(); render(); });
+  if (el.filterSupplier) el.filterSupplier.addEventListener("change", (e) => { filterState.supplier = normalizeSupplierSearchText(e.target.value || ""); render(); });
   if (el.filterStatus) el.filterStatus.addEventListener("change", (e) => { filterState.status = String(e.target.value || ""); render(); });
 }
 function bindAuthEvents() {
@@ -775,7 +775,7 @@ function getFilteredRows() {
     const status = getStatus(row, extra);
     const supplierText = getSupplierFilterText(row, extra);
     const monthOk = !filterState.month || getMonthFromOrderNo(row.orderNo) === filterState.month;
-    const supplierOk = !filterState.supplier || supplierText.split(/\s+/).includes(filterState.supplier);
+    const supplierOk = !filterState.supplier || supplierText.includes(filterState.supplier);
     const statusOk = !filterState.status || status === filterState.status;
     return monthOk && supplierOk && statusOk;
   });
@@ -837,7 +837,15 @@ function getSupplierFilterText(row, extra) {
   const groups = parseMaterialGroups(row, extra);
   const supplierList = groups.map((g) => String(g.supplier || "").trim()).filter(Boolean);
   const merged = [String(extra?.supplier || "").trim(), ...supplierList].filter(Boolean);
-  return merged.join(" ").toLowerCase();
+  return normalizeSupplierSearchText(merged.join(" "));
+}
+
+function normalizeSupplierSearchText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[\/|,，;；]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function render() {
