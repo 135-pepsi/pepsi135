@@ -740,9 +740,9 @@ body:not(.material-page) .kpi-grid {
 }
 
 .material-page #orderTable th:nth-child(1),
-.material-page #orderTable td:nth-child(1) { min-width: 90px; }
+.material-page #orderTable td:nth-child(1) { min-width: 120px; width: 120px; }
 .material-page #orderTable th:nth-child(2),
-.material-page #orderTable td:nth-child(2) { min-width: 70px; }
+.material-page #orderTable td:nth-child(2) { min-width: 80px; width: 80px; }
 .material-page #orderTable th:nth-child(3),
 .material-page #orderTable td:nth-child(3) { min-width: 260px; }
 .material-page #orderTable th:nth-child(4),
@@ -812,21 +812,94 @@ body:not(.material-page) .kpi-grid {
   cursor: pointer;
   color: #dff0ff;
   transition: background-color var(--motion-fast) ease;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .material-detail-cell:hover {
   background: rgba(33, 77, 122, 0.45);
 }
 
+.material-detail-head {
+  font-weight: 700;
+  color: #f0f7ff;
+  margin-bottom: 4px;
+}
+
+.material-detail-line + .material-detail-line {
+  margin-top: 2px;
+}
+
 .material-item-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1.2fr;
   gap: 10px;
+  align-items: start;
 }
 
 .material-item-col {
   display: grid;
   gap: 8px;
+}
+
+.material-item-col-fixed {
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+.material-item-col-lines .auth-login-field {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.material-line-list {
+  display: grid;
+  gap: 8px;
+}
+
+.material-line-row {
+  display: grid;
+  grid-template-columns: 1fr 110px 64px;
+  gap: 8px;
+  align-items: center;
+}
+
+.material-item-grid .auth-login-field > select,
+.material-item-grid .auth-login-field > input {
+  min-height: 38px;
+  height: 38px;
+}
+
+#materialItemMaterial,
+#materialItemSupplier {
+  min-height: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border-color: #4f75a1;
+  background: linear-gradient(180deg, #102a49, #0d233d);
+  font-weight: 600;
+}
+
+#materialItemMaterial:focus,
+#materialItemSupplier:focus {
+  border-color: #79c7ff;
+  box-shadow: 0 0 0 2px rgba(74, 166, 223, 0.26);
+}
+
+.material-item-col .auth-login-field {
+  padding: 10px;
+  border: 1px solid #2f5580;
+  border-radius: 10px;
+  background: rgba(12, 35, 61, 0.65);
+}
+
+.material-item-col .auth-login-field > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #cfe6ff;
+  font-size: 12px;
 }
 
 body:not(.material-page) .order-filters {

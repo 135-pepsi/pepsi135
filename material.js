@@ -5,12 +5,14 @@ const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
 
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
+const IS_LOCAL_DEBUG = location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 20) * 1000);
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
 const STATUS_LIST = ["待请购", "待下单", "在途", "部分到货", "材料齐备", "异常"];
 const MATERIAL_OPTIONS = ["", "45#钢", "40Cr", "铝6061", "铝7075", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
 const SUPPLIER_OPTIONS = ["", "供应商A", "供应商B", "供应商C", "供应商D"];
+const SPEC_LINES_PREFIX = "@LINES:";
 const DEFAULT_EXTRA = Object.freeze({
   supplier: "",
   status: "待请购",
@@ -134,14 +136,30 @@ async function init() {
   if (REMOTE_ENABLED) {
     await initAuth();
     await refreshFromRemote();
+    const testAdded = await ensureTestRowExists();
+    if (testAdded) render();
     setInterval(() => {
       if (!syncing && remoteOnline) void refreshFromRemote(false);
     }, AUTO_REFRESH_MS);
   } else {
+    await ensureTestRowExists();
     setModeText("本地模式");
     render();
     setLastSyncTime();
   }
+}
+
+async function ensureTestRowExists() {
+  if (!IS_LOCAL_DEBUG) return false;
+  const exists = rows.some((r) => String(r.orderNo || "").trim().toUpperCase() === "ZZ2602001");
+  if (exists) return false;
+  const testRow = createEmptyRow();
+  testRow.orderNo = "ZZ2602001";
+  testRow.customer = "测试客户";
+  rows.push(testRow);
+  saveExtra(testRow.id, createDefaultExtra());
+  saveLocalRows();
+  return true;
 }
 
 function bindEvents() {
@@ -198,6 +216,8 @@ function ensureMaterialItemDialog() {
     el.materialSpecInput = document.getElementById("materialItemSpec");
     el.materialQtyInput = document.getElementById("materialItemQty");
     el.materialSupplierInput = document.getElementById("materialItemSupplier");
+    el.materialLineList = document.getElementById("materialLineList");
+    el.materialLineAddBtn = document.getElementById("materialLineAddBtn");
     populateMaterialItemSelects();
     return;
   }
@@ -212,13 +232,16 @@ function ensureMaterialItemDialog() {
         <button id="materialItemDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
       <div class="material-item-grid">
-        <div class="material-item-col">
+        <div class="material-item-col material-item-col-fixed">
           <label class="auth-login-field"><span>材质</span><select id="materialItemMaterial"></select></label>
           <label class="auth-login-field"><span>供应商</span><select id="materialItemSupplier"></select></label>
         </div>
-        <div class="material-item-col">
-          <label class="auth-login-field"><span>尺寸</span><input id="materialItemSpec" type="text" /></label>
-          <label class="auth-login-field"><span>数量</span><input id="materialItemQty" type="number" min="0" step="1" /></label>
+        <div class="material-item-col material-item-col-lines">
+          <div class="auth-login-field">
+            <span>尺寸与数量</span>
+            <div id="materialLineList" class="material-line-list"></div>
+            <button id="materialLineAddBtn" class="btn btn-secondary" type="button">新增尺寸行</button>
+          </div>
         </div>
       </div>
       <div class="auth-login-actions">
@@ -238,6 +261,8 @@ function ensureMaterialItemDialog() {
   el.materialSpecInput = document.getElementById("materialItemSpec");
   el.materialQtyInput = document.getElementById("materialItemQty");
   el.materialSupplierInput = document.getElementById("materialItemSupplier");
+  el.materialLineList = document.getElementById("materialLineList");
+  el.materialLineAddBtn = document.getElementById("materialLineAddBtn");
   populateMaterialItemSelects();
 }
 
@@ -345,6 +370,7 @@ function bindDialogEvents() {
   bindActionDialog(el.abnormalDialog, [el.abnormalClose, el.abnormalCancel], () => void saveAbnormal(), el.abnormalSave);
   bindActionDialog(el.materialItemDialog, [el.materialItemClose, el.materialItemCancel], () => void saveMaterialItemDetail(), el.materialItemSave);
   if (el.materialItemClear) el.materialItemClear.addEventListener("click", clearMaterialItemDetail);
+  if (el.materialLineAddBtn) el.materialLineAddBtn.addEventListener("click", () => appendMaterialLineRow("", ""));
   if (el.infoClose) el.infoClose.addEventListener("click", closeInfo);
   if (el.infoOk) el.infoOk.addEventListener("click", closeInfo);
   if (el.infoDialog) el.infoDialog.addEventListener("click", (e) => { if (e.target === el.infoDialog) closeInfo(); });
@@ -433,13 +459,26 @@ function materialDetailCell(row, extra) {
   const td = document.createElement("td");
   td.className = "material-detail-cell";
   td.dataset.id = row.id;
-  const parts = [
-    String(row.material || "").trim(),
-    String(row.spec || "").trim(),
-    row.quantity === "" ? "" : `x${row.quantity}`,
-    String(extra?.supplier || "").trim(),
-  ].filter(Boolean);
-  td.textContent = parts.length ? parts.join(" / ") : "点击填写材质、尺寸、数量、供应商";
+  const parsed = parseSpecLines(row.spec, row.quantity);
+  const material = String(row.material || "").trim();
+  const supplier = String(extra?.supplier || "").trim();
+  const lines = parsed.lines.filter((x) => String(x.size || "").trim() || String(x.qty || "").trim());
+  if (!material && !supplier && lines.length === 0) {
+    td.textContent = "点击填写材质、尺寸、数量、供应商";
+  } else {
+    const head = document.createElement("div");
+    head.className = "material-detail-head";
+    head.textContent = [material, supplier].filter(Boolean).join(" / ");
+    if (head.textContent) td.appendChild(head);
+    lines.forEach((line) => {
+      const item = document.createElement("div");
+      item.className = "material-detail-line";
+      const size = String(line.size || "").trim();
+      const qty = String(line.qty ?? "").trim();
+      item.textContent = qty ? `${size} x${qty}` : size;
+      td.appendChild(item);
+    });
+  }
   td.title = "点击编辑物料明细";
   td.addEventListener("click", () => openMaterialItemDialog(row.id));
   return td;
@@ -672,8 +711,8 @@ function openMaterialItemDialog(rowId) {
   const extra = getExtra(rowId);
   materialItemEditingRowId = rowId;
   setSelectValueWithFallback(el.materialInput, String(row.material || ""), "请选择材质");
-  if (el.materialSpecInput) el.materialSpecInput.value = String(row.spec || "");
-  if (el.materialQtyInput) el.materialQtyInput.value = row.quantity === "" ? "" : String(row.quantity);
+  const parsed = parseSpecLines(row.spec, row.quantity);
+  renderMaterialLineRows(parsed.lines);
   setSelectValueWithFallback(el.materialSupplierInput, String(extra.supplier || ""), "请选择供应商");
   openDialog(el.materialItemDialog);
   if (el.materialInput) el.materialInput.focus();
@@ -681,26 +720,119 @@ function openMaterialItemDialog(rowId) {
 
 function clearMaterialItemDetail() {
   if (el.materialInput) el.materialInput.value = "";
-  if (el.materialSpecInput) el.materialSpecInput.value = "";
-  if (el.materialQtyInput) el.materialQtyInput.value = "";
+  renderMaterialLineRows([{ size: "", qty: "" }]);
   if (el.materialSupplierInput) el.materialSupplierInput.value = "";
+}
+
+function appendMaterialLineRow(size = "", qty = "") {
+  if (!el.materialLineList) return;
+  const row = document.createElement("div");
+  row.className = "material-line-row";
+  const sizeInput = document.createElement("input");
+  sizeInput.type = "text";
+  sizeInput.className = "material-line-size";
+  sizeInput.placeholder = "尺寸";
+  sizeInput.value = String(size || "");
+  const qtyInput = document.createElement("input");
+  qtyInput.type = "number";
+  qtyInput.min = "0";
+  qtyInput.step = "1";
+  qtyInput.className = "material-line-qty";
+  qtyInput.placeholder = "数量";
+  qtyInput.value = qty === "" ? "" : String(qty);
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "action-btn";
+  removeBtn.textContent = "删除";
+  removeBtn.addEventListener("click", () => {
+    row.remove();
+    if (!el.materialLineList?.children.length) appendMaterialLineRow("", "");
+  });
+  row.appendChild(sizeInput);
+  row.appendChild(qtyInput);
+  row.appendChild(removeBtn);
+  el.materialLineList.appendChild(row);
+}
+
+function renderMaterialLineRows(lines = []) {
+  if (!el.materialLineList) return;
+  el.materialLineList.innerHTML = "";
+  if (!lines.length) {
+    appendMaterialLineRow("", "");
+    return;
+  }
+  lines.forEach((line) => appendMaterialLineRow(line.size, line.qty));
+}
+
+function collectMaterialLineRows() {
+  if (!el.materialLineList) return [];
+  const lines = [];
+  el.materialLineList.querySelectorAll(".material-line-row").forEach((rowEl) => {
+    const size = String(rowEl.querySelector(".material-line-size")?.value || "").trim();
+    const qtyRaw = String(rowEl.querySelector(".material-line-qty")?.value || "").trim();
+    const qtyNum = qtyRaw === "" ? NaN : Number(qtyRaw);
+    if (!size && !qtyRaw) return;
+    lines.push({ size, qty: Number.isFinite(qtyNum) && qtyNum >= 0 ? Math.floor(qtyNum) : null });
+  });
+  return lines;
+}
+
+function parseSpecLines(specValue, qtyValue) {
+  const raw = String(specValue || "").trim();
+  if (!raw) return { lines: [] };
+  if (raw.startsWith(SPEC_LINES_PREFIX)) {
+    try {
+      const parsed = JSON.parse(raw.slice(SPEC_LINES_PREFIX.length));
+      if (Array.isArray(parsed)) {
+        return {
+          lines: parsed
+            .map((x) => ({
+              size: String(x?.size || "").trim(),
+              qty: Number.isFinite(Number(x?.qty)) ? Math.floor(Math.max(0, Number(x.qty))) : "",
+            }))
+            .filter((x) => x.size || x.qty !== ""),
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return {
+    lines: [{ size: raw, qty: qtyValue === "" ? "" : Number(qtyValue) || "" }],
+  };
+}
+
+function serializeSpecLines(lines) {
+  const normalized = lines
+    .map((x) => ({ size: String(x.size || "").trim(), qty: x.qty == null ? "" : x.qty }))
+    .filter((x) => x.size || x.qty !== "");
+  if (!normalized.length) return { spec: "", quantity: "" };
+  if (normalized.length === 1) {
+    const one = normalized[0];
+    return { spec: one.size, quantity: one.qty === "" ? "" : String(one.qty) };
+  }
+  const totalQty = normalized.reduce((sum, x) => sum + (x.qty === "" ? 0 : Number(x.qty)), 0);
+  return { spec: `${SPEC_LINES_PREFIX}${JSON.stringify(normalized)}`, quantity: String(totalQty) };
 }
 
 async function saveMaterialItemDetail() {
   const row = rows.find((r) => r.id === materialItemEditingRowId);
   if (!row) return;
   const material = String(el.materialInput?.value || "").trim();
-  const spec = String(el.materialSpecInput?.value || "").trim();
   const supplier = String(el.materialSupplierInput?.value || "").trim();
-  const qtyRaw = String(el.materialQtyInput?.value || "").trim();
-  const qtyNum = qtyRaw === "" ? "" : Number(qtyRaw);
-  if (qtyRaw !== "" && (!Number.isFinite(qtyNum) || qtyNum < 0)) {
-    showInfo("数量必须为大于等于 0 的数字。", "校验失败");
+  const lines = collectMaterialLineRows();
+  if (!lines.length) {
+    showInfo("请至少填写一行尺寸和数量。", "校验失败");
     return;
   }
+  if (lines.some((line) => !line.size || line.qty == null)) {
+    showInfo("每行都需要填写有效的尺寸和数量。", "校验失败");
+    return;
+  }
+  const serialized = serializeSpecLines(lines);
   row.material = material;
-  row.spec = spec;
-  row.quantity = qtyRaw === "" ? "" : String(Math.floor(Math.max(0, qtyNum)));
+  row.spec = serialized.spec;
+  row.quantity = serialized.quantity;
   saveExtra(row.id, { supplier });
   await persist({ changed: [row] });
   materialItemEditingRowId = "";
@@ -777,6 +909,7 @@ async function refreshFromRemote(showAlert = false) {
     const { data, error } = await db.from("mes_materials").select("*").order("updated_at", { ascending: true });
     if (error) throw error;
     rows = (data || []).map(fromDbRow).map((r) => ({ ...r, customer: resolveCustomer(r.orderNo, r.customer) })).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    await ensureTestRowExists();
     saveLocalRows();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     setLastSyncTime();
