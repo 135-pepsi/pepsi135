@@ -68,7 +68,6 @@ const el = {
   filterStatus: document.getElementById("materialFilterStatus"),
   filterOverdueOnly: document.getElementById("materialFilterOverdueOnly"),
   searchInput: document.getElementById("searchInput"),
-  addOrderBtn: document.getElementById("materialAddOrderBtn"),
 
   kpiNeedOrder: document.getElementById("materialKpiNeedOrder"),
   kpiInTransit: document.getElementById("materialKpiInTransit"),
@@ -166,7 +165,6 @@ function bindEvents() {
   bindFilterEvents();
   bindAuthEvents();
   bindDialogEvents();
-  if (el.addOrderBtn) el.addOrderBtn.addEventListener("click", () => void addBlankRow());
   if (el.reconnectBtn) el.reconnectBtn.addEventListener("click", () => void tryReconnect(true));
 
   if (el.backTopBtn) {
@@ -479,6 +477,16 @@ function materialDetailCell(row, extra) {
       td.appendChild(item);
     });
   }
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "material-detail-add-btn action-btn-secondary";
+  addBtn.textContent = "添加";
+  addBtn.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openMaterialItemDialog(row.id);
+  });
+  td.appendChild(addBtn);
   td.title = "点击编辑物料明细";
   td.addEventListener("click", () => openMaterialItemDialog(row.id));
   return td;
@@ -602,7 +610,6 @@ function actionCell(row) {
   const wrap = document.createElement("div");
   wrap.className = "op-actions";
   wrap.append(
-    actionButton("添加行", "action-btn-secondary", () => void addRowAfter(row.id)),
     actionButton("下单", "action-btn-secondary", () => openPoDialog(row.id)),
     actionButton("到货", "action-btn-secondary", () => openArrivalDialog(row.id)),
     actionButton("异常", "action-btn-secondary", () => openAbnormalDialog(row.id)),

@@ -824,11 +824,28 @@ body:not(.material-page) .kpi-grid {
 .material-detail-head {
   font-weight: 700;
   color: #f0f7ff;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border: 1px solid #3a628f;
+  border-radius: 10px;
+  background: rgba(16, 41, 72, 0.7);
 }
 
 .material-detail-line + .material-detail-line {
   margin-top: 2px;
+}
+
+.material-detail-line {
+  padding: 5px 8px;
+  border: 1px solid #315880;
+  border-radius: 8px;
+  background: rgba(11, 33, 58, 0.62);
+}
+
+.material-detail-add-btn {
+  margin-top: 8px;
+  min-height: 30px;
+  padding: 4px 10px;
 }
 
 .material-item-grid {
