@@ -826,12 +826,13 @@ body:not(.material-page) .kpi-grid {
 }
 
 .material-detail-cell {
-  cursor: pointer;
+  cursor: text;
   color: #dff0ff;
   transition: background-color var(--motion-fast) ease;
   text-align: left;
   white-space: normal;
   line-height: 1.35;
+  user-select: text;
 }
 
 .material-detail-cell:hover {

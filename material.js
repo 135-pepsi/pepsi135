@@ -213,7 +213,7 @@ function shouldUseLocalOnlyMode() {
 function isInSummaryCell(node) {
   let cur = node;
   while (cur) {
-    if (cur.nodeType === 1 && cur.classList?.contains("material-summary-cell")) return true;
+    if (cur.nodeType === 1 && (cur.classList?.contains("material-summary-cell") || cur.classList?.contains("material-detail-cell"))) return true;
     cur = cur.parentNode;
   }
   return false;
@@ -1086,6 +1086,13 @@ function materialDetailCell(row, extra, visibleEntries = null) {
   const td = document.createElement("td");
   td.className = "material-detail-cell";
   td.dataset.id = row.id;
+  td.title = "可选中后复制";
+  ["mousedown", "mouseup", "click", "dblclick"].forEach((evt) => {
+    td.addEventListener(evt, (event) => {
+      event.stopPropagation();
+      extendSummarySelectionHold();
+    });
+  });
   const groups = Array.isArray(visibleEntries)
     ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
     : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
@@ -1187,7 +1194,6 @@ function materialDetailCell(row, extra, visibleEntries = null) {
       td.appendChild(group);
     });
   }
-  td.title = "";
   return td;
 }
 
