@@ -449,7 +449,7 @@ function ensureOtherItemDialog() {
         <div class="material-item-col material-item-col-fixed">
           <label class="auth-login-field"><span>名称</span><input id="otherItemName" type="text" placeholder="请输入名称" /></label>
           <label class="auth-login-field"><span>供应商（自定义）</span><input id="otherItemSupplier" type="text" placeholder="请输入供应商" /></label>
-          <label class="auth-login-field"><span>供应商链接</span><input id="otherItemSupplierLink" type="text" placeholder="https://..." /></label>
+          <label class="auth-login-field"><span>链接</span><input id="otherItemSupplierLink" type="text" placeholder="https://..." /></label>
           <div class="auth-login-field">
             <span>规格与数量</span>
             <div id="otherLineList" class="material-line-list"></div>
@@ -2023,12 +2023,8 @@ async function saveOtherItemDetail() {
     showInfo("请填写名称。", "校验失败");
     return;
   }
-  if (!lines.length) {
-    showInfo("请至少填写一行规格和数量。", "校验失败");
-    return;
-  }
-  if (lines.some((line) => !line.size || line.qty == null)) {
-    showInfo("每行都需要填写有效的规格和数量。", "校验失败");
+  if (lines.some((line) => line.qty == null)) {
+    showInfo("如填写明细行，数量必须为有效数字。", "校验失败");
     return;
   }
   const currentGroups = materialItemEditingGroups.length
