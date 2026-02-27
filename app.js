@@ -7,7 +7,9 @@ const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工",
 const MACHINES = ["机台1", "机台2", "机台3", "机台4", "机台5"];
 const FIXED_COL_WIDTHS = { 12: 90 };
 const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
-const PROCESS_CRAFT_OPTIONS = ["下料", "车床", "CNC", "钳工", "热处理", "表面处理", "外协"];
+const PROCESS_SEQUENCE_CRAFT = "工序";
+const PROCESS_SEQUENCE_MAX = 10;
+const PROCESS_CRAFT_OPTIONS = ["下料", "车床", PROCESS_SEQUENCE_CRAFT, "钳工", "热处理", "表面处理", "外协"];
 const XLSX_COLUMNS = [
   { key: "orderNo", title: "订单号" },
   { key: "customer", title: "客户" },
@@ -1562,12 +1564,12 @@ function getSelectedCraftRoute() {
 function getCncStepCountInput() {
   const v = Number(processCncStepInput?.value || 1);
   if (!Number.isFinite(v) || v < 1) return 1;
-  return Math.min(6, Math.floor(v));
+  return Math.min(PROCESS_SEQUENCE_MAX, Math.floor(v));
 }
 
 function syncProcessCncStepVisibility() {
   if (!processCncStepWrap) return;
-  const hasCnc = getSelectedCraftRoute().includes("CNC");
+  const hasCnc = getSelectedCraftRoute().includes(PROCESS_SEQUENCE_CRAFT);
   processCncStepWrap.style.display = hasCnc ? "grid" : "none";
 }
 
@@ -1583,12 +1585,12 @@ function getExpandedCraftRoute() {
   const cncCount = getCncStepCountInput();
   const expanded = [];
   selected.forEach((name) => {
-    if (name !== "CNC") {
+    if (name !== PROCESS_SEQUENCE_CRAFT) {
       expanded.push(name);
       return;
     }
     for (let i = 1; i <= cncCount; i += 1) {
-      expanded.push(`CNC${i}`);
+      expanded.push(`第${i}序`);
     }
   });
   return expanded;
@@ -1597,7 +1599,7 @@ function getExpandedCraftRoute() {
 function normalizeCraftNameFromRouteItem(name) {
   const s = String(name || "").trim();
   if (!s) return "";
-  if (/^CNC\d+$/i.test(s) || /^CNC$/i.test(s)) return "CNC";
+  if (/^第\d+序$/i.test(s) || /^CNC\d*$/i.test(s) || /^工序\d*$/i.test(s)) return PROCESS_SEQUENCE_CRAFT;
   return s;
 }
 
@@ -1810,14 +1812,18 @@ function initProcessTimeOptions() {
   }
   if (processCncStepInput) {
     processCncStepInput.innerHTML = "";
-    for (let i = 1; i <= 6; i += 1) {
+    for (let i = 1; i <= PROCESS_SEQUENCE_MAX; i += 1) {
       const option = document.createElement("option");
       option.value = String(i);
-      option.textContent = String(i);
+      option.textContent = `第${i}序`;
       processCncStepInput.appendChild(option);
     }
     processCncStepInput.value = "1";
     processCncStepInput.addEventListener("change", syncProcessCraftPreview);
+  }
+  if (processCncStepWrap) {
+    const label = processCncStepWrap.querySelector("span");
+    if (label) label.textContent = "工序总序数";
   }
   syncProcessCraftPreview();
   if (processMachineInput) {
@@ -2406,7 +2412,7 @@ function openProcessTimeDialog(orderId) {
   const route = getProcessRoute(order);
   const selectedOrder = getSelectedCraftOrderFromRoute(route);
   const selected = new Set(selectedOrder);
-  const cncCount = route.filter((x) => /^CNC(\d+)?$/i.test(String(x))).length;
+  const cncCount = route.filter((x) => normalizeCraftNameFromRouteItem(x) === PROCESS_SEQUENCE_CRAFT).length;
   if (processCraftOptions) {
     processCraftOrderSeq = 0;
     processCraftOptions.querySelectorAll('input[type="checkbox"]').forEach((el) => {
@@ -2422,7 +2428,7 @@ function openProcessTimeDialog(orderId) {
       }
     });
   }
-  if (processCncStepInput) processCncStepInput.value = String(Math.max(1, cncCount || 1));
+  if (processCncStepInput) processCncStepInput.value = String(Math.max(1, Math.min(PROCESS_SEQUENCE_MAX, cncCount || 1)));
   syncProcessCraftPreview();
   if (processMinutesInput) processMinutesInput.value = order.plannedHours === "" ? "" : String(order.plannedHours);
   if (processMachineInput) processMachineInput.value = order.machine || defaults.machine || "";
