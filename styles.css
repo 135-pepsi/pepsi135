@@ -778,6 +778,42 @@ body:not(.material-page) .kpi-grid {
   color: #dcecff;
 }
 
+.order-hint-desc {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #a9c7e8;
+  line-height: 1.5;
+}
+
+.order-hint-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.order-hint-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.order-hint-text {
+  display: inline-block;
+  font-size: 12px;
+  color: #dcecff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-hint-empty {
+  font-size: 12px;
+  color: #9fbada;
+}
+
 body:not(.material-page) .order-filters {
   position: static;
   top: auto;

@@ -8,7 +8,7 @@ const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_AN
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 20) * 1000);
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
-const STATUS_LIST = ["待请购", "待下单", "在途", "部分到货", "已到货", "异常"];
+const STATUS_LIST = ["待请购", "待下单", "在途", "部分到货", "材料齐备", "异常"];
 const DEFAULT_EXTRA = Object.freeze({
   supplier: "",
   status: "待请购",
@@ -37,6 +37,7 @@ let reconnectTimer = 0;
 let reconnectDelayMs = 5000;
 let pageUnloading = false;
 let activeRowId = "";
+let orderHintListEl = null;
 
 const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
@@ -72,10 +73,8 @@ const el = {
   kpiRisk3d: document.getElementById("materialKpiRisk3d"),
   kpiAmount: document.getElementById("materialKpiAmount"),
   kpiOrderImpact: document.getElementById("materialKpiOrderImpact"),
-
-  warningOverdue: document.getElementById("warningOverdueItems"),
-  warningRisk: document.getElementById("warningRiskItems"),
-  warningSafety: document.getElementById("warningSafetyItems"),
+  orderHintCard: document.getElementById("orderHintCard"),
+  orderHintList: document.getElementById("orderHintList"),
 
   authDialog: document.getElementById("authLoginDialog"),
   authEmail: document.getElementById("authLoginEmailInput"),
@@ -122,7 +121,10 @@ init().catch((e) => {
 });
 
 async function init() {
+  syncPageActionLabels();
+  setupOrderHintPanel();
   bindEvents();
+  initStatusFilterOptions();
   setFilterDefaults();
   rows = loadLocalRows();
   await refreshOrderCustomerMap();
@@ -166,6 +168,49 @@ function bindEvents() {
       closeInfo();
     }
   });
+}
+
+function syncPageActionLabels() {
+  const orderManageLink = document.querySelector('a[href="index.html"]');
+  if (orderManageLink) orderManageLink.textContent = "订单管理";
+}
+
+function initStatusFilterOptions() {
+  if (!el.filterStatus) return;
+  const current = String(el.filterStatus.value || "");
+  el.filterStatus.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "全部";
+  el.filterStatus.appendChild(all);
+  STATUS_LIST.forEach((status) => {
+    const option = document.createElement("option");
+    option.value = status;
+    option.textContent = status;
+    el.filterStatus.appendChild(option);
+  });
+  el.filterStatus.value = STATUS_LIST.includes(current) ? current : "";
+}
+
+function setupOrderHintPanel() {
+  if (el.orderHintList) {
+    orderHintListEl = el.orderHintList;
+    return;
+  }
+  const card = el.orderHintCard;
+  if (!card) return;
+  card.innerHTML = "";
+  const title = document.createElement("h3");
+  title.textContent = "新订单提示";
+  const desc = document.createElement("p");
+  desc.className = "order-hint-desc";
+  desc.textContent = "订单明细出现新订单号后，会在这里提示并显示客户。";
+  const list = document.createElement("ul");
+  list.className = "order-hint-list";
+  card.appendChild(title);
+  card.appendChild(desc);
+  card.appendChild(list);
+  orderHintListEl = list;
 }
 
 function bindFilterEvents() {
@@ -218,12 +263,12 @@ function getSuggestedQty(row, extra) {
 }
 function getStatus(row, extra) {
   if (STATUS_LIST.includes(extra.status)) return extra.status;
-  if (String(row.isReady || "").trim() === "是") return "已到货";
+  if (String(row.isReady || "").trim() === "是") return "材料齐备";
   if (Number(extra.inTransit || 0) > 0) return "在途";
   return "待请购";
 }
 function isOverdue(row, extra) {
-  if (getStatus(row, extra) === "已到货") return false;
+  if (getStatus(row, extra) === "材料齐备") return false;
   if (!extra.promiseDate) return false;
   const d = new Date(extra.promiseDate);
   if (Number.isNaN(d.getTime())) return false;
@@ -261,7 +306,7 @@ function render() {
   const list = getFilteredRows();
   const extraMap = buildExtraMap(list);
   renderKpi(list, extraMap);
-  renderWarnings(list, extraMap);
+  renderOrderHints();
   if (!el.tableBody) return;
   el.tableBody.innerHTML = "";
   list.forEach((row) => {
@@ -298,28 +343,53 @@ function renderKpi(list, extraMap = new Map()) {
   if (el.kpiOrderImpact) el.kpiOrderImpact.textContent = String(impactOrders);
 }
 
-function renderWarnings(list, extraMap = new Map()) {
-  const getRowExtra = (row) => extraMap.get(row.id) || createDefaultExtra();
-  renderWarningList(el.warningOverdue, list.filter((r) => isOverdue(r, getRowExtra(r))));
-  renderWarningList(el.warningRisk, list.filter((r) => isRisk3d(r, getRowExtra(r))));
-  renderWarningList(el.warningSafety, list.filter((r) => { const ex = getRowExtra(r); return getAvailable(r, ex) <= Number(ex.safetyStock || 0); }));
+function getMissingOrderHints() {
+  const materialOrderNos = new Set(rows.map((r) => String(r.orderNo || "").trim().toUpperCase()).filter(Boolean));
+  const hints = [];
+  orderCustomerMap.forEach((customer, orderNo) => {
+    const normalized = String(orderNo || "").trim().toUpperCase();
+    if (!normalized || materialOrderNos.has(normalized)) return;
+    hints.push({ orderNo: normalized, customer: String(customer || "").trim() });
+  });
+  return hints.sort((a, b) => b.orderNo.localeCompare(a.orderNo));
 }
 
-function renderWarningList(container, list) {
-  if (!container) return;
-  container.innerHTML = "";
-  const top = list.slice(0, 8);
-  if (top.length === 0) {
+function renderOrderHints() {
+  if (!orderHintListEl) return;
+  orderHintListEl.innerHTML = "";
+  const hints = getMissingOrderHints().slice(0, 24);
+  if (!hints.length) {
     const li = document.createElement("li");
-    li.textContent = "暂无";
-    container.appendChild(li);
+    li.className = "order-hint-empty";
+    li.textContent = "暂无待建采购行的新订单";
+    orderHintListEl.appendChild(li);
     return;
   }
-  top.forEach((r) => {
+  hints.forEach((item) => {
     const li = document.createElement("li");
-    li.textContent = `${r.orderNo || "-"} ${r.material || ""}`.trim();
-    container.appendChild(li);
+    li.className = "order-hint-item";
+    const text = document.createElement("span");
+    text.className = "order-hint-text";
+    text.textContent = `${item.orderNo} · ${item.customer || "未识别客户"}`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "action-btn-secondary";
+    btn.textContent = "加入采购明细";
+    btn.addEventListener("click", () => { void addRowFromOrderHint(item.orderNo, item.customer); });
+    li.appendChild(text);
+    li.appendChild(btn);
+    orderHintListEl.appendChild(li);
   });
+}
+
+async function addRowFromOrderHint(orderNo, customer) {
+  const next = createEmptyRow();
+  next.orderNo = String(orderNo || "").trim().toUpperCase();
+  next.customer = String(customer || "").trim();
+  rows.push(next);
+  saveExtra(next.id, createDefaultExtra());
+  await persist({ changed: [next], notifyAuth: false });
+  render();
 }
 function textCell(text) { const td = document.createElement("td"); td.textContent = String(text ?? ""); return td; }
 function editCell(row, key) { const td = document.createElement("td"); td.dataset.id = row.id; td.dataset.key = key; td.textContent = String(row[key] ?? ""); td.addEventListener("dblclick", () => beginEdit(td)); return td; }
@@ -388,8 +458,6 @@ function actionButton(text, cls, click) { const b = document.createElement("butt
 
 async function addBlankRow() {
   const next = createEmptyRow();
-  const last = rows[rows.length - 1];
-  if (last) { next.orderNo = last.orderNo || ""; next.customer = last.customer || ""; }
   rows.push(next);
   saveExtra(next.id, createDefaultExtra());
   await persist({ changed: [next], notifyAuth: false });
@@ -455,10 +523,10 @@ async function saveArrival() {
   if (qty <= 0) { showInfo("请填写大于 0 的到货数量。", "校验失败"); return; }
   const e = getExtra(row.id);
   const left = Math.max(0, Number(e.inTransit || 0) - qty);
-  const status = left > 0 ? "部分到货" : "已到货";
+  const status = left > 0 ? "部分到货" : "材料齐备";
   saveExtra(row.id, { inTransit: left, actualDate: String(el.arrivalDate?.value || "").trim(), status });
   row.quantity = getCurrentStock(row) + qty;
-  row.isReady = status === "已到货" ? "是" : "否";
+  row.isReady = status === "材料齐备" ? "是" : "否";
   await persist({ changed: [row] });
   closeDialog(el.arrivalDialog);
   render();
@@ -543,6 +611,7 @@ async function persist({ changed = [], deletedId = "", notifyAuth = true } = {})
 async function refreshFromRemote(showAlert = false) {
   if (!REMOTE_ENABLED || !remoteOnline) return;
   try {
+    await refreshOrderCustomerMap(false);
     const { data, error } = await db.from("mes_materials").select("*").order("updated_at", { ascending: true });
     if (error) throw error;
     rows = (data || []).map(fromDbRow).map((r) => ({ ...r, customer: resolveCustomer(r.orderNo, r.customer) })).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
@@ -590,7 +659,7 @@ async function tryReconnect(manual) {
   }
 }
 
-async function refreshOrderCustomerMap() {
+async function refreshOrderCustomerMap(syncRows = true) {
   if (REMOTE_ENABLED && remoteOnline) {
     try {
       const { data, error } = await db.from("mes_orders").select("order_no,customer,updated_at").neq("order_no", "").order("updated_at", { ascending: true });
@@ -602,7 +671,8 @@ async function refreshOrderCustomerMap() {
         map.set(key, String(item.customer || "").trim());
       });
       orderCustomerMap = map;
-      await syncCustomerFromOrderMap();
+      if (syncRows) await syncCustomerFromOrderMap();
+      renderOrderHints();
       return;
     } catch {
       // fallback
@@ -619,7 +689,8 @@ async function refreshOrderCustomerMap() {
       map.set(key, String(item?.customer || "").trim());
     });
     orderCustomerMap = map;
-    await syncCustomerFromOrderMap();
+    if (syncRows) await syncCustomerFromOrderMap();
+    renderOrderHints();
   } catch {
     // ignore
   }

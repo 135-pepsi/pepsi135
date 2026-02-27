@@ -1,120 +1,120 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>元源紫泽 物料采购跟踪</title>
+  <title>鍏冩簮绱辰 鐗╂枡閲囪喘璺熻釜</title>
   <link rel="stylesheet" href="styles.css?v=20260226v" />
 </head>
 <body class="material-page">
   <header class="topbar">
     <div>
-      <h1>元源紫泽 物料采购跟踪</h1>
-      <p>轻量 MRP + 看板补货（5台 CNC） · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
+      <h1>鍏冩簮绱辰 鐗╂枡閲囪喘璺熻釜</h1>
+      <p>杞婚噺 MRP + 鐪嬫澘琛ヨ揣锛?鍙?CNC锛?路 <span id="systemMode">鏈湴妯″紡</span> 路 <span id="lastSyncTime">鏈€杩戝悓姝?--</span></p>
     </div>
     <div class="actions">
       <div class="actions-row actions-auth-row">
-        <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
-        <button id="loginBtn" class="btn" type="button">邮箱登录</button>
-        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">退出登录</button>
+        <span id="authUser" class="auth-user" title="褰撳墠鐧诲綍璐﹀彿">鏈櫥褰?/span>
+        <button id="loginBtn" class="btn" type="button">閭鐧诲綍</button>
+        <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">閫€鍑虹櫥褰?/button>
       </div>
       <div class="actions-row actions-main-row">
-        <button id="reconnectBtn" class="btn btn-secondary" type="button">重连云端</button>
-        <a class="btn btn-secondary" href="index.html">返回订单页面</a>
+        <button id="reconnectBtn" class="btn btn-secondary" type="button">閲嶈繛浜戠</button>
+        <a class="btn btn-secondary" href="index.html">订单管理</a>
       </div>
     </div>
   </header>
 
   <main>
     <section class="kpi-grid material-kpi-grid">
-      <article class="kpi-card kpi-a"><span>待下单数</span><strong id="materialKpiNeedOrder">0</strong></article>
-      <article class="kpi-card kpi-b"><span>在途数</span><strong id="materialKpiInTransit">0</strong></article>
-      <article class="kpi-card kpi-c"><span>超期未到货</span><strong id="materialKpiOverdue">0</strong></article>
-      <article class="kpi-card kpi-d"><span>3天缺料风险</span><strong id="materialKpiRisk3d">0</strong></article>
-      <article class="kpi-card kpi-a"><span>总采购金额</span><strong id="materialKpiAmount">¥0.00</strong></article>
-      <article class="kpi-card kpi-b"><span>影响订单数</span><strong id="materialKpiOrderImpact">0</strong></article>
+      <article class="kpi-card kpi-a"><span>寰呬笅鍗曟暟</span><strong id="materialKpiNeedOrder">0</strong></article>
+      <article class="kpi-card kpi-b"><span>鍦ㄩ€旀暟</span><strong id="materialKpiInTransit">0</strong></article>
+      <article class="kpi-card kpi-c"><span>瓒呮湡鏈埌璐?/span><strong id="materialKpiOverdue">0</strong></article>
+      <article class="kpi-card kpi-d"><span>3澶╃己鏂欓闄?/span><strong id="materialKpiRisk3d">0</strong></article>
+      <article class="kpi-card kpi-a"><span>鎬婚噰璐噾棰?/span><strong id="materialKpiAmount">楼0.00</strong></article>
+      <article class="kpi-card kpi-b"><span>褰卞搷璁㈠崟鏁?/span><strong id="materialKpiOrderImpact">0</strong></article>
     </section>
 
     <section class="material-layout">
       <aside class="material-side-card">
-        <h3>筛选</h3>
+        <h3>绛涢€?/h3>
         <div class="material-filter-grid">
           <label>
-            <span>按月</span>
+            <span>鎸夋湀</span>
             <select id="materialFilterMonth">
-              <option value="">全部</option>
-              <option value="01">01月</option>
-              <option value="02">02月</option>
-              <option value="03">03月</option>
-              <option value="04">04月</option>
-              <option value="05">05月</option>
-              <option value="06">06月</option>
-              <option value="07">07月</option>
-              <option value="08">08月</option>
-              <option value="09">09月</option>
-              <option value="10">10月</option>
-              <option value="11">11月</option>
-              <option value="12">12月</option>
+              <option value="">鍏ㄩ儴</option>
+              <option value="01">01鏈?/option>
+              <option value="02">02鏈?/option>
+              <option value="03">03鏈?/option>
+              <option value="04">04鏈?/option>
+              <option value="05">05鏈?/option>
+              <option value="06">06鏈?/option>
+              <option value="07">07鏈?/option>
+              <option value="08">08鏈?/option>
+              <option value="09">09鏈?/option>
+              <option value="10">10鏈?/option>
+              <option value="11">11鏈?/option>
+              <option value="12">12鏈?/option>
             </select>
           </label>
           <label>
-            <span>供应商</span>
-            <input id="materialFilterSupplier" placeholder="输入供应商" />
+            <span>渚涘簲鍟?/span>
+            <input id="materialFilterSupplier" placeholder="杈撳叆渚涘簲鍟? />
           </label>
           <label>
-            <span>状态</span>
+            <span>鐘舵€?/span>
             <select id="materialFilterStatus">
-              <option value="">全部</option>
-              <option value="待请购">待请购</option>
-              <option value="待下单">待下单</option>
-              <option value="在途">在途</option>
-              <option value="部分到货">部分到货</option>
-              <option value="已到货">已到货</option>
-              <option value="异常">异常</option>
+              <option value="">鍏ㄩ儴</option>
+              <option value="寰呰璐?>寰呰璐?/option>
+              <option value="寰呬笅鍗?>寰呬笅鍗?/option>
+              <option value="鍦ㄩ€?>鍦ㄩ€?/option>
+              <option value="閮ㄥ垎鍒拌揣">閮ㄥ垎鍒拌揣</option>
+              <option value="宸插埌璐?>宸插埌璐?/option>
+              <option value="寮傚父">寮傚父</option>
             </select>
           </label>
           <label>
-            <span>机台</span>
+            <span>鏈哄彴</span>
             <select id="materialFilterMachine">
-              <option value="">全部</option>
-              <option value="机台1">机台1</option>
-              <option value="机台2">机台2</option>
-              <option value="机台3">机台3</option>
-              <option value="机台4">机台4</option>
-              <option value="机台5">机台5</option>
+              <option value="">鍏ㄩ儴</option>
+              <option value="鏈哄彴1">鏈哄彴1</option>
+              <option value="鏈哄彴2">鏈哄彴2</option>
+              <option value="鏈哄彴3">鏈哄彴3</option>
+              <option value="鏈哄彴4">鏈哄彴4</option>
+              <option value="鏈哄彴5">鏈哄彴5</option>
             </select>
           </label>
           <label class="check-row">
             <input id="materialFilterOverdueOnly" type="checkbox" />
-            <span>仅看超期</span>
+            <span>浠呯湅瓒呮湡</span>
           </label>
           <label>
-            <span>关键字</span>
-            <input id="searchInput" placeholder="订单号/客户/物料/规格" />
+            <span>鍏抽敭瀛?/span>
+            <input id="searchInput" placeholder="璁㈠崟鍙?瀹㈡埛/鐗╂枡/瑙勬牸" />
           </label>
         </div>
       </aside>
 
       <section class="material-main-card">
         <div class="material-main-head">
-          <h3>采购明细</h3>
-          <button id="materialAddOrderBtn" class="btn btn-primary" type="button">新增行</button>
+          <h3>閲囪喘鏄庣粏</h3>
+          <button id="materialAddOrderBtn" class="btn btn-primary" type="button">鏂板琛?/button>
         </div>
         <div class="table-wrap" id="tableWrap">
           <table id="orderTable">
             <thead>
               <tr>
-                <th>订单号</th>
-                <th>客户</th>
-                <th>物料</th>
-                <th>规格</th>
-                <th>库存</th>
-                <th>可用量</th>
-                <th>安全库存</th>
-                <th>建议采购量</th>
-                <th>承诺到货</th>
-                <th>状态</th>
-                <th>操作</th>
+                <th>璁㈠崟鍙?/th>
+                <th>瀹㈡埛</th>
+                <th>鐗╂枡</th>
+                <th>瑙勬牸</th>
+                <th>搴撳瓨</th>
+                <th>鍙敤閲?/th>
+                <th>瀹夊叏搴撳瓨</th>
+                <th>寤鸿閲囪喘閲?/th>
+                <th>鎵胯鍒拌揣</th>
+                <th>鐘舵€?/th>
+                <th>鎿嶄綔</th>
               </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -122,47 +122,37 @@
         </div>
       </section>
 
-      <aside class="material-side-card">
-        <h3>预警卡</h3>
-        <div class="warning-list">
-          <h4>超期未到货</h4>
-          <ul id="warningOverdueItems"></ul>
-        </div>
-        <div class="warning-list">
-          <h4>未来3天缺料风险</h4>
-          <ul id="warningRiskItems"></ul>
-        </div>
-        <div class="warning-list">
-          <h4>低于安全库存</h4>
-          <ul id="warningSafetyItems"></ul>
-        </div>
+      <aside class="material-side-card" id="orderHintCard">
+        <h3>新订单提示</h3>
+        <p class="order-hint-desc">订单明细出现新订单号后，会在这里提示并显示客户。</p>
+        <ul id="orderHintList" class="order-hint-list"></ul>
       </aside>
     </section>
 
-    <p class="hint">提示：双击可编辑基础字段；采购操作请使用“下单/到货/异常”按钮。</p>
+    <p class="hint">鎻愮ず锛氬弻鍑诲彲缂栬緫鍩虹瀛楁锛涢噰璐搷浣滆浣跨敤鈥滀笅鍗?鍒拌揣/寮傚父鈥濇寜閽€?/p>
   </main>
 
   <div id="authLoginDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel auth-login-panel" role="dialog" aria-modal="true" aria-labelledby="authLoginTitle">
       <header class="dialog-head">
-        <h3 id="authLoginTitle">邮箱登录</h3>
-        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="authLoginTitle">閭鐧诲綍</h3>
+        <button id="authLoginCloseBtn" class="btn btn-secondary" type="button">鍏抽棴</button>
       </header>
-      <p class="dialog-subtitle">优先使用邮箱+密码登录；也可发送登录邮件。</p>
+      <p class="dialog-subtitle">浼樺厛浣跨敤閭+瀵嗙爜鐧诲綍锛涗篃鍙彂閫佺櫥褰曢偖浠躲€?/p>
       <div class="auth-login-form">
         <label class="auth-login-field" for="authLoginEmailInput">
-          <span>邮箱</span>
+          <span>閭</span>
           <input id="authLoginEmailInput" type="email" autocomplete="email" placeholder="name@example.com" />
         </label>
         <label class="auth-login-field" for="authLoginPasswordInput">
-          <span>密码</span>
-          <input id="authLoginPasswordInput" type="password" autocomplete="current-password" placeholder="请输入密码" />
+          <span>瀵嗙爜</span>
+          <input id="authLoginPasswordInput" type="password" autocomplete="current-password" placeholder="璇疯緭鍏ュ瘑鐮? />
         </label>
       </div>
       <div class="auth-login-actions">
-        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="authPasswordLoginBtn" class="btn btn-primary" type="button">密码登录</button>
-        <button id="authLoginSubmitBtn" class="btn btn-secondary" type="button">发送登录邮件</button>
+        <button id="authLoginCancelBtn" class="btn btn-secondary" type="button">鍙栨秷</button>
+        <button id="authPasswordLoginBtn" class="btn btn-primary" type="button">瀵嗙爜鐧诲綍</button>
+        <button id="authLoginSubmitBtn" class="btn btn-secondary" type="button">鍙戦€佺櫥褰曢偖浠?/button>
       </div>
     </section>
   </div>
@@ -170,18 +160,18 @@
   <div id="poDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="poDialogTitle">
       <header class="dialog-head">
-        <h3 id="poDialogTitle">下单</h3>
-        <button id="poDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="poDialogTitle">涓嬪崟</h3>
+        <button id="poDialogCloseBtn" class="btn btn-secondary" type="button">鍏抽棴</button>
       </header>
       <div class="auth-login-form">
-        <label class="auth-login-field"><span>供应商</span><input id="poSupplier" /></label>
-        <label class="auth-login-field"><span>采购数量</span><input id="poQty" type="number" min="0" step="1" /></label>
-        <label class="auth-login-field"><span>单价</span><input id="poPrice" type="number" min="0" step="0.01" /></label>
-        <label class="auth-login-field"><span>承诺交期</span><input id="poPromiseDate" type="date" /></label>
+        <label class="auth-login-field"><span>渚涘簲鍟?/span><input id="poSupplier" /></label>
+        <label class="auth-login-field"><span>閲囪喘鏁伴噺</span><input id="poQty" type="number" min="0" step="1" /></label>
+        <label class="auth-login-field"><span>鍗曚环</span><input id="poPrice" type="number" min="0" step="0.01" /></label>
+        <label class="auth-login-field"><span>鎵胯浜ゆ湡</span><input id="poPromiseDate" type="date" /></label>
       </div>
       <div class="auth-login-actions">
-        <button id="poCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="poSaveBtn" class="btn btn-primary" type="button">保存</button>
+        <button id="poCancelBtn" class="btn btn-secondary" type="button">鍙栨秷</button>
+        <button id="poSaveBtn" class="btn btn-primary" type="button">淇濆瓨</button>
       </div>
     </section>
   </div>
@@ -189,16 +179,16 @@
   <div id="arrivalDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="arrivalDialogTitle">
       <header class="dialog-head">
-        <h3 id="arrivalDialogTitle">到货</h3>
-        <button id="arrivalDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="arrivalDialogTitle">鍒拌揣</h3>
+        <button id="arrivalDialogCloseBtn" class="btn btn-secondary" type="button">鍏抽棴</button>
       </header>
       <div class="auth-login-form">
-        <label class="auth-login-field"><span>到货数量</span><input id="arrivalQty" type="number" min="0" step="1" /></label>
-        <label class="auth-login-field"><span>到货日期</span><input id="arrivalDate" type="date" /></label>
+        <label class="auth-login-field"><span>鍒拌揣鏁伴噺</span><input id="arrivalQty" type="number" min="0" step="1" /></label>
+        <label class="auth-login-field"><span>鍒拌揣鏃ユ湡</span><input id="arrivalDate" type="date" /></label>
       </div>
       <div class="auth-login-actions">
-        <button id="arrivalCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="arrivalSaveBtn" class="btn btn-primary" type="button">保存</button>
+        <button id="arrivalCancelBtn" class="btn btn-secondary" type="button">鍙栨秷</button>
+        <button id="arrivalSaveBtn" class="btn btn-primary" type="button">淇濆瓨</button>
       </div>
     </section>
   </div>
@@ -206,17 +196,17 @@
   <div id="abnormalDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="abnormalDialogTitle">
       <header class="dialog-head">
-        <h3 id="abnormalDialogTitle">异常</h3>
-        <button id="abnormalDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="abnormalDialogTitle">寮傚父</h3>
+        <button id="abnormalDialogCloseBtn" class="btn btn-secondary" type="button">鍏抽棴</button>
       </header>
       <div class="auth-login-form">
-        <label class="auth-login-field"><span>延期原因</span><input id="abnormalReason" /></label>
-        <label class="auth-login-field"><span>替代料</span><input id="abnormalAltMaterial" /></label>
-        <label class="auth-login-field"><span>预计恢复时间</span><input id="abnormalRecoverDate" type="date" /></label>
+        <label class="auth-login-field"><span>寤舵湡鍘熷洜</span><input id="abnormalReason" /></label>
+        <label class="auth-login-field"><span>鏇夸唬鏂?/span><input id="abnormalAltMaterial" /></label>
+        <label class="auth-login-field"><span>棰勮鎭㈠鏃堕棿</span><input id="abnormalRecoverDate" type="date" /></label>
       </div>
       <div class="auth-login-actions">
-        <button id="abnormalCancelBtn" class="btn btn-secondary" type="button">取消</button>
-        <button id="abnormalSaveBtn" class="btn btn-primary" type="button">保存</button>
+        <button id="abnormalCancelBtn" class="btn btn-secondary" type="button">鍙栨秷</button>
+        <button id="abnormalSaveBtn" class="btn btn-primary" type="button">淇濆瓨</button>
       </div>
     </section>
   </div>
@@ -224,17 +214,17 @@
   <div id="infoDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="infoDialogTitle">
       <header class="dialog-head">
-        <h3 id="infoDialogTitle">提示</h3>
-        <button id="infoDialogCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+        <h3 id="infoDialogTitle">鎻愮ず</h3>
+        <button id="infoDialogCloseBtn" class="btn btn-secondary" type="button">鍏抽棴</button>
       </header>
       <p id="infoDialogText" class="dialog-subtitle"></p>
       <div class="confirm-actions">
-        <button id="infoDialogOkBtn" class="btn btn-primary" type="button">知道了</button>
+        <button id="infoDialogOkBtn" class="btn btn-primary" type="button">鐭ラ亾浜?/button>
       </div>
     </section>
   </div>
 
-  <button id="backTopBtn" class="back-top-btn" title="返回顶部">返回顶部</button>
+  <button id="backTopBtn" class="back-top-btn" title="杩斿洖椤堕儴">杩斿洖椤堕儴</button>
 
   <script src="supabase.min.js?v=20260226v"></script>
   <script src="config.prod.js?v=20260226v"></script>
@@ -251,3 +241,5 @@
   <script src="material.js?v=20260226v"></script>
 </body>
 </html>
+
+

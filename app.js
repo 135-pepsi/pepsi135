@@ -192,6 +192,7 @@ const SURFACE_TITLE_BASE = "表面处理设置";
 init();
 
 async function init() {
+  syncPageActionLabels();
   bindEvents();
   applyCompactMode();
   setupColumnResizers();
@@ -225,6 +226,11 @@ function setLastSyncTime() {
   const d = new Date(lastSyncAt);
   const t = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
   lastSyncTime.textContent = `最近同步 ${t}`;
+}
+
+function syncPageActionLabels() {
+  const materialManageLink = document.querySelector('a[href="material.html"]');
+  if (materialManageLink) materialManageLink.textContent = "物料管理";
 }
 
 function makeOrderFieldKey(orderId, key) {
