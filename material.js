@@ -255,14 +255,14 @@ function bindHeaderActions() {
   const addOtherBtn = document.getElementById("materialHeaderAddOtherBtn");
   if (addMaterialBtn) addMaterialBtn.addEventListener("click", () => {
     if (!selectedRowId) {
-      showInfo("请先点击一行，再使用表头添加。", "提示");
+      showInfo("请先选择订单（点击一行订单）再添加物料。", "提示");
       return;
     }
     void addMaterialForOrderRow(selectedRowId);
   });
   if (addOtherBtn) addOtherBtn.addEventListener("click", () => {
     if (!selectedRowId) {
-      showInfo("请先点击一行，再使用表头添加。", "提示");
+      showInfo("请先选择订单（点击一行订单）再添加其他。", "提示");
       return;
     }
     void addOtherForOrderRow(selectedRowId);
@@ -2019,10 +2019,6 @@ async function saveOtherItemDetail() {
   const supplier = String(el.otherSupplierInput?.value || "").trim();
   const supplierLink = String(el.otherSupplierLinkInput?.value || "").trim();
   const lines = collectOtherLineRows();
-  if (!material) {
-    showInfo("请填写名称。", "校验失败");
-    return;
-  }
   if (lines.some((line) => line.qty == null)) {
     showInfo("如填写明细行，数量必须为有效数字。", "校验失败");
     return;
