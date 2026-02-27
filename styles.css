@@ -730,15 +730,19 @@ body:not(.material-page) .kpi-grid {
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
+.material-main-card #orderHintCard {
+  margin: 10px 12px 12px;
+}
+
 .material-page #orderTable th,
 .material-page #orderTable td {
   white-space: nowrap;
 }
 
 .material-page #orderTable th:nth-child(1),
-.material-page #orderTable td:nth-child(1) { min-width: 120px; }
+.material-page #orderTable td:nth-child(1) { min-width: 90px; }
 .material-page #orderTable th:nth-child(2),
-.material-page #orderTable td:nth-child(2) { min-width: 90px; }
+.material-page #orderTable td:nth-child(2) { min-width: 70px; }
 .material-page #orderTable th:nth-child(3),
 .material-page #orderTable td:nth-child(3) { min-width: 260px; }
 .material-page #orderTable th:nth-child(4),

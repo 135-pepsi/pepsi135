@@ -46,7 +46,6 @@ const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
   supplier: "",
   status: "",
-  machine: "",
   overdueOnly: false,
   keyword: "",
 };
@@ -65,7 +64,6 @@ const el = {
   filterMonth: document.getElementById("materialFilterMonth"),
   filterSupplier: document.getElementById("materialFilterSupplier"),
   filterStatus: document.getElementById("materialFilterStatus"),
-  filterMachine: document.getElementById("materialFilterMachine"),
   filterOverdueOnly: document.getElementById("materialFilterOverdueOnly"),
   searchInput: document.getElementById("searchInput"),
   addOrderBtn: document.getElementById("materialAddOrderBtn"),
@@ -328,7 +326,6 @@ function bindFilterEvents() {
   if (el.filterMonth) el.filterMonth.addEventListener("change", (e) => { filterState.month = String(e.target.value || ""); render(); });
   if (el.filterSupplier) el.filterSupplier.addEventListener("input", (e) => { filterState.supplier = String(e.target.value || "").trim().toLowerCase(); render(); });
   if (el.filterStatus) el.filterStatus.addEventListener("change", (e) => { filterState.status = String(e.target.value || ""); render(); });
-  if (el.filterMachine) el.filterMachine.addEventListener("change", (e) => { filterState.machine = String(e.target.value || ""); render(); });
   if (el.filterOverdueOnly) el.filterOverdueOnly.addEventListener("change", (e) => { filterState.overdueOnly = Boolean(e.target.checked); render(); });
   if (el.searchInput) el.searchInput.addEventListener("input", (e) => { filterState.keyword = String(e.target.value || "").trim().toLowerCase(); render(); });
 }
@@ -405,11 +402,10 @@ function getFilteredRows() {
     const monthOk = !filterState.month || getMonthFromOrderNo(row.orderNo) === filterState.month;
     const supplierOk = !filterState.supplier || String(extra.supplier || "").toLowerCase().includes(filterState.supplier);
     const statusOk = !filterState.status || status === filterState.status;
-    const machineOk = !filterState.machine || String(extra.machine || "") === filterState.machine;
     const overdueOk = !filterState.overdueOnly || isOverdue(row, extra);
-    if (!(monthOk && supplierOk && statusOk && machineOk && overdueOk)) return false;
+    if (!(monthOk && supplierOk && statusOk && overdueOk)) return false;
     if (!filterState.keyword) return true;
-    const hay = [row.orderNo, row.customer, row.material, row.spec, extra.supplier, extra.machine, status].join(" ").toLowerCase();
+    const hay = [row.orderNo, row.customer, row.material, row.spec, extra.supplier, status].join(" ").toLowerCase();
     return hay.includes(filterState.keyword);
   });
 }

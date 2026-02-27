@@ -28,12 +28,6 @@
   <main>
     <section class="material-layout">
       <div class="material-left-col">
-        <aside class="material-side-card" id="orderHintCard">
-          <h3>新订单提示</h3>
-          <p class="order-hint-desc">订单明细出现新订单号后，会在这里提示并显示客户。</p>
-          <ul id="orderHintList" class="order-hint-list"></ul>
-        </aside>
-
         <aside class="material-side-card">
           <h3>筛选</h3>
           <div class="material-filter-grid">
@@ -65,17 +59,6 @@
                 <option value="">全部</option>
               </select>
             </label>
-            <label>
-              <span>机台</span>
-              <select id="materialFilterMachine">
-                <option value="">全部</option>
-                <option value="机台1">机台1</option>
-                <option value="机台2">机台2</option>
-                <option value="机台3">机台3</option>
-                <option value="机台4">机台4</option>
-                <option value="机台5">机台5</option>
-              </select>
-            </label>
             <label class="check-row">
               <input id="materialFilterOverdueOnly" type="checkbox" />
               <span>仅看超期</span>
@@ -100,12 +83,6 @@
                 <th>订单号</th>
                 <th>客户</th>
                 <th>物料</th>
-                <th>规格</th>
-                <th>库存</th>
-                <th>可用量</th>
-                <th>安全库存</th>
-                <th>建议采购量</th>
-                <th>承诺到货</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -113,6 +90,12 @@
             <tbody id="tableBody"></tbody>
           </table>
         </div>
+
+        <aside class="material-side-card" id="orderHintCard">
+          <h3>新订单提示</h3>
+          <p class="order-hint-desc">订单明细出现新订单号后，会在这里提示并显示客户。</p>
+          <ul id="orderHintList" class="order-hint-list"></ul>
+        </aside>
       </section>
     </section>
 
