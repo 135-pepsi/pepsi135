@@ -8,6 +8,8 @@ const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const IS_LOCAL_DEBUG = location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 20) * 1000);
+const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
+const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 
 const STATUS_LIST = ["下单", "采购", "到货", "异常"];
@@ -57,6 +59,8 @@ let amountEditingGroupIndex = -1;
 let selectedRowId = "";
 let supplierCustomBound = false;
 let otherScreenshotDataUrl = "";
+let screenshotPreviewRenderToken = 0;
+const screenshotObjectUrlCache = new Map();
 
 const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
@@ -1053,7 +1057,7 @@ function materialDetailCell(row, extra) {
         group.addEventListener("click", (event) => {
           const target = event.target;
           if (target instanceof HTMLElement && target.closest(".material-detail-group-actions")) return;
-          openImagePreview(screenshot);
+          void openImagePreview(screenshot);
         });
       }
       const head = document.createElement("div");
@@ -1391,10 +1395,13 @@ function openDialog(d) { if (!d) return; d.hidden = false; document.body.style.o
 function closeDialog(d) { if (!d) return; d.hidden = true; refreshBodyOverflow(); }
 function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.otherDialog, el.amountDialog, el.infoDialog, el.imagePreviewDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
 
-function openImagePreview(dataUrl) {
+async function openImagePreview(dataUrl) {
   if (!el.imagePreviewDialog || !el.imagePreviewBody) return;
-  const src = String(dataUrl || "").trim();
-  if (!src) return;
+  const src = await resolveScreenshotPreviewSrc(dataUrl);
+  if (!src) {
+    showInfo("截图预览加载失败。", "提示");
+    return;
+  }
   el.imagePreviewBody.innerHTML = "";
   const img = document.createElement("img");
   img.src = src;
@@ -1591,7 +1598,7 @@ function openOtherItemDialog(rowId, options = {}) {
   if (el.otherNameInput) el.otherNameInput.value = String(currentGroup.material || "");
   if (el.otherSupplierInput) el.otherSupplierInput.value = String(currentGroup.supplier || "");
   otherScreenshotDataUrl = String(currentGroup.screenshot || "");
-  renderOtherScreenshotPreview();
+  void renderOtherScreenshotPreview();
   if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
   renderOtherLineRows(currentGroup.lines);
   openDialog(el.otherDialog);
@@ -1608,25 +1615,7 @@ function clearOtherItemDetail() {
 async function handleOtherScreenshotChange() {
   const file = el.otherScreenshotInput?.files?.[0];
   if (!file) return;
-  if (!String(file.type || "").startsWith("image/")) {
-    showInfo("请上传图片文件。", "校验失败");
-    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
-    return;
-  }
-  const maxBytes = 2 * 1024 * 1024;
-  if (file.size > maxBytes) {
-    showInfo("截图大小不能超过 2MB。", "校验失败");
-    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
-    return;
-  }
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("读取截图失败"));
-    reader.readAsDataURL(file);
-  }).catch(() => "");
-  otherScreenshotDataUrl = String(dataUrl || "");
-  renderOtherScreenshotPreview();
+  await setOtherScreenshotFromFile(file);
 }
 
 async function captureOtherScreenshot() {
@@ -1654,8 +1643,13 @@ async function captureOtherScreenshot() {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("截图上下文创建失败");
     ctx.drawImage(video, 0, 0, width, height);
-    otherScreenshotDataUrl = canvas.toDataURL("image/png");
-    renderOtherScreenshotPreview();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+    if (!blob) throw new Error("截图生成失败");
+    const row = rows.find((r) => r.id === otherItemEditingRowId);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const fileName = `material_screenshot_${row?.orderNo || row?.id || "row"}_${ts}.png`;
+    const file = new File([blob], fileName, { type: "image/png" });
+    await setOtherScreenshotFromFile(file);
     if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
   } catch (e) {
     const name = String(e?.name || "");
@@ -1670,21 +1664,143 @@ async function captureOtherScreenshot() {
 function clearOtherScreenshot() {
   otherScreenshotDataUrl = "";
   if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
-  renderOtherScreenshotPreview();
+  void renderOtherScreenshotPreview();
 }
 
-function renderOtherScreenshotPreview() {
+async function renderOtherScreenshotPreview() {
   if (!el.otherScreenshotPreview) return;
+  const token = ++screenshotPreviewRenderToken;
   el.otherScreenshotPreview.innerHTML = "";
   if (!otherScreenshotDataUrl) {
     el.otherScreenshotPreview.textContent = "未上传截图";
     return;
   }
+  const previewSrc = await resolveScreenshotPreviewSrc(otherScreenshotDataUrl);
+  if (token !== screenshotPreviewRenderToken) return;
+  if (!previewSrc) {
+    el.otherScreenshotPreview.textContent = "截图预览加载失败";
+    return;
+  }
   const img = document.createElement("img");
-  img.src = otherScreenshotDataUrl;
+  img.src = previewSrc;
   img.alt = "截图预览";
   img.loading = "lazy";
   el.otherScreenshotPreview.appendChild(img);
+}
+
+async function setOtherScreenshotFromFile(file) {
+  if (!file) return;
+  if (!String(file.type || "").startsWith("image/")) {
+    showInfo("请上传图片文件。", "校验失败");
+    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
+    return;
+  }
+  const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
+  if (file.size > maxBytes) {
+    showInfo(`截图大小不能超过 ${UPLOAD_MAX_MB}MB。`, "校验失败");
+    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
+    return;
+  }
+
+  const row = rows.find((r) => r.id === otherItemEditingRowId);
+  if (UPLOAD_API_BASE && row) {
+    try {
+      const uploadedRef = await uploadScreenshotToNas(row, file);
+      if (uploadedRef) {
+        otherScreenshotDataUrl = uploadedRef;
+        await renderOtherScreenshotPreview();
+        return;
+      }
+    } catch (e) {
+      console.warn("截图上传 NAS 失败，将回退本地预览", e);
+      showInfo("NAS 上传失败，已临时保存到本地。", "提示");
+    }
+  }
+  if (!UPLOAD_API_BASE) {
+    showInfo("未配置 NAS 上传服务，截图将仅保存在当前浏览器。", "提示");
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  otherScreenshotDataUrl = String(dataUrl || "");
+  await renderOtherScreenshotPreview();
+}
+
+async function readFileAsDataUrl(file) {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("读取截图失败"));
+    reader.readAsDataURL(file);
+  }).catch(() => "");
+}
+
+async function uploadScreenshotToNas(row, file) {
+  if (!UPLOAD_API_BASE) return "";
+  const form = new FormData();
+  form.append("orderId", String(row.id || ""));
+  form.append("lineId", String(row.id || ""));
+  form.append("orderNo", String(row.orderNo || ""));
+  form.append("drawingNo", "");
+  form.append("partName", String(row.material || "其他采购截图"));
+  form.append("file", file);
+  const data = await apiFetchJson("/api/files/upload", { method: "POST", body: form });
+  const ref = extractNasFileRef(data);
+  if (!ref) throw new Error("上传成功但未返回文件引用");
+  return ref;
+}
+
+function extractNasFileRef(data) {
+  const url = String(
+    data?.url
+    || data?.fileUrl
+    || data?.downloadUrl
+    || data?.data?.url
+    || data?.data?.fileUrl
+    || ""
+  ).trim();
+  if (url) return url;
+
+  const path = String(
+    data?.path
+    || data?.filePath
+    || data?.data?.path
+    || ""
+  ).trim();
+  if (path) {
+    if (/^https?:\/\//i.test(path)) return path;
+    return `${UPLOAD_API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+  }
+
+  const id = String(
+    data?.id
+    || data?.fileId
+    || data?.data?.id
+    || data?.file?.id
+    || ""
+  ).trim();
+  if (id) return `nas:${id}`;
+  return "";
+}
+
+async function resolveScreenshotPreviewSrc(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+  if (/^(data:image|blob:|https?:\/\/)/i.test(raw)) return raw;
+  if (raw.startsWith("nas:")) {
+    const fileId = raw.slice(4).trim();
+    if (!fileId || !UPLOAD_API_BASE) return "";
+    if (screenshotObjectUrlCache.has(fileId)) return screenshotObjectUrlCache.get(fileId);
+    try {
+      const blob = await apiFetchBlob(`/api/files/download/${encodeURIComponent(fileId)}`, { method: "GET" });
+      const objectUrl = URL.createObjectURL(blob);
+      screenshotObjectUrlCache.set(fileId, objectUrl);
+      return objectUrl;
+    } catch (e) {
+      console.warn("加载 NAS 截图失败", e);
+      return "";
+    }
+  }
+  return raw;
 }
 
 function parseSpecLines(specValue, qtyValue) {
@@ -2119,6 +2235,50 @@ function formatCurrency(value) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(safe);
 }
 function formatMmDd(dateText) { if (!dateText) return ""; const d = new Date(dateText); if (Number.isNaN(d.getTime())) return ""; return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+
+async function apiFetchJson(path, options = {}) {
+  if (!UPLOAD_API_BASE) throw new Error("未配置上传服务地址");
+  const token = await getAccessToken();
+  const headers = new Headers(options.headers || {});
+  if (!(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const resp = await fetch(`${UPLOAD_API_BASE}${path}`, { ...options, headers });
+  if (!resp.ok) throw await parseHttpError(resp);
+  if (resp.status === 204) return null;
+  return await resp.json();
+}
+
+async function apiFetchBlob(path, options = {}) {
+  if (!UPLOAD_API_BASE) throw new Error("未配置上传服务地址");
+  const token = await getAccessToken();
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const resp = await fetch(`${UPLOAD_API_BASE}${path}`, { ...options, headers });
+  if (!resp.ok) throw await parseHttpError(resp);
+  return await resp.blob();
+}
+
+async function getAccessToken() {
+  if (authSession?.access_token) return authSession.access_token;
+  if (!db?.auth) return "";
+  try {
+    const { data } = await db.auth.getSession();
+    return data?.session?.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
+async function parseHttpError(resp) {
+  let message = `HTTP ${resp.status}`;
+  try {
+    const data = await resp.json();
+    message = data?.message || data?.error || message;
+  } catch {
+    // ignore parse error
+  }
+  return new Error(message);
+}
 
 function showInfo(message, title = "提示") {
   if (!el.infoDialog || !el.infoText) { alert(message); return; }
