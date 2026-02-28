@@ -611,7 +611,6 @@ function ensureOtherItemDialog() {
         <div class="material-item-col material-item-col-lines">
           <div class="auth-login-field">
             <span>截图</span>
-            <input id="otherScreenshotInput" type="file" accept="image/*" />
             <div id="otherScreenshotPreview" class="other-screenshot-preview">未上传截图</div>
             <div class="other-screenshot-actions">
               <button id="otherScreenshotCaptureBtn" class="btn btn-secondary" type="button">截屏</button>
@@ -849,7 +848,6 @@ function bindDialogEvents() {
   if (el.otherClear) el.otherClear.addEventListener("click", clearOtherItemDetail);
   if (el.materialLineAddBtn) el.materialLineAddBtn.addEventListener("click", () => appendMaterialLineRow("", ""));
   if (el.otherLineAddBtn) el.otherLineAddBtn.addEventListener("click", () => appendOtherLineRow("", ""));
-  if (el.otherScreenshotInput) el.otherScreenshotInput.addEventListener("change", () => void handleOtherScreenshotChange());
   if (el.otherScreenshotClearBtn) el.otherScreenshotClearBtn.addEventListener("click", clearOtherScreenshot);
   if (el.otherScreenshotCaptureBtn) el.otherScreenshotCaptureBtn.addEventListener("click", () => void captureOtherScreenshot());
   if (el.infoClose) el.infoClose.addEventListener("click", closeInfo);
@@ -2025,7 +2023,6 @@ function openOtherItemDialog(rowId, options = {}) {
   if (el.otherSupplierLinkInput) el.otherSupplierLinkInput.value = String(currentGroup.supplierLink || "");
   otherScreenshotDataUrl = String(currentGroup.screenshot || "");
   void renderOtherScreenshotPreview();
-  if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
   renderOtherLineRows(currentGroup.lines);
   openDialog(el.otherDialog);
   if (el.otherNameInput) el.otherNameInput.focus();
@@ -2039,19 +2036,13 @@ function clearOtherItemDetail() {
   renderOtherLineRows([{ size: "", qty: "" }]);
 }
 
-async function handleOtherScreenshotChange() {
-  const file = el.otherScreenshotInput?.files?.[0];
-  if (!file) return;
-  await setOtherScreenshotFromFile(file);
-}
-
 async function captureOtherScreenshot() {
   if (!window.isSecureContext) {
-    showInfo("当前环境不支持截屏，请使用文件上传。", "功能受限");
+    showInfo("当前环境不支持截屏。", "功能受限");
     return;
   }
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    showInfo("当前浏览器不支持截屏，请使用文件上传。", "功能受限");
+    showInfo("当前浏览器不支持截屏。", "功能受限");
     return;
   }
   let stream = null;
@@ -2077,11 +2068,10 @@ async function captureOtherScreenshot() {
     const fileName = `material_screenshot_${row?.orderNo || row?.id || "row"}_${ts}.png`;
     const file = new File([blob], fileName, { type: "image/png" });
     await setOtherScreenshotFromFile(file);
-    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
   } catch (e) {
     const name = String(e?.name || "");
     if (name !== "NotAllowedError" && name !== "AbortError") {
-      showInfo("截屏失败，请重试或使用文件上传。", "错误");
+      showInfo("截屏失败，请重试。", "错误");
     }
   } finally {
     if (stream) stream.getTracks().forEach((track) => track.stop());
@@ -2090,7 +2080,6 @@ async function captureOtherScreenshot() {
 
 function clearOtherScreenshot() {
   otherScreenshotDataUrl = "";
-  if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
   void renderOtherScreenshotPreview();
 }
 
@@ -2119,13 +2108,11 @@ async function setOtherScreenshotFromFile(file) {
   if (!file) return;
   if (!String(file.type || "").startsWith("image/")) {
     showInfo("请上传图片文件。", "校验失败");
-    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
     return;
   }
   const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
   if (file.size > maxBytes) {
     showInfo(`截图大小不能超过 ${UPLOAD_MAX_MB}MB。`, "校验失败");
-    if (el.otherScreenshotInput) el.otherScreenshotInput.value = "";
     return;
   }
 
