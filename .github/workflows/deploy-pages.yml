@@ -43,6 +43,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           UPLOAD_API_BASE: ${{ secrets.UPLOAD_API_BASE }}
+          SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS: ${{ secrets.SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS }}
+          SUPABASE_STORAGE_BUCKET_TUZHI: ${{ secrets.SUPABASE_STORAGE_BUCKET_TUZHI }}
         run: |
           json_escape() {
             python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
@@ -50,12 +52,16 @@ jobs:
           SUPABASE_URL_JSON="$(json_escape "$SUPABASE_URL")"
           SUPABASE_ANON_KEY_JSON="$(json_escape "$SUPABASE_ANON_KEY")"
           UPLOAD_API_BASE_JSON="$(json_escape "$UPLOAD_API_BASE")"
+          SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS_JSON="$(json_escape "${SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS:-order-attachments}")"
+          SUPABASE_STORAGE_BUCKET_TUZHI_JSON="$(json_escape "${SUPABASE_STORAGE_BUCKET_TUZHI:-tuzhi}")"
           cat > config.runtime.js << EOF
           window.__MES_CONFIG__ = {
             SUPABASE_URL: ${SUPABASE_URL_JSON},
             SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY_JSON},
             AUTO_REFRESH_SECONDS: 5,
             SUPABASE_STORAGE_BUCKET: "material-screenshots",
+            SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS: ${SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS_JSON},
+            SUPABASE_STORAGE_BUCKET_TUZHI: ${SUPABASE_STORAGE_BUCKET_TUZHI_JSON},
             SUPABASE_STORAGE_SIGNED_EXPIRES: 3600,
             UPLOAD_API_BASE: ${UPLOAD_API_BASE_JSON},
             UPLOAD_MAX_MB: 50,

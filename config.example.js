@@ -7,6 +7,10 @@
   AUTO_REFRESH_SECONDS: 15,
   // Optional: Supabase storage bucket for attachments
   SUPABASE_STORAGE_BUCKET: "material-screenshots",
+  // Optional: order page preview bucket (name/drawing click)
+  SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS: "order-attachments",
+  // Optional: order page file-button bucket (upload/download/delete)
+  SUPABASE_STORAGE_BUCKET_TUZHI: "tuzhi",
   // Optional: signed URL expire seconds
   SUPABASE_STORAGE_SIGNED_EXPIRES: 3600,
   // Optional upload gateway, e.g. http://192.168.1.10:3001
