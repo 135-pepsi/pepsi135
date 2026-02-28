@@ -11,7 +11,7 @@ const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS ||
 const SUMMARY_SELECTION_HOLD_MS = Math.max(5000, Number(MES_CONFIG.SUMMARY_SELECTION_HOLD_SECONDS || 15) * 1000);
 const STORAGE_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET || "material-screenshots").trim();
 const STORAGE_SIGNED_EXPIRES = Math.max(60, Number(MES_CONFIG.SUPABASE_STORAGE_SIGNED_EXPIRES || 3600));
-const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
+const UPLOAD_API_BASE = normalizeUploadApiBase(MES_CONFIG.UPLOAD_API_BASE);
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
 const FORCE_FULL_SYNC_INTERVAL = 12;
@@ -19,6 +19,55 @@ const DEBUG_PERF = Boolean(MES_CONFIG.DEBUG_PERF);
 const VIRTUAL_ENABLED_THRESHOLD = 120;
 const VIRTUAL_ROW_ESTIMATE = 88;
 const VIRTUAL_OVERSCAN_ROWS = 10;
+
+function isPrivateIpv4Host(hostname) {
+  const m = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  const c = Number(m[3]);
+  const d = Number(m[4]);
+  if ([a, b, c, d].some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
+function normalizeUploadApiBase(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  try {
+    const u = new URL(text, location.href);
+    const protocol = String(u.protocol || "").toLowerCase();
+    const host = String(u.hostname || "").toLowerCase();
+    if (protocol === "https:") return u.href.replace(/\/+$/, "");
+    if (
+      protocol === "http:" &&
+      (host === "localhost" || host === "127.0.0.1" || host === "::1" || isPrivateIpv4Host(host))
+    ) {
+      return u.href.replace(/\/+$/, "");
+    }
+    console.warn("UPLOAD_API_BASE 已忽略：仅允许 https，或局域网/本机 http。", text);
+    return "";
+  } catch (_e) {
+    console.warn("UPLOAD_API_BASE 格式无效，已忽略。", text);
+    return "";
+  }
+}
+
+function toSafeExternalHttpUrl(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  try {
+    const u = new URL(text, location.href);
+    const protocol = String(u.protocol || "").toLowerCase();
+    if (protocol !== "https:" && protocol !== "http:") return "";
+    return u.href;
+  } catch (_e) {
+    return "";
+  }
+}
 
 const STATUS_LIST = ["下单", "采购", "到货", "异常"];
 const MATERIAL_OPTIONS = ["", "45#钢", "40Cr", "铝6061", "铝7075", "铝2A12", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
@@ -1383,13 +1432,21 @@ function materialDetailCell(row, extra, visibleEntries = null) {
       if (linkText) {
         const linkWrap = document.createElement("div");
         linkWrap.className = "material-detail-link";
-        const link = document.createElement("a");
-        link.href = linkText;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.textContent = linkText;
-        link.addEventListener("click", (event) => event.stopPropagation());
-        linkWrap.appendChild(link);
+        const safeHref = toSafeExternalHttpUrl(linkText);
+        if (safeHref) {
+          const link = document.createElement("a");
+          link.href = safeHref;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = linkText;
+          link.addEventListener("click", (event) => event.stopPropagation());
+          linkWrap.appendChild(link);
+        } else {
+          const linkTextNode = document.createElement("span");
+          linkTextNode.textContent = linkText;
+          linkTextNode.title = "链接无效或协议不安全（仅允许 http/https）";
+          linkWrap.appendChild(linkTextNode);
+        }
         group.appendChild(linkWrap);
       }
       g.lines.forEach((line) => {

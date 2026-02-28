@@ -33,7 +33,7 @@ const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
 const STORAGE_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET || "order-attachments").trim();
-const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
+const UPLOAD_API_BASE = normalizeUploadApiBase(MES_CONFIG.UPLOAD_API_BASE);
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar");
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
@@ -49,6 +49,42 @@ window.__MES_BOOT__ = {
   hasAnonKey: Boolean(MES_CONFIG.SUPABASE_ANON_KEY),
   remoteEnabled: REMOTE_ENABLED,
 };
+
+function isPrivateIpv4Host(hostname) {
+  const m = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  const c = Number(m[3]);
+  const d = Number(m[4]);
+  if ([a, b, c, d].some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
+function normalizeUploadApiBase(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  try {
+    const u = new URL(text, location.href);
+    const protocol = String(u.protocol || "").toLowerCase();
+    const host = String(u.hostname || "").toLowerCase();
+    if (protocol === "https:") return u.href.replace(/\/+$/, "");
+    if (
+      protocol === "http:" &&
+      (host === "localhost" || host === "127.0.0.1" || host === "::1" || isPrivateIpv4Host(host))
+    ) {
+      return u.href.replace(/\/+$/, "");
+    }
+    console.warn("UPLOAD_API_BASE 已忽略：仅允许 https，或局域网/本机 http。", text);
+    return "";
+  } catch (_e) {
+    console.warn("UPLOAD_API_BASE 格式无效，已忽略。", text);
+    return "";
+  }
+}
 
 let orders = [];
 let filters = {
@@ -3812,7 +3848,11 @@ async function previewOrderFile(item, orderOverride = null) {
     previewBody.innerHTML = `<div class="preview-empty">该文件类型暂不支持在线预览，请下载查看。</div>`;
   } catch (e) {
     const detail = e?.message || "未知错误";
-    previewBody.innerHTML = `<div class="preview-empty">预览失败：${detail}</div>`;
+    previewBody.innerHTML = "";
+    const msg = document.createElement("div");
+    msg.className = "preview-empty";
+    msg.textContent = `预览失败：${detail}`;
+    previewBody.appendChild(msg);
   }
 }
 
@@ -4474,7 +4514,6 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
-
 
 
 
