@@ -130,6 +130,7 @@ let currentRenderList = [];
 let currentRenderExtraMap = new Map();
 let pendingViewportRenderRaf = 0;
 let tableDelegateBound = false;
+let deleteConfirmResolver = null;
 
 const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
@@ -201,6 +202,11 @@ const el = {
   imagePreviewDialog: document.getElementById("imagePreviewDialog"),
   imagePreviewClose: document.getElementById("imagePreviewCloseBtn"),
   imagePreviewBody: document.getElementById("imagePreviewBody"),
+  deleteConfirmDialog: document.getElementById("deleteConfirmDialog"),
+  deleteConfirmClose: document.getElementById("deleteConfirmCloseBtn"),
+  deleteConfirmCancel: document.getElementById("deleteConfirmCancelBtn"),
+  deleteConfirmOk: document.getElementById("deleteConfirmOkBtn"),
+  deleteConfirmText: document.getElementById("deleteConfirmText"),
 
   amountDialog: document.getElementById("amountEditDialog"),
   amountClose: document.getElementById("amountEditDialogCloseBtn"),
@@ -237,6 +243,7 @@ async function init() {
   ensureOtherItemDialog();
   ensureAmountEditDialog();
   ensureImagePreviewDialog();
+  ensureDeleteConfirmDialog();
   bindEvents();
   document.addEventListener("selectionchange", () => {
     if (hasActiveSummarySelection()) extendSummarySelectionHold();
@@ -342,6 +349,7 @@ function bindEvents() {
       closeDialog(el.amountDialog);
       closeInfo();
       closeImagePreview();
+      closeDeleteConfirm(false);
     }
   });
 }
@@ -564,6 +572,41 @@ function ensureImagePreviewDialog() {
   el.imagePreviewDialog = dialog;
   el.imagePreviewClose = document.getElementById("imagePreviewCloseBtn");
   el.imagePreviewBody = document.getElementById("imagePreviewBody");
+}
+
+function ensureDeleteConfirmDialog() {
+  const existing = document.getElementById("deleteConfirmDialog");
+  if (existing) {
+    el.deleteConfirmDialog = existing;
+    el.deleteConfirmClose = document.getElementById("deleteConfirmCloseBtn");
+    el.deleteConfirmCancel = document.getElementById("deleteConfirmCancelBtn");
+    el.deleteConfirmOk = document.getElementById("deleteConfirmOkBtn");
+    el.deleteConfirmText = document.getElementById("deleteConfirmText");
+    return;
+  }
+  const dialog = document.createElement("div");
+  dialog.id = "deleteConfirmDialog";
+  dialog.className = "dialog-backdrop";
+  dialog.hidden = true;
+  dialog.innerHTML = `
+    <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+      <header class="dialog-head">
+        <h3 id="deleteConfirmTitle">确认删除</h3>
+        <button id="deleteConfirmCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="deleteConfirmText" class="dialog-subtitle">确认执行删除操作吗？</p>
+      <div class="confirm-actions">
+        <button id="deleteConfirmCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="deleteConfirmOkBtn" class="btn btn-danger" type="button">确认删除</button>
+      </div>
+    </section>
+  `;
+  document.body.appendChild(dialog);
+  el.deleteConfirmDialog = dialog;
+  el.deleteConfirmClose = document.getElementById("deleteConfirmCloseBtn");
+  el.deleteConfirmCancel = document.getElementById("deleteConfirmCancelBtn");
+  el.deleteConfirmOk = document.getElementById("deleteConfirmOkBtn");
+  el.deleteConfirmText = document.getElementById("deleteConfirmText");
 }
 
 function ensureOtherItemDialog() {
@@ -855,6 +898,14 @@ function bindDialogEvents() {
   if (el.infoDialog) el.infoDialog.addEventListener("click", (e) => { if (e.target === el.infoDialog) closeInfo(); });
   if (el.imagePreviewClose) el.imagePreviewClose.addEventListener("click", closeImagePreview);
   if (el.imagePreviewDialog) el.imagePreviewDialog.addEventListener("click", (e) => { if (e.target === el.imagePreviewDialog) closeImagePreview(); });
+  if (el.deleteConfirmClose) el.deleteConfirmClose.addEventListener("click", () => closeDeleteConfirm(false));
+  if (el.deleteConfirmCancel) el.deleteConfirmCancel.addEventListener("click", () => closeDeleteConfirm(false));
+  if (el.deleteConfirmOk) el.deleteConfirmOk.addEventListener("click", () => closeDeleteConfirm(true));
+  if (el.deleteConfirmDialog) {
+    el.deleteConfirmDialog.addEventListener("click", (e) => {
+      if (e.target === el.deleteConfirmDialog) closeDeleteConfirm(false);
+    });
+  }
 }
 
 function bindActionDialog(dialogEl, closeButtons, saveFn, saveBtn) {
@@ -1660,10 +1711,10 @@ async function deleteMaterialGroup(rowId, groupIndex) {
   const extra = getExtra(row.id);
   const groups = parseMaterialGroups(row, extra);
   if (!groups[groupIndex]) return;
-  if (!confirm("确认删除该物料分组吗？")) return;
+  if (!(await openDeleteConfirm("确认删除该物料分组吗？"))) return;
   groups.splice(groupIndex, 1);
   if (!groups.length) {
-    await deleteRow(row.id);
+    await deleteRow(row.id, true);
     return;
   }
   const serialized = serializeMaterialGroups(groups);
@@ -1684,8 +1735,8 @@ async function deleteMaterialGroup(rowId, groupIndex) {
   render();
 }
 
-async function deleteRow(id) {
-  if (!confirm("确认删除该物料行吗？")) return;
+async function deleteRow(id, skipConfirm = false) {
+  if (!skipConfirm && !(await openDeleteConfirm("确认删除该物料行吗？"))) return;
   rows = rows.filter((r) => r.id !== id);
   invalidateRowCaches(id);
   markSupplierFilterDirty();
@@ -1785,7 +1836,27 @@ async function saveAbnormal() {
 
 function openDialog(d) { if (!d) return; d.hidden = false; document.body.style.overflow = "hidden"; }
 function closeDialog(d) { if (!d) return; d.hidden = true; refreshBodyOverflow(); }
-function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.otherDialog, el.amountDialog, el.infoDialog, el.imagePreviewDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
+function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.otherDialog, el.amountDialog, el.infoDialog, el.imagePreviewDialog, el.deleteConfirmDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
+
+function openDeleteConfirm(message) {
+  return new Promise((resolve) => {
+    if (!el.deleteConfirmDialog) {
+      resolve(confirm(message));
+      return;
+    }
+    deleteConfirmResolver = resolve;
+    if (el.deleteConfirmText) el.deleteConfirmText.textContent = message || "确认执行删除操作吗？";
+    openDialog(el.deleteConfirmDialog);
+    if (el.deleteConfirmCancel) el.deleteConfirmCancel.focus();
+  });
+}
+
+function closeDeleteConfirm(confirmed) {
+  if (el.deleteConfirmDialog) closeDialog(el.deleteConfirmDialog);
+  const resolver = deleteConfirmResolver;
+  deleteConfirmResolver = null;
+  if (resolver) resolver(Boolean(confirmed));
+}
 
 async function openImagePreview(dataUrl) {
   if (!el.imagePreviewDialog || !el.imagePreviewBody) return;
