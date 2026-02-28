@@ -37,6 +37,11 @@ const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/,
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar");
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
+const FORCE_FULL_SYNC_INTERVAL = 12;
+const VIRTUAL_ENABLED_THRESHOLD = 160;
+const VIRTUAL_ROW_ESTIMATE = 46;
+const VIRTUAL_OVERSCAN_ROWS = 18;
+const DEBUG_PERF = Boolean(MES_CONFIG.DEBUG_PERF);
 
 let orders = [];
 let filters = {
@@ -84,6 +89,19 @@ let authLoginSubmittingMode = "";
 let authLoginCooldownUntil = 0;
 let authLoginCooldownTimer = 0;
 let processCraftOrderSeq = 0;
+let ordersSyncCursor = "";
+let orderIncrementalSyncCount = 0;
+let currentRenderRows = [];
+let currentRenderUnitFlags = new Map();
+let currentEffectiveOrderNoMap = new Map();
+const orderRowDomCache = new Map();
+let pendingViewportRenderRaf = 0;
+let pendingFilterRenderTimer = 0;
+let kanbanScaffoldReady = false;
+let kanbanTotalPill = null;
+const kanbanStatusPills = new Map();
+const kanbanColState = new Map();
+const kanbanCardCache = new Map();
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -201,13 +219,15 @@ async function init() {
   if (REMOTE_ENABLED) {
     await initAuth();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
-    await refreshFromRemote();
+    await refreshFromRemoteIncremental(false, false);
     setInterval(async () => {
-      if (!syncing && remoteOnline) await refreshFromRemote(false);
+      if (!syncing && remoteOnline) await refreshFromRemoteIncremental(false, true);
     }, AUTO_REFRESH_MS);
   } else {
     setModeText("本地模式");
     orders = loadOrdersLocal();
+    resetOrderDerivedCaches();
+    ordersSyncCursor = computeOrdersSyncCursor(orders);
     render();
     setLastSyncTime();
   }
@@ -666,7 +686,7 @@ function bindEvents() {
   if (searchInput) {
     searchInput.addEventListener("input", (e) => {
       filters.q = e.target.value.trim().toLowerCase();
-      render();
+      scheduleFilterRender();
     });
   }
   const filterMonth = document.getElementById("filterMonth");
@@ -681,7 +701,7 @@ function bindEvents() {
   if (filterOrderNo) {
     filterOrderNo.addEventListener("input", (e) => {
       filters.orderNo = e.target.value.trim().toLowerCase();
-      render();
+      scheduleFilterRender();
     });
   }
   const statusColorFilters = document.getElementById("statusColorFilters");
@@ -718,11 +738,12 @@ function bindEvents() {
     });
   }
   window.addEventListener("scroll", updateBackTopBtn);
-  tableWrap.addEventListener("scroll", updateBackTopBtn);
+  if (tableWrap) tableWrap.addEventListener("scroll", handleTableWrapScroll);
   window.addEventListener("resize", updateStickyColumnOffsets);
   window.addEventListener("resize", () => {
     updatePinnedOffsets();
     syncFilterPanelForViewport();
+    if (isVirtualRenderEnabled(currentRenderRows.length)) scheduleViewportRender();
   });
 
   document.addEventListener("keydown", (e) => {
@@ -830,7 +851,7 @@ async function initAuth() {
       setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     }
     if (authSession && remoteOnline) {
-      void refreshFromRemote(false);
+      void refreshFromRemoteIncremental(false, false);
     }
   });
 }
@@ -1120,9 +1141,11 @@ function canWriteRemote(notify = true) {
 }
 
 function createEmptyOrder() {
+  const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
     orderNo: "",
     drawingNo: "",
     customer: "",
@@ -1190,74 +1213,209 @@ async function addBlankRow() {
   if (firstEditable) beginEdit(firstEditable);
 }
 
+function isVirtualRenderEnabled(total) {
+  return Boolean(tableWrap && total >= VIRTUAL_ENABLED_THRESHOLD);
+}
+
+function getVirtualWindow(total) {
+  if (!isVirtualRenderEnabled(total)) return { start: 0, end: total, topPad: 0, bottomPad: 0 };
+  const scrollTop = tableWrap?.scrollTop || 0;
+  const clientHeight = tableWrap?.clientHeight || 0;
+  const estimatedStart = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_ESTIMATE) - VIRTUAL_OVERSCAN_ROWS);
+  const estimatedVisible = Math.ceil(clientHeight / VIRTUAL_ROW_ESTIMATE) + VIRTUAL_OVERSCAN_ROWS * 2;
+  const start = Math.min(Math.max(0, estimatedStart), Math.max(0, total - 1));
+  const end = Math.min(total, start + Math.max(estimatedVisible, VIRTUAL_OVERSCAN_ROWS * 2));
+  const topPad = start * VIRTUAL_ROW_ESTIMATE;
+  const bottomPad = Math.max(0, (total - end) * VIRTUAL_ROW_ESTIMATE);
+  return { start, end, topPad, bottomPad };
+}
+
+function makeOrderRowSignature(order, idx, flags, now) {
+  const start = Boolean(flags?.start);
+  const end = Boolean(flags?.end);
+  const unit = Boolean(flags?.unit);
+  const rootId = String(flags?.rootId || "");
+  const hasFiles = attachmentStateByLineId.get(order.id) === true;
+  const uploadedAt = String(attachmentLatestTimeByLineId.get(order.id) || "");
+  const saved = (rowSavedUntil.get(order.id) || 0) > now;
+  return JSON.stringify({
+    i: idx,
+    id: order.id,
+    start,
+    end,
+    unit,
+    rootId,
+    saved,
+    delayed: String(order.isDelayed || ""),
+    status: String(order.status || ""),
+    step: String(order.processStepCurrent || ""),
+    orderNo: String(order.orderNo || ""),
+    customer: String(order.customer || ""),
+    name: String(order.name || ""),
+    drawingNo: String(order.drawingNo || ""),
+    qty: String(order.qty ?? ""),
+    processName: String(order.processName || ""),
+    plannedHours: String(order.plannedHours ?? ""),
+    machine: String(order.machine || ""),
+    dueDate: String(order.dueDate || ""),
+    startTime: String(order.startTime || ""),
+    note: String(order.note || ""),
+    dirty: [
+      hasDirtyCellMark(order.id, "orderNo"),
+      hasDirtyCellMark(order.id, "customer"),
+      hasDirtyCellMark(order.id, "name"),
+      hasDirtyCellMark(order.id, "drawingNo"),
+      hasDirtyCellMark(order.id, "qty"),
+      hasDirtyCellMark(order.id, "note"),
+    ],
+    errs: [
+      transientCellErrors.get(getErrorKey(order.id, "orderNo")) || "",
+      transientCellErrors.get(getErrorKey(order.id, "qty")) || "",
+      transientCellErrors.get(getErrorKey(order.id, "startTime")) || "",
+      transientCellErrors.get(getErrorKey(order.id, "dueDate")) || "",
+      transientCellErrors.get(getErrorKey(order.id, "note")) || "",
+      ruleCellErrors.get(getErrorKey(order.id, "orderNo")) || "",
+      ruleCellErrors.get(getErrorKey(order.id, "qty")) || "",
+      ruleCellErrors.get(getErrorKey(order.id, "startTime")) || "",
+      ruleCellErrors.get(getErrorKey(order.id, "dueDate")) || "",
+      ruleCellErrors.get(getErrorKey(order.id, "note")) || "",
+    ],
+    hasFiles,
+    uploadedAt,
+  });
+}
+
+function buildOrderRow(order, idx, flags, now) {
+  const tr = document.createElement("tr");
+  tr.dataset.id = order.id;
+  const stateClass =
+    order.isDelayed === "延期" ? "row-delayed" : order.status === "加工中" ? "row-working" : order.status === "可发货" ? "row-shipped" : "";
+  if (stateClass) tr.classList.add(stateClass);
+  if ((rowSavedUntil.get(order.id) || 0) > now) tr.classList.add("row-saved");
+  if (flags?.unit) tr.classList.add("order-unit");
+  if (flags?.start) tr.classList.add("order-unit-start");
+  if (flags?.end) tr.classList.add("order-unit-end");
+
+  tr.appendChild(textCell(idx + 1));
+  tr.appendChild(editCell(order, "orderNo"));
+  tr.appendChild(editCell(order, "customer"));
+  tr.appendChild(previewEditCell(order, "name"));
+  tr.appendChild(previewEditCell(order, "drawingNo"));
+  tr.appendChild(editCell(order, "qty"));
+  tr.appendChild(processTimeCell(order));
+  tr.appendChild(statusCell(order));
+  tr.appendChild(dateCell(order, "startTime", "下单"));
+  tr.appendChild(dateCell(order, "dueDate", "交期"));
+  tr.appendChild(noteCell(order));
+
+  const opTd = document.createElement("td");
+  opTd.className = "op-cell";
+  const opActions = document.createElement("div");
+  opActions.className = "op-actions";
+  if (flags?.start) {
+    const fileBtn = document.createElement("button");
+    fileBtn.className = "action-btn-secondary";
+    fileBtn.textContent = "图纸";
+    const targetId = flags?.rootId || order.id;
+    fileBtn.addEventListener("click", () => {
+      void openAttachmentDialog(targetId);
+    });
+    opActions.appendChild(fileBtn);
+  }
+  const delBtn = document.createElement("button");
+  delBtn.className = "action-btn";
+  delBtn.textContent = "删除";
+  delBtn.addEventListener("click", () => {
+    void removeOrder(order.id);
+  });
+  opActions.appendChild(delBtn);
+  opTd.appendChild(opActions);
+  tr.appendChild(opTd);
+  return tr;
+}
+
+function getOrderRow(order, idx, flags, now) {
+  const signature = makeOrderRowSignature(order, idx, flags, now);
+  const hit = orderRowDomCache.get(order.id);
+  if (hit && hit.signature === signature && hit.tr) return hit.tr;
+  const tr = buildOrderRow(order, idx, flags, now);
+  orderRowDomCache.set(order.id, { signature, tr });
+  return tr;
+}
+
+function createVirtualPadRow(heightPx) {
+  const tr = document.createElement("tr");
+  tr.className = "order-virtual-pad-row";
+  const td = document.createElement("td");
+  td.colSpan = 12;
+  td.style.height = `${Math.max(0, Math.floor(heightPx))}px`;
+  td.style.padding = "0";
+  td.style.border = "0";
+  td.style.background = "transparent";
+  tr.appendChild(td);
+  return tr;
+}
+
+function createUnitGapRow() {
+  const gapTr = document.createElement("tr");
+  gapTr.className = "order-unit-gap";
+  const gapTd = document.createElement("td");
+  gapTd.colSpan = 12;
+  gapTr.appendChild(gapTd);
+  return gapTr;
+}
+
+function renderTableViewportRows() {
+  if (!tableBody) return;
+  const startTs = DEBUG_PERF ? performance.now() : 0;
+  const rows = currentRenderRows;
+  const total = rows.length;
+  const { start, end, topPad, bottomPad } = getVirtualWindow(total);
+  const frag = document.createDocumentFragment();
+  const visibleRows = [];
+  if (topPad > 0) frag.appendChild(createVirtualPadRow(topPad));
+  const now = Date.now();
+  for (let i = start; i < end; i += 1) {
+    const order = rows[i];
+    visibleRows.push(order);
+    const flags = currentRenderUnitFlags.get(order.id);
+    frag.appendChild(getOrderRow(order, i, flags, now));
+    if (flags?.end && i < rows.length - 1) frag.appendChild(createUnitGapRow());
+  }
+  if (bottomPad > 0) frag.appendChild(createVirtualPadRow(bottomPad));
+  tableBody.replaceChildren(frag);
+  if (DEBUG_PERF) {
+    const rendered = Math.max(0, end - start);
+    const cost = performance.now() - startTs;
+    console.debug(`[orders] render ${cost.toFixed(1)}ms (visible ${rendered}/${total})`);
+  }
+  void warmupAttachmentStates(visibleRows);
+}
+
+function scheduleViewportRender() {
+  if (pendingViewportRenderRaf) return;
+  pendingViewportRenderRaf = window.requestAnimationFrame(() => {
+    pendingViewportRenderRaf = 0;
+    renderTableViewportRows();
+  });
+}
+
 function render() {
   ensureTableColGroup();
   rebuildRuleCellErrors();
-  const rows = getFilteredOrders();
-  const unitFlags = buildOrderUnitFlags(rows);
-  tableBody.innerHTML = "";
-  const now = Date.now();
-
-  rows.forEach((o, idx) => {
-    const tr = document.createElement("tr");
-    tr.dataset.id = o.id;
-
-    const stateClass =
-      o.isDelayed === "延期" ? "row-delayed" : o.status === "加工中" ? "row-working" : o.status === "可发货" ? "row-shipped" : "";
-    if (stateClass) tr.classList.add(stateClass);
-    if ((rowSavedUntil.get(o.id) || 0) > now) tr.classList.add("row-saved");
-    const flags = unitFlags.get(o.id);
-    if (flags?.unit) tr.classList.add("order-unit");
-    if (flags?.start) tr.classList.add("order-unit-start");
-    if (flags?.end) tr.classList.add("order-unit-end");
-
-    tr.appendChild(textCell(idx + 1));
-    tr.appendChild(editCell(o, "orderNo"));
-    tr.appendChild(editCell(o, "customer"));
-    tr.appendChild(previewEditCell(o, "name"));
-    tr.appendChild(previewEditCell(o, "drawingNo"));
-    tr.appendChild(editCell(o, "qty"));
-    tr.appendChild(processTimeCell(o));
-    tr.appendChild(statusCell(o));
-    tr.appendChild(dateCell(o, "startTime", "下单"));
-    tr.appendChild(dateCell(o, "dueDate", "交期"));
-    tr.appendChild(noteCell(o));
-
-    const opTd = document.createElement("td");
-    opTd.className = "op-cell";
-    const opActions = document.createElement("div");
-    opActions.className = "op-actions";
-    if (flags?.start) {
-      const fileBtn = document.createElement("button");
-      fileBtn.className = "action-btn-secondary";
-      fileBtn.textContent = "图纸";
-      const targetId = flags?.rootId || o.id;
-      fileBtn.addEventListener("click", () => {
-        void openAttachmentDialog(targetId);
-      });
-      opActions.appendChild(fileBtn);
-    }
-    const delBtn = document.createElement("button");
-    delBtn.className = "action-btn";
-    delBtn.textContent = "删除";
-    delBtn.addEventListener("click", () => {
-      void removeOrder(o.id);
-    });
-    opActions.appendChild(delBtn);
-    opTd.appendChild(opActions);
-    tr.appendChild(opTd);
-
-    tableBody.appendChild(tr);
-
-    if (flags?.end && idx < rows.length - 1) {
-      const gapTr = document.createElement("tr");
-      gapTr.className = "order-unit-gap";
-      const gapTd = document.createElement("td");
-      gapTd.colSpan = 12;
-      gapTr.appendChild(gapTd);
-      tableBody.appendChild(gapTr);
-    }
+  currentRenderRows = getFilteredOrders();
+  currentRenderUnitFlags = buildOrderUnitFlags(currentRenderRows);
+  currentEffectiveOrderNoMap = buildEffectiveOrderNoMap(currentRenderRows);
+  const aliveIds = new Set(orders.map((x) => x.id));
+  orderRowDomCache.forEach((_v, id) => {
+    if (!aliveIds.has(id)) orderRowDomCache.delete(id);
   });
+  const now = Date.now();
+  if (pendingViewportRenderRaf) {
+    cancelAnimationFrame(pendingViewportRenderRaf);
+    pendingViewportRenderRaf = 0;
+  }
+  renderTableViewportRows();
 
   rowSavedUntil.forEach((until, id) => {
     if (until <= now) rowSavedUntil.delete(id);
@@ -1265,9 +1423,8 @@ function render() {
 
   applyColumnWidths();
   queueStickyColumnOffsets();
-  renderKanban(rows);
+  renderKanban(currentRenderRows);
   renderKpis(orders);
-  void warmupAttachmentStates(rows);
 }
 
 function buildOrderUnitFlags(rows) {
@@ -1311,54 +1468,34 @@ function buildOrderUnitFlags(rows) {
 
 function renderKanban(rows) {
   if (!kanbanBoard || !boardSummary) return;
-
-  kanbanBoard.innerHTML = "";
-  boardSummary.innerHTML = "";
-  const effectiveOrderNoMap = buildEffectiveOrderNoMap(rows);
+  ensureKanbanScaffold();
+  const effectiveOrderNoMap = currentEffectiveOrderNoMap && currentEffectiveOrderNoMap.size ? currentEffectiveOrderNoMap : buildEffectiveOrderNoMap(rows);
 
   const total = rows.length;
-  const totalPill = document.createElement("span");
-  totalPill.className = "board-pill";
-  totalPill.textContent = `当前订单 ${total}`;
-  boardSummary.appendChild(totalPill);
+  if (kanbanTotalPill) kanbanTotalPill.textContent = `当前订单 ${total}`;
+  const activeCardIds = new Set();
 
   STATUS.forEach((status) => {
     const list = rows.filter((o) => o.status === status);
-
-    const statusPill = document.createElement("span");
-    statusPill.className = "board-pill";
-    statusPill.textContent = `${status} ${list.length}`;
-    boardSummary.appendChild(statusPill);
-
-    const col = document.createElement("article");
-    col.className = "kanban-col";
-
-    const head = document.createElement("div");
-    head.className = "kanban-col-head";
-    const title = document.createElement("strong");
-    title.textContent = status;
-    const count = document.createElement("span");
-    count.textContent = `${list.length} 单`;
-    head.appendChild(title);
-    head.appendChild(count);
-
-    const body = document.createElement("div");
-    body.className = "kanban-col-body";
-
+    const statusPill = kanbanStatusPills.get(status);
+    if (statusPill) statusPill.textContent = `${status} ${list.length}`;
+    const col = kanbanColState.get(status);
+    if (!col) return;
+    col.countEl.textContent = `${list.length} 单`;
     if (list.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "kanban-empty";
-      empty.textContent = "暂无订单";
-      body.appendChild(empty);
-    } else {
-      list.forEach((order) => {
-        body.appendChild(createKanbanCard(order, effectiveOrderNoMap.get(order.id) || ""));
-      });
+      col.bodyEl.replaceChildren(col.emptyEl);
+      return;
     }
+    const nodes = list.map((order) => {
+      activeCardIds.add(order.id);
+      const displayOrderNo = effectiveOrderNoMap.get(order.id) || "";
+      return getKanbanCardNode(order, displayOrderNo);
+    });
+    col.bodyEl.replaceChildren(...nodes);
+  });
 
-    col.appendChild(head);
-    col.appendChild(body);
-    kanbanBoard.appendChild(col);
+  kanbanCardCache.forEach((_value, id) => {
+    if (!activeCardIds.has(id)) kanbanCardCache.delete(id);
   });
 }
 
@@ -1398,6 +1535,72 @@ function createKanbanCard(order, displayOrderNo = "") {
   return card;
 }
 
+function ensureKanbanScaffold() {
+  if (!kanbanBoard || !boardSummary) return;
+  if (kanbanScaffoldReady) return;
+  kanbanBoard.innerHTML = "";
+  boardSummary.innerHTML = "";
+  kanbanStatusPills.clear();
+  kanbanColState.clear();
+
+  kanbanTotalPill = document.createElement("span");
+  kanbanTotalPill.className = "board-pill";
+  boardSummary.appendChild(kanbanTotalPill);
+
+  STATUS.forEach((status) => {
+    const statusPill = document.createElement("span");
+    statusPill.className = "board-pill";
+    boardSummary.appendChild(statusPill);
+    kanbanStatusPills.set(status, statusPill);
+
+    const col = document.createElement("article");
+    col.className = "kanban-col";
+    const head = document.createElement("div");
+    head.className = "kanban-col-head";
+    const title = document.createElement("strong");
+    title.textContent = status;
+    const count = document.createElement("span");
+    head.appendChild(title);
+    head.appendChild(count);
+    const body = document.createElement("div");
+    body.className = "kanban-col-body";
+    const empty = document.createElement("div");
+    empty.className = "kanban-empty";
+    empty.textContent = "暂无订单";
+    body.appendChild(empty);
+    col.appendChild(head);
+    col.appendChild(body);
+    kanbanBoard.appendChild(col);
+    kanbanColState.set(status, { colEl: col, countEl: count, bodyEl: body, emptyEl: empty });
+  });
+  kanbanScaffoldReady = true;
+}
+
+function makeKanbanCardSignature(order, displayOrderNo = "") {
+  return JSON.stringify({
+    id: order.id,
+    orderNo: String(displayOrderNo || ""),
+    name: String(order.name || ""),
+    drawingNo: String(order.drawingNo || ""),
+    customer: String(order.customer || ""),
+    machine: String(order.machine || ""),
+    status: String(order.status || ""),
+    step: String(order.processStepCurrent || ""),
+    dueDate: String(order.dueDate || ""),
+    plannedHours: String(order.plannedHours ?? ""),
+    delayed: String(order.isDelayed || ""),
+  });
+}
+
+function getKanbanCardNode(order, displayOrderNo = "") {
+  const signature = makeKanbanCardSignature(order, displayOrderNo);
+  const hit = kanbanCardCache.get(order.id);
+  if (hit && hit.signature === signature && hit.node) return hit.node;
+  const node = createKanbanCard(order, displayOrderNo);
+  kanbanCardCache.set(order.id, { signature, node });
+  return node;
+}
+
 function buildEffectiveOrderNoMap(rows) {
   const map = new Map();
   let current = "";
@@ -1417,7 +1620,15 @@ function createKanbanTag(text, delayed = false) {
 }
 
 function focusOrderRow(id) {
-  const row = tableBody.querySelector(`tr[data-id="${id}"]`);
+  let row = tableBody.querySelector(`tr[data-id="${id}"]`);
+  if (!row && tableWrap) {
+    const idx = currentRenderRows.findIndex((x) => x.id === id);
+    if (idx >= 0 && isVirtualRenderEnabled(currentRenderRows.length)) {
+      tableWrap.scrollTop = Math.max(0, idx * VIRTUAL_ROW_ESTIMATE - tableWrap.clientHeight / 2);
+      renderTableViewportRows();
+      row = tableBody.querySelector(`tr[data-id="${id}"]`);
+    }
+  }
   if (!row) return;
   row.classList.remove("row-focus");
   row.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2579,17 +2790,50 @@ function jumpToNextPreferredField(currentTd) {
       }
     }
     const nextRow = row.nextElementSibling;
-    if (!nextRow) return;
-    const first = nextRow.querySelector('td[data-key="orderNo"]');
-    if (first) beginEdit(first);
+    if (nextRow) {
+      const first = nextRow.querySelector('td[data-key="orderNo"]');
+      if (first) {
+        beginEdit(first);
+        return;
+      }
+    }
+    const currentId = String(row.dataset.id || "");
+    const currentIdx = currentRenderRows.findIndex((x) => x.id === currentId);
+    if (currentIdx >= 0 && currentIdx < currentRenderRows.length - 1) {
+      const nextId = currentRenderRows[currentIdx + 1]?.id;
+      if (nextId) {
+        focusOrderRow(nextId);
+        setTimeout(() => {
+          const first = tableBody.querySelector(`tr[data-id="${nextId}"] td[data-key="orderNo"]`);
+          if (first) beginEdit(first);
+        }, 0);
+      }
+    }
     return;
   }
 
   const nextRow = row.nextElementSibling;
-  if (!nextRow) return;
-  const colIndex = [...row.children].indexOf(currentTd);
-  const nextTd = nextRow.children[colIndex];
-  if (nextTd && nextTd.dataset.key) beginEdit(nextTd);
+  if (nextRow) {
+    const colIndex = [...row.children].indexOf(currentTd);
+    const nextTd = nextRow.children[colIndex];
+    if (nextTd && nextTd.dataset.key) {
+      beginEdit(nextTd);
+      return;
+    }
+  }
+  const currentId = String(row.dataset.id || "");
+  const currentIdx = currentRenderRows.findIndex((x) => x.id === currentId);
+  if (currentIdx >= 0 && currentIdx < currentRenderRows.length - 1) {
+    const nextId = currentRenderRows[currentIdx + 1]?.id;
+    const key = currentKey || "orderNo";
+    if (nextId) {
+      focusOrderRow(nextId);
+      setTimeout(() => {
+        const nextTd = tableBody.querySelector(`tr[data-id="${nextId}"] td[data-key="${key}"]`);
+        if (nextTd) beginEdit(nextTd);
+      }, 0);
+    }
+  }
 }
 
 function selectCell(order, key, options) {
@@ -2852,7 +3096,16 @@ function isDueToday(dueDate) {
 }
 
 async function persistOrders({ changed = [], deletedId = null } = {}) {
+  if (changed.length > 0) {
+    const baseMs = Date.now();
+    changed.forEach((item, idx) => {
+      item.updatedAt = new Date(baseMs + idx).toISOString();
+      invalidateOrderCaches(item.id);
+    });
+  }
+  if (deletedId) invalidateOrderCaches(deletedId);
   saveOrdersLocal();
+  ordersSyncCursor = computeOrdersSyncCursor(orders);
   setLastSyncTime();
   if (!REMOTE_ENABLED || !remoteOnline) return;
   if (!canWriteRemote(true)) return;
@@ -2860,8 +3113,7 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
   syncing = true;
   try {
     if (changed.length > 0) {
-      const baseMs = Date.now();
-      const payload = changed.map((item, idx) => toDbRow(item, new Date(baseMs + idx).toISOString()));
+      const payload = changed.map((item) => toDbRow(item, item.updatedAt || new Date().toISOString()));
       const { error } = await db.from("mes_orders").upsert(payload, { onConflict: "id" });
       if (error) throw error;
     }
@@ -2898,6 +3150,7 @@ function loadOrdersLocal() {
           ...createEmptyOrder(),
           ...x,
           createdAt: x.createdAt || new Date(Date.now() + idx).toISOString(),
+          updatedAt: x.updatedAt || x.createdAt || new Date(Date.now() + idx).toISOString(),
         }));
       }
     } catch (e) {
@@ -2908,16 +3161,51 @@ function loadOrdersLocal() {
 }
 
 async function refreshFromRemote(showAlert = false) {
+  await refreshFromRemoteIncremental(showAlert, false);
+}
+
+function computeOrdersSyncCursor(list = []) {
+  return list.reduce((max, row) => {
+    const value = String(row?.updatedAt || row?.createdAt || "");
+    return value > max ? value : max;
+  }, "");
+}
+
+function mergeRemoteOrders(remoteList = []) {
+  const byId = new Map(orders.map((item) => [item.id, item]));
+  remoteList.forEach((item) => {
+    if (!item?.id) return;
+    byId.set(item.id, item);
+    invalidateOrderCaches(item.id);
+  });
+  orders = Array.from(byId.values()).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+}
+
+async function refreshFromRemoteIncremental(showAlert = false, preferIncremental = false) {
   if (!remoteOnline) return;
   try {
-    const { data, error } = await db.from("mes_orders").select("*").order("updated_at", { ascending: true });
+    const shouldFullSync = !preferIncremental || !ordersSyncCursor || orderIncrementalSyncCount >= FORCE_FULL_SYNC_INTERVAL;
+    let query = db.from("mes_orders").select("*").order("updated_at", { ascending: true });
+    if (!shouldFullSync && ordersSyncCursor) query = query.gt("updated_at", ordersSyncCursor);
+    const { data, error } = await query;
     if (error) throw error;
-    orders = (data || [])
-      .map(fromDbRow)
-      .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    const remoteList = (data || []).map(fromDbRow);
+    if (shouldFullSync) {
+      orders = remoteList.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+      orderIncrementalSyncCount = 0;
+      resetOrderDerivedCaches();
+    } else if (remoteList.length > 0) {
+      mergeRemoteOrders(remoteList);
+      orderIncrementalSyncCount += 1;
+    } else {
+      orderIncrementalSyncCount += 1;
+    }
+    ordersSyncCursor = computeOrdersSyncCursor(orders);
 
     if (orders.length === 0) {
       orders = loadOrdersLocal();
+      resetOrderDerivedCaches();
+      ordersSyncCursor = computeOrdersSyncCursor(orders);
       await persistOrders({ changed: orders });
     }
 
@@ -2933,12 +3221,16 @@ async function refreshFromRemote(showAlert = false) {
       remoteErrorNotified = false;
       setModeText("云端只读（未登录）");
       orders = loadOrdersLocal();
+      resetOrderDerivedCaches();
+      ordersSyncCursor = computeOrdersSyncCursor(orders);
       render();
       setLastSyncTime();
       return;
     }
     handleRemoteError("云端读取失败", e);
     orders = loadOrdersLocal();
+    resetOrderDerivedCaches();
+    ordersSyncCursor = computeOrdersSyncCursor(orders);
     render();
   }
 }
@@ -2978,7 +3270,7 @@ async function tryReconnectRemote(manual = false) {
     remoteOnline = true;
     reconnectDelayMs = 5000;
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
-    await refreshFromRemote(false);
+    await refreshFromRemoteIncremental(false, false);
     if (manual) alert("云端连接已恢复");
   } catch (e) {
     remoteOnline = false;
@@ -3115,9 +3407,31 @@ function clearQuickAdd() {
   });
 }
 
+function scheduleFilterRender(delayMs = 80) {
+  if (pendingFilterRenderTimer) clearTimeout(pendingFilterRenderTimer);
+  pendingFilterRenderTimer = setTimeout(() => {
+    pendingFilterRenderTimer = 0;
+    render();
+  }, delayMs);
+}
+
+function invalidateOrderCaches(id) {
+  if (!id) return;
+  orderRowDomCache.delete(id);
+}
+
+function resetOrderDerivedCaches() {
+  orderRowDomCache.clear();
+}
+
 function scrollToTopRow() {
   if (tableWrap) tableWrap.scrollTo({ top: 0, behavior: "smooth" });
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function handleTableWrapScroll() {
+  updateBackTopBtn();
+  if (isVirtualRenderEnabled(currentRenderRows.length)) scheduleViewportRender();
 }
 
 function updateBackTopBtn() {

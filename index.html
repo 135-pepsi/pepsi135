@@ -1,15 +1,15 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>元源紫泽 生产管理系统</title>
+  <title>元源紫宸 生产管理系统</title>
   <link rel="stylesheet" href="styles.css?v=20260226s" />
 </head>
 <body>
   <header class="topbar">
     <div>
-      <h1>元源紫泽 生产管理系统</h1>
+      <h1>元源紫宸 生产管理系统</h1>
       <p>订单进度看板与明细协同 · <span id="systemMode">本地模式</span> · <span id="lastSyncTime">最近同步 --</span></p>
     </div>
     <div class="actions">
@@ -19,8 +19,7 @@
         <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;">退出登录</button>
       </div>
       <div class="actions-row actions-main-row">
-        <button id="reconnectBtn" class="btn btn-secondary" type="button">重连云端</button>
-        <a class="btn btn-secondary" href="material.html">物料页面</a>
+        <a class="btn btn-secondary" href="material.html">物料管理</a>
       </div>
     </div>
   </header>
@@ -80,7 +79,7 @@
           <button class="status-color-btn is-green" type="button" data-color="green" title="完成待检/可发货">完成</button>
           <button class="status-color-btn is-red" type="button" data-color="red" title="返工">返工</button>
         </div>
-        <input id="qaOrderNo" placeholder="编号(如030)" />
+        <input id="qaOrderNo" placeholder="编号(如:30)" />
         <input id="qaCustomer" placeholder="客户" />
         <button id="quickAddBtn" class="btn btn-primary">新增订单</button>
       </div>
@@ -202,7 +201,7 @@
         <button id="statusCloseBtn" class="btn btn-secondary" type="button">关闭</button>
       </header>
       <p id="statusSubTitle" class="dialog-subtitle"></p>
-      <p id="statusProcessContext" class="status-process-context">当前未选择工艺 / 共1序 / 剩余1序</p>
+      <p id="statusProcessContext" class="status-process-context">当前未选择工艺 / 共0序 / 剩余1序</p>
       <div class="status-form">
         <label class="status-field">
           <span>状态</span>
@@ -363,3 +362,7 @@
   <script src="app.js?v=20260226s"></script>
 </body>
 </html>
+
+
+
+
