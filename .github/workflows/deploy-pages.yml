@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject runtime config
+        shell: bash
+        run: |
+          cat > config.runtime.js << 'EOF'
+          window.__MES_CONFIG__ = {
+            SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",
+            SUPABASE_ANON_KEY: "${{ secrets.SUPABASE_ANON_KEY }}",
+            AUTO_REFRESH_SECONDS: 5,
+            SUPABASE_STORAGE_BUCKET: "material-screenshots",
+            SUPABASE_STORAGE_SIGNED_EXPIRES: 3600,
+            UPLOAD_API_BASE: "${{ secrets.UPLOAD_API_BASE }}",
+            UPLOAD_MAX_MB: 50,
+            UPLOAD_ACCEPT: ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar"
+          };
+          EOF
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
