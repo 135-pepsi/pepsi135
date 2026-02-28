@@ -45,10 +45,7 @@ jobs:
           UPLOAD_API_BASE: ${{ secrets.UPLOAD_API_BASE }}
         run: |
           json_escape() {
-            python3 - <<'PY' "$1"
-import json,sys
-print(json.dumps(sys.argv[1]))
-PY
+            python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
           }
           SUPABASE_URL_JSON="$(json_escape "$SUPABASE_URL")"
           SUPABASE_ANON_KEY_JSON="$(json_escape "$SUPABASE_ANON_KEY")"
