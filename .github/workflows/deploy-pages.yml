@@ -44,7 +44,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           UPLOAD_API_BASE: ${{ secrets.UPLOAD_API_BASE }}
         run: |
-          cat > config.runtime.js << 'EOF'
+          cat > config.runtime.js << EOF
           window.__MES_CONFIG__ = {
             SUPABASE_URL: "${SUPABASE_URL}",
             SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY}",
