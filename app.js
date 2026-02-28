@@ -32,7 +32,8 @@ const XLSX_COLUMNS = [
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
-const STORAGE_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET || "order-attachments").trim();
+const ORDER_TEXT_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS || "order-attachments").trim();
+const ORDER_BUTTON_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET_TUZHI || "tuzhi").trim();
 const UPLOAD_API_BASE = normalizeUploadApiBase(MES_CONFIG.UPLOAD_API_BASE);
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar");
@@ -48,6 +49,8 @@ window.__MES_BOOT__ = {
   supabaseUrl: MES_CONFIG.SUPABASE_URL || "",
   hasAnonKey: Boolean(MES_CONFIG.SUPABASE_ANON_KEY),
   remoteEnabled: REMOTE_ENABLED,
+  orderTextBucket: ORDER_TEXT_BUCKET,
+  orderButtonBucket: ORDER_BUTTON_BUCKET,
 };
 
 function isPrivateIpv4Host(hostname) {
@@ -3536,22 +3539,20 @@ function closePreviewDialog() {
 async function openLinePreview(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order) return;
-  if (!canUseStorageAttachments()) {
-    alert("未登录或未配置 Storage bucket，请先设置 config.js 的 SUPABASE_STORAGE_BUCKET。");
+  if (!canUseStorageBucket(ORDER_TEXT_BUCKET)) {
+    alert(`未登录或未配置 Storage bucket，请先设置 order-attachments（当前: ${ORDER_TEXT_BUCKET || "未配置"}）。`);
     return;
   }
   try {
-    const items = await storageListOrderFiles(orderId);
+    const items = await storageListOrderFiles(orderId, ORDER_TEXT_BUCKET);
     setAttachmentStateFromItems(orderId, items);
     if (items.length === 0) {
-      alert("该零件暂无图纸，请先上传。");
-      await openAttachmentDialog(orderId);
+      alert("该零件暂无可预览图纸，请点击文字执行截图上传。");
       return;
     }
     const previewable = items.find((item) => isPreviewableFile(item));
     if (!previewable) {
-      alert("当前图纸类型不支持在线预览，请在附件列表中下载查看。");
-      await openAttachmentDialog(orderId);
+      alert("当前图纸类型不支持在线预览。");
       return;
     }
     await previewOrderFile(previewable, order);
@@ -3588,10 +3589,10 @@ function renderAttachmentList() {
   if (!attachmentList) return;
   attachmentList.innerHTML = "";
 
-  if (!canUseStorageAttachments()) {
+  if (!canUseStorageBucket(ORDER_BUTTON_BUCKET)) {
     const empty = document.createElement("div");
     empty.className = "attachment-empty";
-    empty.textContent = "未登录或未配置 Storage bucket，请在 config.js 中设置 SUPABASE_STORAGE_BUCKET。";
+    empty.textContent = `未登录或未配置 Storage bucket（图纸按钮使用: ${ORDER_BUTTON_BUCKET || "未配置"}）。`;
     attachmentList.appendChild(empty);
     return;
   }
@@ -3662,7 +3663,7 @@ function renderAttachmentList() {
 
 async function loadOrderFiles(orderId) {
   if (!orderId) return;
-  if (!canUseStorageAttachments()) {
+  if (!canUseStorageBucket(ORDER_BUTTON_BUCKET)) {
     attachmentLoading = false;
     renderAttachmentList();
     return;
@@ -3670,8 +3671,7 @@ async function loadOrderFiles(orderId) {
   attachmentLoading = true;
   renderAttachmentList();
   try {
-    attachmentItems = await storageListOrderFiles(orderId);
-    setAttachmentStateFromItems(orderId, attachmentItems);
+    attachmentItems = await storageListOrderFiles(orderId, ORDER_BUTTON_BUCKET);
   } catch (e) {
     const detail = e?.message || "未知错误";
     alert(`加载附件失败：${detail}`);
@@ -3691,25 +3691,18 @@ async function uploadAttachmentFromInput(event) {
 
 async function uploadAttachmentFile(orderId, file, refreshDialogList = false) {
   if (!file || !orderId) return;
-  if (!canUseStorageAttachments()) {
-    alert("未登录或未配置 Storage bucket，请先设置 config.js 的 SUPABASE_STORAGE_BUCKET。");
+  if (!canUseStorageBucket(ORDER_BUTTON_BUCKET)) {
+    alert(`未登录或未配置 Storage bucket（图纸按钮使用: ${ORDER_BUTTON_BUCKET || "未配置"}）。`);
     return;
   }
-  const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
-  if (file.size > maxBytes) {
-    alert(`文件过大，当前限制 ${UPLOAD_MAX_MB}MB。`);
-    return;
-  }
-  const ext = `.${(file.name.split(".").pop() || "").toLowerCase()}`;
-  const allowList = UPLOAD_ACCEPT.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
-  if (allowList.length > 0 && !allowList.includes(ext)) {
-    alert(`文件类型不支持：${ext || "未知"}。`);
+  const validateMsg = validateAttachmentFile(file);
+  if (validateMsg) {
+    alert(validateMsg);
     return;
   }
 
   try {
-    await storageUploadOrderFile(orderId, file);
-    setAttachmentState(orderId, true);
+    await storageUploadOrderFile(orderId, file, ORDER_BUTTON_BUCKET);
     if (refreshDialogList && attachmentPanelOrderId === orderId) {
       await loadOrderFiles(orderId);
     }
@@ -3756,17 +3749,32 @@ async function captureAndUploadScreenshot(orderId) {
     if (!blob) throw new Error("截图失败");
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const file = new File([blob], `screenshot_${order.orderNo || orderId}_${ts}.png`, { type: "image/png" });
-    await uploadAttachmentFile(orderId, file, false);
+    await uploadLinePreviewFile(orderId, file);
   } catch (e) {
     const message = String(e?.message || "");
     const canceled = message.toLowerCase().includes("permission denied") || message.toLowerCase().includes("cancel");
     if (!canceled) {
       alert(`截屏上传失败：${message || "未知错误"}`);
     }
-    await openAttachmentDialog(orderId);
   } finally {
     if (stream) stream.getTracks().forEach((t) => t.stop());
   }
+}
+
+async function uploadLinePreviewFile(orderId, file) {
+  if (!file || !orderId) return;
+  if (!canUseStorageBucket(ORDER_TEXT_BUCKET)) {
+    alert(`未登录或未配置 Storage bucket（文字点击使用: ${ORDER_TEXT_BUCKET || "未配置"}）。`);
+    return;
+  }
+  const validateMsg = validateAttachmentFile(file);
+  if (validateMsg) {
+    alert(validateMsg);
+    return;
+  }
+  await storageUploadOrderFile(orderId, file, ORDER_TEXT_BUCKET);
+  await fetchAndSetAttachmentState(orderId);
+  render();
 }
 
 async function deleteOrderFile(item) {
@@ -3774,9 +3782,8 @@ async function deleteOrderFile(item) {
   if (!path) return;
   if (!confirm(`确认删除附件“${getAttachmentName(item)}”吗？`)) return;
   try {
-    await storageDeleteOrderFile(path);
+    await storageDeleteOrderFile(path, String(item?.bucket_id || ORDER_BUTTON_BUCKET));
     attachmentItems = attachmentItems.filter((x) => String(x?.path || "") !== path);
-    setAttachmentStateFromItems(attachmentPanelOrderId, attachmentItems);
     renderAttachmentList();
     render();
   } catch (e) {
@@ -3789,7 +3796,7 @@ async function downloadOrderFile(item) {
   const path = String(item?.path || "");
   if (!path) return;
   try {
-    const blob = await storageDownloadOrderFile(path);
+    const blob = await storageDownloadOrderFile(path, String(item?.bucket_id || ORDER_BUTTON_BUCKET));
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -3825,7 +3832,7 @@ async function previewOrderFile(item, orderOverride = null) {
       URL.revokeObjectURL(previewObjectUrl);
       previewObjectUrl = "";
     }
-    const blob = await storageDownloadOrderFile(path);
+    const blob = await storageDownloadOrderFile(path, String(item?.bucket_id || ORDER_TEXT_BUCKET));
     previewObjectUrl = URL.createObjectURL(blob);
     const kind = getPreviewKind(item, blob.type || "");
     previewBody.innerHTML = "";
@@ -3917,7 +3924,7 @@ function syncPreviewUploadedTime(orderId, uploadedAt = "") {
 }
 
 async function warmupAttachmentStates(rows, forceAll = false) {
-  if (!canUseStorageAttachments()) return;
+  if (!canUseStorageBucket(ORDER_TEXT_BUCKET)) return;
   const targets = rows
     .map((row) => row.id)
     .filter((id) => id && (forceAll || !attachmentStateByLineId.has(id)) && !attachmentStateLoading.has(id))
@@ -3929,7 +3936,7 @@ async function warmupAttachmentStates(rows, forceAll = false) {
 async function fetchAndSetAttachmentState(orderId) {
   attachmentStateLoading.add(orderId);
   try {
-    const items = await storageListOrderFiles(orderId);
+    const items = await storageListOrderFiles(orderId, ORDER_TEXT_BUCKET);
     setAttachmentStateFromItems(orderId, items);
   } catch (_e) {
     attachmentStateByLineId.set(orderId, false);
@@ -3975,8 +3982,8 @@ function formatDateTime(value) {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
-function canUseStorageAttachments() {
-  return Boolean(REMOTE_ENABLED && db && STORAGE_BUCKET && authSession?.user?.id);
+function canUseStorageBucket(bucketName) {
+  return Boolean(REMOTE_ENABLED && db && String(bucketName || "").trim() && authSession?.user?.id);
 }
 
 function orderAttachmentFolder(orderId) {
@@ -3988,14 +3995,15 @@ function sanitizeAttachmentFileName(name) {
   return base.replace(/[^\w.\-()\u4e00-\u9fa5]+/g, "_").slice(0, 120);
 }
 
-function buildAttachmentItemFromStorage(folder, entry) {
+function buildAttachmentItemFromStorage(bucketName, folder, entry) {
   const rawName = String(entry?.name || "");
   const displayName = rawName.replace(/^\d+_[a-f0-9]{8}_/i, "") || rawName || "未命名附件";
   const path = `${folder}/${rawName}`;
   const size = Number(entry?.metadata?.size || entry?.metadata?.fileSize || entry?.size || 0) || 0;
   const mime = String(entry?.metadata?.mimetype || entry?.metadata?.contentType || "");
   return {
-    id: `sb:${STORAGE_BUCKET}/${path}`,
+    id: `sb:${bucketName}/${path}`,
+    bucket_id: bucketName,
     path,
     name: rawName,
     display_name: displayName,
@@ -4006,10 +4014,10 @@ function buildAttachmentItemFromStorage(folder, entry) {
   };
 }
 
-async function storageListOrderFiles(orderId) {
-  if (!db || !STORAGE_BUCKET) return [];
+async function storageListOrderFiles(orderId, bucketName) {
+  if (!db || !bucketName) return [];
   const folder = orderAttachmentFolder(orderId);
-  const { data, error } = await db.storage.from(STORAGE_BUCKET).list(folder, {
+  const { data, error } = await db.storage.from(bucketName).list(folder, {
     limit: 200,
     offset: 0,
     sortBy: { column: "name", order: "desc" },
@@ -4017,15 +4025,15 @@ async function storageListOrderFiles(orderId) {
   if (error) throw error;
   return (Array.isArray(data) ? data : [])
     .filter((entry) => String(entry?.name || "") && String(entry?.name || "") !== ".emptyFolderPlaceholder")
-    .map((entry) => buildAttachmentItemFromStorage(folder, entry));
+    .map((entry) => buildAttachmentItemFromStorage(bucketName, folder, entry));
 }
 
-async function storageUploadOrderFile(orderId, file) {
-  if (!db || !STORAGE_BUCKET) throw new Error("Storage 未配置");
+async function storageUploadOrderFile(orderId, file, bucketName) {
+  if (!db || !bucketName) throw new Error("Storage 未配置");
   const folder = orderAttachmentFolder(orderId);
   const safeName = sanitizeAttachmentFileName(file.name);
   const path = `${folder}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}`;
-  const { error } = await db.storage.from(STORAGE_BUCKET).upload(path, file, {
+  const { error } = await db.storage.from(bucketName).upload(path, file, {
     upsert: false,
     contentType: file.type || undefined,
     cacheControl: "3600",
@@ -4033,17 +4041,27 @@ async function storageUploadOrderFile(orderId, file) {
   if (error) throw error;
 }
 
-async function storageDeleteOrderFile(path) {
-  if (!db || !STORAGE_BUCKET) throw new Error("Storage 未配置");
-  const { error } = await db.storage.from(STORAGE_BUCKET).remove([path]);
+async function storageDeleteOrderFile(path, bucketName) {
+  if (!db || !bucketName) throw new Error("Storage 未配置");
+  const { error } = await db.storage.from(bucketName).remove([path]);
   if (error) throw error;
 }
 
-async function storageDownloadOrderFile(path) {
-  if (!db || !STORAGE_BUCKET) throw new Error("Storage 未配置");
-  const { data, error } = await db.storage.from(STORAGE_BUCKET).download(path);
+async function storageDownloadOrderFile(path, bucketName) {
+  if (!db || !bucketName) throw new Error("Storage 未配置");
+  const { data, error } = await db.storage.from(bucketName).download(path);
   if (error) throw error;
   return data;
+}
+
+function validateAttachmentFile(file) {
+  if (!file) return "未选择文件。";
+  const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
+  if (file.size > maxBytes) return `文件过大，当前限制 ${UPLOAD_MAX_MB}MB。`;
+  const ext = `.${(file.name.split(".").pop() || "").toLowerCase()}`;
+  const allowList = UPLOAD_ACCEPT.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  if (allowList.length > 0 && !allowList.includes(ext)) return `文件类型不支持：${ext || "未知"}。`;
+  return "";
 }
 
 function formatDateTimeShort(value) {
@@ -4514,7 +4532,6 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
-
 
 
 
