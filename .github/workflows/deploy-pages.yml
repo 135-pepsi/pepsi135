@@ -21,21 +21,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate runtime secrets
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::error::Missing secret: SUPABASE_URL"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Missing secret: SUPABASE_ANON_KEY"
+            exit 1
+          fi
+          echo "Runtime secrets check passed."
+
       - name: Inject runtime config
         shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          UPLOAD_API_BASE: ${{ secrets.UPLOAD_API_BASE }}
         run: |
           cat > config.runtime.js << 'EOF'
           window.__MES_CONFIG__ = {
-            SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",
-            SUPABASE_ANON_KEY: "${{ secrets.SUPABASE_ANON_KEY }}",
+            SUPABASE_URL: "${SUPABASE_URL}",
+            SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY}",
             AUTO_REFRESH_SECONDS: 5,
             SUPABASE_STORAGE_BUCKET: "material-screenshots",
             SUPABASE_STORAGE_SIGNED_EXPIRES: 3600,
-            UPLOAD_API_BASE: "${{ secrets.UPLOAD_API_BASE }}",
+            UPLOAD_API_BASE: "${UPLOAD_API_BASE}",
             UPLOAD_MAX_MB: 50,
             UPLOAD_ACCEPT: ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar"
           };
           EOF
+          test -s config.runtime.js
+          grep -q 'window.__MES_CONFIG__' config.runtime.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
