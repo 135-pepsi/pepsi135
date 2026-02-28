@@ -42,6 +42,13 @@ const VIRTUAL_ENABLED_THRESHOLD = 160;
 const VIRTUAL_ROW_ESTIMATE = 46;
 const VIRTUAL_OVERSCAN_ROWS = 18;
 const DEBUG_PERF = Boolean(MES_CONFIG.DEBUG_PERF);
+window.__MES_BOOT__ = {
+  href: location.href,
+  hasSupabase: Boolean(window.supabase),
+  supabaseUrl: MES_CONFIG.SUPABASE_URL || "",
+  hasAnonKey: Boolean(MES_CONFIG.SUPABASE_ANON_KEY),
+  remoteEnabled: REMOTE_ENABLED,
+};
 
 let orders = [];
 let filters = {
@@ -4452,7 +4459,6 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
-
 
 
 
