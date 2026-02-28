@@ -846,7 +846,11 @@ async function initAuth() {
     if (error) throw error;
     authSession = data?.session || null;
   } catch (e) {
-    console.warn("读取登录态失败", e);
+    if (isAbortError(e)) {
+      console.warn("读取登录态被中断，稍后自动重试", e);
+    } else {
+      console.warn("读取登录态失败", e);
+    }
     authSession = null;
   }
   updateAuthUi();
@@ -3243,6 +3247,11 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
 }
 
 function handleRemoteError(prefix, err) {
+  if (isAbortError(err)) {
+    console.warn(`${prefix}（请求被中断）`, err);
+    scheduleReconnect();
+    return;
+  }
   console.error(prefix, err);
   remoteOnline = false;
   setModeText("本地模式（云连接失败）");
@@ -3258,6 +3267,12 @@ function isAuthError(err) {
   const code = String(err?.status || err?.code || "").toUpperCase();
   const msg = String(err?.message || err?.error_description || "").toUpperCase();
   return code === "401" || code === "403" || code === "PGRST301" || msg.includes("JWT") || msg.includes("AUTH");
+}
+
+function isAbortError(err) {
+  const name = String(err?.name || "");
+  const msg = String(err?.message || err?.error_description || "").toLowerCase();
+  return name === "AbortError" || msg.includes("signal is aborted") || msg.includes("aborterror");
 }
 
 function scheduleReconnect() {
@@ -4459,7 +4474,6 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
-
 
 
 
