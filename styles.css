@@ -710,6 +710,25 @@ body:not(.material-page) .kpi-grid {
   font-size: 12px;
 }
 
+.material-stat-row {
+  display: grid;
+  gap: 6px;
+}
+
+.material-stat-label {
+  color: #a9c7e8;
+  font-size: 12px;
+}
+
+.material-stat-value {
+  display: block;
+  font-size: 24px;
+  font-family: var(--font-display);
+  line-height: 1.2;
+  color: #8fd0ff;
+  font-variant-numeric: tabular-nums;
+}
+
 .material-main-head {
   display: flex;
   justify-content: space-between;
@@ -2196,7 +2215,6 @@ body.compact-mode {
     display: none;
   }
 }
-
 
 
 

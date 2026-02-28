@@ -152,6 +152,7 @@ const el = {
   filterMonth: document.getElementById("materialFilterMonth"),
   filterSupplier: document.getElementById("materialFilterSupplier"),
   filterStatus: document.getElementById("materialFilterStatus"),
+  summaryAmountTotal: document.getElementById("materialSummaryAmountTotal"),
 
   kpiNeedOrder: document.getElementById("materialKpiNeedOrder"),
   kpiInTransit: document.getElementById("materialKpiInTransit"),
@@ -1252,12 +1253,27 @@ function render() {
   }
   currentRenderList = getFilteredRows();
   currentRenderExtraMap = buildExtraMap(currentRenderList);
+  renderMaterialSummary(currentRenderList, currentRenderExtraMap);
   renderOrderHints();
   if (pendingViewportRenderRaf) {
     cancelAnimationFrame(pendingViewportRenderRaf);
     pendingViewportRenderRaf = 0;
   }
   renderViewportRows();
+}
+
+function renderMaterialSummary(list, extraMap = new Map()) {
+  if (!el.summaryAmountTotal) return;
+  const total = list.reduce((sum, row) => {
+    const extra = extraMap.get(row.id) || createDefaultExtra();
+    const visibleEntries = getVisibleGroupEntries(row, extra);
+    const rowAmount = visibleEntries.reduce((groupSum, entry) => {
+      const value = Number(entry?.group?.amount);
+      return Number.isFinite(value) && value >= 0 ? groupSum + value : groupSum;
+    }, 0);
+    return sum + rowAmount;
+  }, 0);
+  el.summaryAmountTotal.textContent = formatCurrency(total);
 }
 
 function summaryCell(text) {
