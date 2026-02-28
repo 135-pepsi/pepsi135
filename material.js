@@ -14,6 +14,11 @@ const STORAGE_SIGNED_EXPIRES = Math.max(60, Number(MES_CONFIG.SUPABASE_STORAGE_S
 const UPLOAD_API_BASE = String(MES_CONFIG.UPLOAD_API_BASE || "").replace(/\/+$/, "");
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
+const FORCE_FULL_SYNC_INTERVAL = 12;
+const DEBUG_PERF = Boolean(MES_CONFIG.DEBUG_PERF);
+const VIRTUAL_ENABLED_THRESHOLD = 120;
+const VIRTUAL_ROW_ESTIMATE = 88;
+const VIRTUAL_OVERSCAN_ROWS = 10;
 
 const STATUS_LIST = ["下单", "采购", "到货", "异常"];
 const MATERIAL_OPTIONS = ["", "45#钢", "40Cr", "铝6061", "铝7075", "铝2A12", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
@@ -65,6 +70,17 @@ let supplierCustomBound = false;
 let otherScreenshotDataUrl = "";
 let screenshotPreviewRenderToken = 0;
 const screenshotObjectUrlCache = new Map();
+const parsedGroupCache = new Map();
+let supplierFilterDirty = true;
+let pendingGroupHeightSync = 0;
+let pendingGroupHeightRaf = 0;
+let materialSyncCursor = "";
+let materialIncrementalSyncCount = 0;
+const rowDomCache = new Map();
+let currentRenderList = [];
+let currentRenderExtraMap = new Map();
+let pendingViewportRenderRaf = 0;
+let tableDelegateBound = false;
 
 const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
@@ -178,8 +194,10 @@ async function init() {
   });
   initStatusFilterOptions();
   initSupplierFilterOptions();
+  supplierFilterDirty = false;
   setFilterDefaults();
   rows = loadLocalRows();
+  resetDerivedCaches();
   if (REMOTE_ENABLED) {
     await initAuth();
     if (shouldUseLocalOnlyMode()) {
@@ -189,13 +207,13 @@ async function init() {
       render();
       setLastSyncTime();
     } else {
-      await refreshFromRemote();
+      await refreshFromRemote(false, false);
       const testAdded = await ensureTestRowExists();
       if (testAdded) render();
     }
     setInterval(() => {
       if (Date.now() < summarySelectionHoldUntil || hasActiveSummarySelection()) return;
-      if (!syncing && remoteOnline && !shouldUseLocalOnlyMode()) void refreshFromRemote(false);
+      if (!syncing && remoteOnline && !shouldUseLocalOnlyMode()) void refreshFromRemote(false, true);
     }, AUTO_REFRESH_MS);
   } else {
     await refreshOrderCustomerMap();
@@ -247,6 +265,7 @@ function bindEvents() {
   bindAuthEvents();
   bindDialogEvents();
   bindHeaderActions();
+  bindTableDelegates();
   if (el.reconnectBtn) el.reconnectBtn.addEventListener("click", () => void tryReconnect(true));
 
   if (el.backTopBtn) {
@@ -255,7 +274,10 @@ function bindEvents() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
   }
-  if (el.tableWrap) el.tableWrap.addEventListener("scroll", updateBackTopBtn);
+  if (el.tableWrap) el.tableWrap.addEventListener("scroll", handleTableWrapScroll);
+  window.addEventListener("resize", () => {
+    if (isVirtualRenderEnabled(currentRenderList.length)) scheduleViewportRender();
+  });
   window.addEventListener("scroll", updateBackTopBtn);
   window.addEventListener("beforeunload", () => {
     pageUnloading = true;
@@ -272,6 +294,62 @@ function bindEvents() {
       closeInfo();
       closeImagePreview();
     }
+  });
+}
+
+function bindTableDelegates() {
+  if (!el.tableBody || tableDelegateBound) return;
+  tableDelegateBound = true;
+  el.tableBody.addEventListener("click", (event) => {
+    const rawTarget = event.target;
+    const target = rawTarget instanceof Element
+      ? rawTarget
+      : (rawTarget && rawTarget.parentElement ? rawTarget.parentElement : null);
+    if (!target) return;
+    const actionBtn = target.closest("button[data-action]");
+    if (actionBtn instanceof HTMLButtonElement) {
+      event.preventDefault();
+      event.stopPropagation();
+      const action = String(actionBtn.dataset.action || "");
+      const rowId = String(actionBtn.dataset.rowId || "");
+      const groupIndex = Number(actionBtn.dataset.groupIndex || "0");
+      if (!rowId) return;
+      if (action === "edit-amount") {
+        void editGroupAmount(rowId, groupIndex);
+        return;
+      }
+      if (action === "cycle-status") {
+        void cycleGroupStatus(rowId, groupIndex);
+        return;
+      }
+      if (action === "delete-group") {
+        void deleteMaterialGroup(rowId, groupIndex);
+        return;
+      }
+      if (action === "delete-row") {
+        void deleteRow(rowId);
+        return;
+      }
+      if (action === "edit-item") {
+        const kind = String(actionBtn.dataset.itemKind || "material");
+        if (kind === "other") {
+          openOtherItemDialog(rowId, { groupIndex });
+        } else {
+          openMaterialItemDialog(rowId, { groupIndex });
+        }
+      }
+      return;
+    }
+
+    if (target.closest("a,button,input,select,textarea")) return;
+    const tr = target.closest("tr[data-row-id]");
+    if (!(tr instanceof HTMLTableRowElement)) return;
+    const rowId = String(tr.dataset.rowId || "");
+    if (!rowId) return;
+    const prev = selectedRowId;
+    selectedRowId = rowId;
+    updateSelectedRowClass(prev, false);
+    updateSelectedRowClass(selectedRowId, true);
   });
 }
 
@@ -597,6 +675,7 @@ function addCustomSupplierOption(name) {
   if (SUPPLIER_BLOCKLIST.has(v)) return;
   if (!supplierOptions.includes(v)) {
     supplierOptions.push(v);
+    markSupplierFilterDirty();
     saveCustomSupplierOptions();
   }
 }
@@ -649,7 +728,7 @@ function collectSupplierFilterOptions() {
   rows.forEach((row) => {
     const extra = getExtra(row.id);
     const merged = [String(extra?.supplier || "").trim()];
-    parseMaterialGroups(row, extra).forEach((g) => merged.push(String(g?.supplier || "").trim()));
+    getCachedMaterialGroups(row, extra).forEach((g) => merged.push(String(g?.supplier || "").trim()));
     merged.forEach((v) => { if (v) set.add(v); });
   });
   return Array.from(set).sort((a, b) => a.localeCompare(b, "zh-CN"));
@@ -738,11 +817,61 @@ function bindActionDialog(dialogEl, closeButtons, saveFn, saveBtn) {
 }
 
 function setFilterDefaults() { if (el.filterMonth) el.filterMonth.value = filterState.month; }
-function createEmptyRow() { return { id: crypto.randomUUID(), createdAt: new Date().toISOString(), orderNo: "", customer: "", material: "", spec: "", quantity: "", amount: "", isReady: "" }; }
+function createEmptyRow() {
+  const now = new Date().toISOString();
+  return { id: crypto.randomUUID(), createdAt: now, updatedAt: now, orderNo: "", customer: "", material: "", spec: "", quantity: "", amount: "", isReady: "" };
+}
 function createDefaultExtra() { return { ...DEFAULT_EXTRA }; }
 function getExtra(id) { return { ...createDefaultExtra(), ...(extras[id] || {}) }; }
-function saveExtra(id, patch) { extras[id] = { ...getExtra(id), ...patch }; saveExtras(); }
-function deleteExtra(id) { if (extras[id]) { delete extras[id]; saveExtras(); } }
+function markSupplierFilterDirty() { supplierFilterDirty = true; }
+function invalidateRowCaches(id) {
+  if (!id) return;
+  parsedGroupCache.delete(id);
+  rowDomCache.delete(id);
+}
+function resetDerivedCaches() {
+  parsedGroupCache.clear();
+  rowDomCache.clear();
+  markSupplierFilterDirty();
+}
+function makeMaterialGroupCacheToken(row, extra) {
+  return JSON.stringify({
+    spec: String(row?.spec || ""),
+    material: String(row?.material || ""),
+    quantity: String(row?.quantity ?? ""),
+    amount: String(row?.amount ?? ""),
+    isReady: String(row?.isReady || ""),
+    createdAt: String(row?.createdAt || ""),
+    updatedAt: String(row?.updatedAt || ""),
+    supplier: String(extra?.supplier || ""),
+    status: String(extra?.status || ""),
+    inTransit: Number(extra?.inTransit || 0),
+  });
+}
+function getCachedMaterialGroups(row, extra) {
+  const id = String(row?.id || "");
+  if (!id) return parseMaterialGroups(row, extra);
+  const token = makeMaterialGroupCacheToken(row, extra);
+  const hit = parsedGroupCache.get(id);
+  if (hit && hit.token === token) return hit.groups;
+  const groups = parseMaterialGroups(row, extra);
+  parsedGroupCache.set(id, { token, groups });
+  return groups;
+}
+function saveExtra(id, patch) {
+  extras[id] = { ...getExtra(id), ...patch };
+  invalidateRowCaches(id);
+  markSupplierFilterDirty();
+  saveExtras();
+}
+function deleteExtra(id) {
+  if (extras[id]) {
+    delete extras[id];
+    invalidateRowCaches(id);
+    markSupplierFilterDirty();
+    saveExtras();
+  }
+}
 function buildExtraMap(list) { const map = new Map(); list.forEach((row) => map.set(row.id, getExtra(row.id))); return map; }
 
 function getCurrentStock(row) { const n = Number(row.quantity); return Number.isFinite(n) ? n : 0; }
@@ -768,7 +897,7 @@ function normalizeStatus(value, row, extra) {
 }
 
 function getStatus(row, extra) {
-  const groups = parseMaterialGroups(row, extra);
+  const groups = getCachedMaterialGroups(row, extra);
   if (!groups.length) return normalizeStatus(extra?.status, row, extra);
   const statuses = groups.map((g) => normalizeStatus(g?.status, row, extra));
   if (statuses.some((s) => s === "异常")) return "异常";
@@ -795,7 +924,7 @@ function getMonthFromOrderNo(orderNo) {
 }
 
 function getVisibleGroupEntries(row, extra) {
-  const groups = parseMaterialGroups(row, extra);
+  const groups = getCachedMaterialGroups(row, extra);
   const entries = groups.map((group, index) => ({ group, index }));
   const supplierNeed = String(filterState.supplier || "").trim();
   const statusNeed = String(filterState.status || "").trim();
@@ -847,7 +976,7 @@ function buildContentSummary(row, extra, visibleEntries = null) {
   const customer = String(row.customer || "").trim();
   const groups = Array.isArray(visibleEntries)
     ? visibleEntries.map((entry) => entry.group)
-    : parseMaterialGroups(row, extra);
+    : getCachedMaterialGroups(row, extra);
   const header = [
     `订单号: ${orderNo || "-"}`,
     `客户: ${customer || "-"}`,
@@ -877,7 +1006,7 @@ function buildContentSummary(row, extra, visibleEntries = null) {
 }
 
 function getSupplierFilterText(row, extra) {
-  const groups = parseMaterialGroups(row, extra);
+  const groups = getCachedMaterialGroups(row, extra);
   const supplierList = groups.map((g) => String(g.supplier || "").trim()).filter(Boolean);
   const merged = [String(extra?.supplier || "").trim(), ...supplierList].filter(Boolean);
   return normalizeSupplierSearchText(merged.join(" "));
@@ -891,33 +1020,146 @@ function normalizeSupplierSearchText(text) {
     .trim();
 }
 
+function isVirtualRenderEnabled(total) {
+  return Boolean(el.tableWrap && total >= VIRTUAL_ENABLED_THRESHOLD);
+}
+
+function getVirtualWindow(total) {
+  if (!isVirtualRenderEnabled(total)) return { start: 0, end: total, topPad: 0, bottomPad: 0 };
+  const wrap = el.tableWrap;
+  const scrollTop = wrap?.scrollTop || 0;
+  const clientHeight = wrap?.clientHeight || 0;
+  const estimatedStart = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_ESTIMATE) - VIRTUAL_OVERSCAN_ROWS);
+  const estimatedVisible = Math.ceil(clientHeight / VIRTUAL_ROW_ESTIMATE) + VIRTUAL_OVERSCAN_ROWS * 2;
+  const start = Math.min(Math.max(0, estimatedStart), Math.max(0, total - 1));
+  const end = Math.min(total, start + Math.max(estimatedVisible, VIRTUAL_OVERSCAN_ROWS * 2));
+  const topPad = start * VIRTUAL_ROW_ESTIMATE;
+  const bottomPad = Math.max(0, (total - end) * VIRTUAL_ROW_ESTIMATE);
+  return { start, end, topPad, bottomPad };
+}
+
+function makeRowRenderSignature(row, extra, visibleEntries) {
+  return JSON.stringify({
+    selected: selectedRowId === row.id,
+    orderNo: String(row.orderNo || ""),
+    customer: String(row.customer || ""),
+    material: String(row.material || ""),
+    spec: String(row.spec || ""),
+    quantity: String(row.quantity ?? ""),
+    amount: String(row.amount ?? ""),
+    isReady: String(row.isReady || ""),
+    updatedAt: String(row.updatedAt || row.createdAt || ""),
+    extraSupplier: String(extra?.supplier || ""),
+    extraStatus: String(extra?.status || ""),
+    visibleLen: Array.isArray(visibleEntries) ? visibleEntries.length : 0,
+    visible: Array.isArray(visibleEntries)
+      ? visibleEntries.map((entry) => ({
+        i: Number(entry.index || 0),
+        m: String(entry.group?.material || ""),
+        s: String(entry.group?.supplier || ""),
+        st: String(entry.group?.status || ""),
+        a: String(entry.group?.amount ?? ""),
+        l: Array.isArray(entry.group?.lines)
+          ? entry.group.lines.map((line) => `${String(line?.size || "")}:${String(line?.qty ?? "")}`).join("|")
+          : "",
+      }))
+      : [],
+  });
+}
+
+function buildRowTr(row, extra, visibleEntries) {
+  const tr = document.createElement("tr");
+  tr.dataset.rowId = row.id;
+  if (selectedRowId === row.id) tr.classList.add("material-row-selected");
+  tr.appendChild(editCell(row, "orderNo"));
+  tr.appendChild(textCell(row.customer || ""));
+  tr.appendChild(materialDetailCell(row, extra, visibleEntries));
+  tr.appendChild(amountDetailCell(row, extra, visibleEntries));
+  tr.appendChild(statusDetailCell(row, extra, visibleEntries));
+  tr.appendChild(actionDetailCell(row, extra, visibleEntries));
+  tr.appendChild(summaryCell(buildContentSummary(row, extra, visibleEntries)));
+  return tr;
+}
+
+function getRowTr(row, extra, visibleEntries) {
+  const signature = makeRowRenderSignature(row, extra, visibleEntries);
+  const cached = rowDomCache.get(row.id);
+  if (cached && cached.signature === signature && cached.tr) return cached.tr;
+  const tr = buildRowTr(row, extra, visibleEntries);
+  rowDomCache.set(row.id, { signature, tr });
+  return tr;
+}
+
+function createPadRow(heightPx) {
+  const tr = document.createElement("tr");
+  tr.className = "material-virtual-pad-row";
+  const td = document.createElement("td");
+  td.colSpan = 7;
+  td.style.height = `${Math.max(0, Math.floor(heightPx))}px`;
+  td.style.padding = "0";
+  td.style.border = "0";
+  td.style.background = "transparent";
+  tr.appendChild(td);
+  return tr;
+}
+
+function renderViewportRows() {
+  if (!el.tableBody) return;
+  const startTs = DEBUG_PERF ? performance.now() : 0;
+  const list = currentRenderList;
+  const total = list.length;
+  const { start, end, topPad, bottomPad } = getVirtualWindow(total);
+  const frag = document.createDocumentFragment();
+  if (topPad > 0) frag.appendChild(createPadRow(topPad));
+  for (let i = start; i < end; i += 1) {
+    const row = list[i];
+    const extra = currentRenderExtraMap.get(row.id) || createDefaultExtra();
+    const visibleEntries = getVisibleGroupEntries(row, extra);
+    frag.appendChild(getRowTr(row, extra, visibleEntries));
+  }
+  if (bottomPad > 0) frag.appendChild(createPadRow(bottomPad));
+  el.tableBody.replaceChildren(frag);
+  if (shouldSyncGroupHeights(total)) {
+    scheduleGroupHeightSync();
+  } else {
+    if (pendingGroupHeightSync) {
+      clearTimeout(pendingGroupHeightSync);
+      pendingGroupHeightSync = 0;
+    }
+    if (pendingGroupHeightRaf) {
+      cancelAnimationFrame(pendingGroupHeightRaf);
+      pendingGroupHeightRaf = 0;
+    }
+  }
+  if (DEBUG_PERF) {
+    const cost = performance.now() - startTs;
+    const rendered = Math.max(0, end - start);
+    console.debug(`[material] render ${cost.toFixed(1)}ms (visible ${rendered}/${total})`);
+  }
+}
+
+function scheduleViewportRender() {
+  if (pendingViewportRenderRaf) return;
+  pendingViewportRenderRaf = requestAnimationFrame(() => {
+    pendingViewportRenderRaf = 0;
+    renderViewportRows();
+  });
+}
+
 function render() {
   cleanupExtras();
-  initSupplierFilterOptions();
-  const list = getFilteredRows();
-  const extraMap = buildExtraMap(list);
+  if (supplierFilterDirty) {
+    initSupplierFilterOptions();
+    supplierFilterDirty = false;
+  }
+  currentRenderList = getFilteredRows();
+  currentRenderExtraMap = buildExtraMap(currentRenderList);
   renderOrderHints();
-  if (!el.tableBody) return;
-  el.tableBody.innerHTML = "";
-  list.forEach((row) => {
-    const extra = extraMap.get(row.id) || createDefaultExtra();
-    const visibleEntries = getVisibleGroupEntries(row, extra);
-    const tr = document.createElement("tr");
-    tr.addEventListener("click", () => {
-      selectedRowId = row.id;
-      render();
-    });
-    if (selectedRowId === row.id) tr.classList.add("material-row-selected");
-    tr.appendChild(editCell(row, "orderNo"));
-    tr.appendChild(textCell(row.customer || ""));
-    tr.appendChild(materialDetailCell(row, extra, visibleEntries));
-    tr.appendChild(amountDetailCell(row, extra, visibleEntries));
-    tr.appendChild(statusDetailCell(row, extra, visibleEntries));
-    tr.appendChild(actionDetailCell(row, extra, visibleEntries));
-    tr.appendChild(summaryCell(buildContentSummary(row, extra, visibleEntries)));
-    el.tableBody.appendChild(tr);
-  });
-  requestAnimationFrame(syncGroupHeights);
+  if (pendingViewportRenderRaf) {
+    cancelAnimationFrame(pendingViewportRenderRaf);
+    pendingViewportRenderRaf = 0;
+  }
+  renderViewportRows();
 }
 
 function summaryCell(text) {
@@ -937,7 +1179,7 @@ function amountDetailCell(row, extra, visibleEntries = null) {
   td.className = "material-amount-cell";
   const groups = Array.isArray(visibleEntries)
     ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
-    : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
+    : getCachedMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
   if (!groups.length) {
     td.textContent = "未填写";
     return td;
@@ -957,11 +1199,9 @@ function amountDetailCell(row, extra, visibleEntries = null) {
     editBtn.className = "material-icon-btn";
     editBtn.setAttribute("aria-label", "编辑");
     editBtn.title = "编辑";
-    editBtn.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void editGroupAmount(row.id, Number(g.__sourceIndex ?? idx));
-    });
+    editBtn.dataset.action = "edit-amount";
+    editBtn.dataset.rowId = row.id;
+    editBtn.dataset.groupIndex = String(Number(g.__sourceIndex ?? idx));
     groupActions.appendChild(editBtn);
     group.appendChild(amountText);
     group.appendChild(groupActions);
@@ -1021,7 +1261,7 @@ function statusDetailCell(row, extra, visibleEntries = null) {
   td.className = "material-status-cell";
   const groups = Array.isArray(visibleEntries)
     ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
-    : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
+    : getCachedMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
   if (!groups.length) {
     const empty = document.createElement("div");
     empty.className = "material-status-group";
@@ -1040,11 +1280,9 @@ function statusDetailCell(row, extra, visibleEntries = null) {
     btn.textContent = statusText;
     btn.dataset.status = statusText;
     btn.title = "点击切换状态";
-    btn.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void cycleGroupStatus(row.id, Number(g.__sourceIndex ?? idx));
-    });
+    btn.dataset.action = "cycle-status";
+    btn.dataset.rowId = row.id;
+    btn.dataset.groupIndex = String(Number(g.__sourceIndex ?? idx));
     group.appendChild(btn);
     td.appendChild(group);
   });
@@ -1095,7 +1333,7 @@ function materialDetailCell(row, extra, visibleEntries = null) {
   });
   const groups = Array.isArray(visibleEntries)
     ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
-    : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
+    : getCachedMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
   const hasContent = groups.some((g) => g.material || g.supplier || g.lines.some((x) => x.size || x.qty !== ""));
   if (!hasContent) {
     const empty = document.createElement("div");
@@ -1111,6 +1349,10 @@ function materialDetailCell(row, extra, visibleEntries = null) {
     editBtn.className = "material-icon-btn";
     editBtn.setAttribute("aria-label", "编辑");
     editBtn.title = "编辑";
+    editBtn.dataset.action = "edit-item";
+    editBtn.dataset.itemKind = "material";
+    editBtn.dataset.rowId = row.id;
+    editBtn.dataset.groupIndex = "0";
     editBtn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -1177,6 +1419,10 @@ function materialDetailCell(row, extra, visibleEntries = null) {
       editBtn.className = "material-icon-btn";
       editBtn.setAttribute("aria-label", "编辑");
       editBtn.title = "编辑";
+      editBtn.dataset.action = "edit-item";
+      editBtn.dataset.itemKind = String(g?.itemKind || "material");
+      editBtn.dataset.rowId = row.id;
+      editBtn.dataset.groupIndex = String(Number(g.__sourceIndex ?? idx));
       editBtn.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1322,7 +1568,7 @@ function actionDetailCell(row, extra, visibleEntries = null) {
   td.className = "material-op-cell";
   const groups = Array.isArray(visibleEntries)
     ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
-    : parseMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
+    : getCachedMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
   if (!groups.length) {
     const group = document.createElement("div");
     group.className = "material-op-group";
@@ -1330,7 +1576,8 @@ function actionDetailCell(row, extra, visibleEntries = null) {
     btn.type = "button";
     btn.className = "action-btn";
     btn.textContent = "删除";
-    btn.addEventListener("click", () => void deleteRow(row.id));
+    btn.dataset.action = "delete-row";
+    btn.dataset.rowId = row.id;
     group.appendChild(btn);
     td.appendChild(group);
     return td;
@@ -1343,11 +1590,9 @@ function actionDetailCell(row, extra, visibleEntries = null) {
     btn.type = "button";
     btn.className = "action-btn";
     btn.textContent = "删除";
-    btn.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void deleteMaterialGroup(row.id, Number(g.__sourceIndex ?? idx));
-    });
+    btn.dataset.action = "delete-group";
+    btn.dataset.rowId = row.id;
+    btn.dataset.groupIndex = String(Number(g.__sourceIndex ?? idx));
     group.appendChild(btn);
     td.appendChild(group);
   });
@@ -1387,6 +1632,8 @@ async function deleteMaterialGroup(rowId, groupIndex) {
 async function deleteRow(id) {
   if (!confirm("确认删除该物料行吗？")) return;
   rows = rows.filter((r) => r.id !== id);
+  invalidateRowCaches(id);
+  markSupplierFilterDirty();
   deleteExtra(id);
   await persist({ deletedId: id });
   render();
@@ -1506,7 +1753,32 @@ function closeImagePreview() {
   closeDialog(el.imagePreviewDialog);
 }
 
+function updateSelectedRowClass(rowId, selected) {
+  if (!el.tableBody || !rowId) return;
+  const tr = el.tableBody.querySelector(`tr[data-row-id="${rowId}"]`);
+  if (!tr) return;
+  tr.classList.toggle("material-row-selected", Boolean(selected));
+}
+
+function shouldSyncGroupHeights(totalRows = currentRenderList.length) {
+  return !isVirtualRenderEnabled(totalRows);
+}
+
+function scheduleGroupHeightSync() {
+  if (!shouldSyncGroupHeights()) return;
+  if (pendingGroupHeightSync) clearTimeout(pendingGroupHeightSync);
+  pendingGroupHeightSync = setTimeout(() => {
+    pendingGroupHeightSync = 0;
+    if (pendingGroupHeightRaf) cancelAnimationFrame(pendingGroupHeightRaf);
+    pendingGroupHeightRaf = requestAnimationFrame(() => {
+      pendingGroupHeightRaf = 0;
+      syncGroupHeights();
+    });
+  }, 40);
+}
+
 function syncGroupHeights() {
+  if (!shouldSyncGroupHeights()) return;
   if (!el.tableBody) return;
   const wrapRect = el.tableWrap?.getBoundingClientRect?.() || null;
   const visiblePadding = 120;
@@ -2145,6 +2417,11 @@ async function saveOtherItemDetail() {
   render();
 }
 
+function handleTableWrapScroll() {
+  updateBackTopBtn();
+  if (isVirtualRenderEnabled(currentRenderList.length)) scheduleViewportRender();
+}
+
 function updateBackTopBtn() { if (!el.backTopBtn) return; const pageY = window.scrollY || 0; const tableY = el.tableWrap ? el.tableWrap.scrollTop : 0; el.backTopBtn.style.display = pageY > 120 || tableY > 120 ? "inline-flex" : "none"; }
 
 async function initAuth() {
@@ -2156,6 +2433,7 @@ async function initAuth() {
     updateAuthUi();
     if (shouldUseLocalOnlyMode()) {
       rows = loadLocalRows();
+      resetDerivedCaches();
       await ensureTestRowExists();
       setModeText("本地调试模式（未登录）");
       render();
@@ -2200,6 +2478,19 @@ function setModeText(text) { if (el.systemMode) el.systemMode.textContent = text
 function setLastSyncTime() { if (!el.lastSyncTime) return; const now = new Date(); const t = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`; el.lastSyncTime.textContent = `最近同步 ${t}`; }
 
 async function persist({ changed = [], deletedId = "", notifyAuth = true } = {}) {
+  if (changed.length > 0) {
+    const base = Date.now();
+    changed.forEach((r, i) => {
+      const ts = new Date(base + i).toISOString();
+      r.updatedAt = ts;
+      invalidateRowCaches(r.id);
+    });
+    markSupplierFilterDirty();
+  }
+  if (deletedId) {
+    invalidateRowCaches(deletedId);
+    markSupplierFilterDirty();
+  }
   saveLocalRows();
   setLastSyncTime();
   if (!REMOTE_ENABLED || !remoteOnline) return;
@@ -2207,8 +2498,7 @@ async function persist({ changed = [], deletedId = "", notifyAuth = true } = {})
   syncing = true;
   try {
     if (changed.length > 0) {
-      const base = Date.now();
-      const payload = changed.map((r, i) => toDbRow(r, new Date(base + i).toISOString()));
+      const payload = changed.map((r) => toDbRow(r, r.updatedAt || new Date().toISOString()));
       const { error } = await db.from("mes_materials").upsert(payload, { onConflict: "id" });
       if (error) throw error;
     }
@@ -2220,10 +2510,27 @@ async function persist({ changed = [], deletedId = "", notifyAuth = true } = {})
     handleRemoteError("物料云端同步失败", e);
   } finally { syncing = false; }
 }
-async function refreshFromRemote(showAlert = false) {
+function computeMaterialSyncCursor(list = []) {
+  return list.reduce((max, row) => {
+    const value = String(row?.updatedAt || row?.createdAt || "");
+    return value > max ? value : max;
+  }, "");
+}
+
+function mergeRemoteRows(remoteList = []) {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  remoteList.forEach((remoteRow) => {
+    if (!remoteRow?.id) return;
+    byId.set(remoteRow.id, { ...remoteRow, customer: resolveCustomer(remoteRow.orderNo, remoteRow.customer) });
+  });
+  rows = Array.from(byId.values()).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+}
+
+async function refreshFromRemote(showAlert = false, preferIncremental = false) {
   if (!REMOTE_ENABLED || !remoteOnline) return;
   if (shouldUseLocalOnlyMode()) {
     rows = loadLocalRows();
+    resetDerivedCaches();
     await ensureTestRowExists();
     setModeText("本地调试模式（未登录）");
     render();
@@ -2232,9 +2539,27 @@ async function refreshFromRemote(showAlert = false) {
   }
   try {
     await refreshOrderCustomerMap(false);
-    const { data, error } = await db.from("mes_materials").select("*").order("updated_at", { ascending: true });
+    const shouldFullSync = !preferIncremental || !materialSyncCursor || materialIncrementalSyncCount >= FORCE_FULL_SYNC_INTERVAL;
+    let query = db.from("mes_materials").select("*").order("updated_at", { ascending: true });
+    if (!shouldFullSync && materialSyncCursor) query = query.gt("updated_at", materialSyncCursor);
+    const { data, error } = await query;
     if (error) throw error;
-    rows = (data || []).map(fromDbRow).map((r) => ({ ...r, customer: resolveCustomer(r.orderNo, r.customer) })).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    const remoteList = (data || []).map(fromDbRow);
+    if (shouldFullSync) {
+      rows = remoteList
+        .map((r) => ({ ...r, customer: resolveCustomer(r.orderNo, r.customer) }))
+        .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+      materialIncrementalSyncCount = 0;
+      resetDerivedCaches();
+    } else if (remoteList.length > 0) {
+      mergeRemoteRows(remoteList);
+      materialIncrementalSyncCount += 1;
+      markSupplierFilterDirty();
+      remoteList.forEach((r) => invalidateRowCaches(r.id));
+    } else {
+      materialIncrementalSyncCount += 1;
+    }
+    materialSyncCursor = computeMaterialSyncCursor(rows);
     await ensureTestRowExists();
     saveLocalRows();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
@@ -2246,6 +2571,7 @@ async function refreshFromRemote(showAlert = false) {
     if (pageUnloading) return;
     handleRemoteError("物料云端读取失败", e);
     rows = loadLocalRows();
+    resetDerivedCaches();
     render();
   }
 }
@@ -2344,7 +2670,23 @@ async function syncCustomerFromOrderMap() {
   if (changed.length > 0) await persist({ changed, notifyAuth: false });
 }
 
-function cleanupExtras() { const ids = new Set(rows.map((r) => r.id)); let changed = false; Object.keys(extras).forEach((id) => { if (!ids.has(id)) { delete extras[id]; changed = true; } }); if (changed) saveExtras(); }
+function cleanupExtras() {
+  const ids = new Set(rows.map((r) => r.id));
+  let changed = false;
+  Object.keys(extras).forEach((id) => {
+    if (!ids.has(id)) {
+      delete extras[id];
+      changed = true;
+    }
+  });
+  parsedGroupCache.forEach((_, id) => {
+    if (!ids.has(id)) parsedGroupCache.delete(id);
+  });
+  rowDomCache.forEach((_, id) => {
+    if (!ids.has(id)) rowDomCache.delete(id);
+  });
+  if (changed) saveExtras();
+}
 function normalizeOrderNo(input) {
   const raw = String(input || "").trim().toUpperCase();
   if (!raw) return "";
@@ -2357,14 +2699,39 @@ function normalizeOrderNo(input) {
 function resolveCustomer(orderNo, fallback) { const key = String(orderNo || "").trim().toUpperCase(); return orderCustomerMap.get(key) || String(fallback || "").trim(); }
 
 function toDbRow(r, updatedAt) { return { id: r.id, order_no: r.orderNo || "", customer: r.customer || "", material: r.material || "", spec: r.spec || "", quantity: toFiniteOrNull(r.quantity), amount: toFiniteOrNull(r.amount), is_ready: r.isReady || "", created_at: r.createdAt || updatedAt || new Date().toISOString(), updated_at: updatedAt || new Date().toISOString() }; }
-function fromDbRow(row) { return { id: row.id || crypto.randomUUID(), createdAt: row.created_at || row.updated_at || new Date().toISOString(), orderNo: String(row.order_no || ""), customer: String(row.customer || ""), material: String(row.material || ""), spec: String(row.spec || ""), quantity: row.quantity == null ? "" : Number(row.quantity), amount: row.amount == null ? "" : Number(row.amount), isReady: String(row.is_ready || "") }; }
+function fromDbRow(row) {
+  const updatedAt = row.updated_at || row.created_at || new Date().toISOString();
+  return {
+    id: row.id || crypto.randomUUID(),
+    createdAt: row.created_at || updatedAt,
+    updatedAt,
+    orderNo: String(row.order_no || ""),
+    customer: String(row.customer || ""),
+    material: String(row.material || ""),
+    spec: String(row.spec || ""),
+    quantity: row.quantity == null ? "" : Number(row.quantity),
+    amount: row.amount == null ? "" : Number(row.amount),
+    isReady: String(row.is_ready || ""),
+  };
+}
 function toFiniteOrNull(v) { if (v == null || v === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
 
 function saveLocalRows() { localStorage.setItem(STORAGE_KEY, JSON.stringify(rows)); }
 function loadLocalRows() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
-  try { const list = JSON.parse(raw); if (!Array.isArray(list)) return []; return list.map((r, i) => ({ ...createEmptyRow(), ...r, createdAt: r.createdAt || new Date(Date.now() + i).toISOString() })); } catch { return []; }
+  try {
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    return list.map((r, i) => {
+      const fallbackTime = new Date(Date.now() + i).toISOString();
+      const createdAt = r.createdAt || fallbackTime;
+      const updatedAt = r.updatedAt || r.createdAt || fallbackTime;
+      return { ...createEmptyRow(), ...r, createdAt, updatedAt };
+    });
+  } catch {
+    return [];
+  }
 }
 function saveExtras() { localStorage.setItem(EXTRA_KEY, JSON.stringify(extras)); }
 function loadExtras() { const raw = localStorage.getItem(EXTRA_KEY); if (!raw) return {}; try { const parsed = JSON.parse(raw); return parsed && typeof parsed === "object" ? parsed : {}; } catch { return {}; } }

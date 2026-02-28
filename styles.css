@@ -1048,6 +1048,13 @@ body:not(.material-page) .kpi-grid {
   justify-content: center;
 }
 
+.material-page .material-detail-group,
+.material-page .material-amount-group,
+.material-page .material-status-group,
+.material-page .material-op-group {
+  min-height: 52px;
+}
+
 .material-op-group.is-group-gap {
   margin-top: 5px;
 }
