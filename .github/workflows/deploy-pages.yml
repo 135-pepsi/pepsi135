@@ -44,14 +44,23 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           UPLOAD_API_BASE: ${{ secrets.UPLOAD_API_BASE }}
         run: |
+          json_escape() {
+            python3 - <<'PY' "$1"
+import json,sys
+print(json.dumps(sys.argv[1]))
+PY
+          }
+          SUPABASE_URL_JSON="$(json_escape "$SUPABASE_URL")"
+          SUPABASE_ANON_KEY_JSON="$(json_escape "$SUPABASE_ANON_KEY")"
+          UPLOAD_API_BASE_JSON="$(json_escape "$UPLOAD_API_BASE")"
           cat > config.runtime.js << EOF
           window.__MES_CONFIG__ = {
-            SUPABASE_URL: "${SUPABASE_URL}",
-            SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY}",
+            SUPABASE_URL: ${SUPABASE_URL_JSON},
+            SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY_JSON},
             AUTO_REFRESH_SECONDS: 5,
             SUPABASE_STORAGE_BUCKET: "material-screenshots",
             SUPABASE_STORAGE_SIGNED_EXPIRES: 3600,
-            UPLOAD_API_BASE: "${UPLOAD_API_BASE}",
+            UPLOAD_API_BASE: ${UPLOAD_API_BASE_JSON},
             UPLOAD_MAX_MB: 50,
             UPLOAD_ACCEPT: ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar"
           };
