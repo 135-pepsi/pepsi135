@@ -3999,7 +3999,21 @@ function orderAttachmentFolder(orderId) {
 
 function sanitizeAttachmentFileName(name) {
   const base = String(name || "").trim() || "unnamed";
-  return base.replace(/[^\w.\-()\u4e00-\u9fa5]+/g, "_").slice(0, 120);
+  const dot = base.lastIndexOf(".");
+  const stemRaw = dot > 0 ? base.slice(0, dot) : base;
+  const extRaw = dot > 0 ? base.slice(dot + 1) : "";
+  const stem = stemRaw
+    .normalize("NFKD")
+    .replace(/[^\x00-\x7F]/g, "")
+    .replace(/[^A-Za-z0-9._()-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[_\-.]+|[_\-.]+$/g, "") || "unnamed";
+  const ext = extRaw
+    .normalize("NFKD")
+    .replace(/[^\x00-\x7F]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "")
+    .toLowerCase();
+  return `${stem.slice(0, 96)}${ext ? `.${ext.slice(0, 12)}` : ""}`;
 }
 
 function buildAttachmentItemFromStorage(bucketName, folder, entry) {
@@ -4540,7 +4554,6 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
-
 
 
 
