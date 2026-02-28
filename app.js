@@ -3672,6 +3672,12 @@ async function loadOrderFiles(orderId) {
   renderAttachmentList();
   try {
     attachmentItems = await storageListOrderFiles(orderId, ORDER_BUTTON_BUCKET);
+    window.__lastAttachmentItems = attachmentItems;
+    console.info(
+      "[attachments:button:list]",
+      ORDER_BUTTON_BUCKET,
+      attachmentItems.map((x) => ({ name: getAttachmentName(x), bucket: x.bucket_id, path: x.path }))
+    );
   } catch (e) {
     const detail = e?.message || "未知错误";
     alert(`加载附件失败：${detail}`);
@@ -3702,7 +3708,8 @@ async function uploadAttachmentFile(orderId, file, refreshDialogList = false) {
   }
 
   try {
-    await storageUploadOrderFile(orderId, file, ORDER_BUTTON_BUCKET);
+    const saved = await storageUploadOrderFile(orderId, file, ORDER_BUTTON_BUCKET);
+    console.info("[attachments:button:upload]", { bucket: ORDER_BUTTON_BUCKET, orderId, path: saved?.path || "" });
     if (refreshDialogList && attachmentPanelOrderId === orderId) {
       await loadOrderFiles(orderId);
     }
@@ -4039,6 +4046,7 @@ async function storageUploadOrderFile(orderId, file, bucketName) {
     cacheControl: "3600",
   });
   if (error) throw error;
+  return { bucket_id: bucketName, path };
 }
 
 async function storageDeleteOrderFile(path, bucketName) {
@@ -4532,7 +4540,6 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
-
 
 
 
