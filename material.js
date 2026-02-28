@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-﻿
-=======
-﻿
->>>>>>> cf36796 (init project with pages workflow)
+﻿﻿
 const STORAGE_KEY = "mini_mes_materials_v2";
 const EXTRA_KEY = "mini_mes_materials_extra_v2";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
@@ -2513,11 +2509,7 @@ async function persist({ changed = [], deletedId = "", notifyAuth = true } = {})
   } catch (e) {
     handleRemoteError("物料云端同步失败", e);
   } finally { syncing = false; }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> cf36796 (init project with pages workflow)
 function computeMaterialSyncCursor(list = []) {
   return list.reduce((max, row) => {
     const value = String(row?.updatedAt || row?.createdAt || "");
@@ -2801,8 +2793,4 @@ function showInfo(message, title = "提示") {
   el.infoText.textContent = String(message || "");
   openDialog(el.infoDialog);
 }
-<<<<<<< HEAD
 function closeInfo() { closeDialog(el.infoDialog); }
-=======
-function closeInfo() { closeDialog(el.infoDialog); }
->>>>>>> cf36796 (init project with pages workflow)
