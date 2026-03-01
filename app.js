@@ -1237,7 +1237,7 @@ async function quickAdd() {
     customer,
     status: "待排产",
     programNo: "未出",
-    startTime: "",
+    startTime: getTodayDateLocal(),
   };
   order.processStepCurrent = "";
   order.isDelayed = calcDelayed(order);
@@ -1251,6 +1251,14 @@ async function quickAdd() {
     const targetCell = tableBody.querySelector(`td[data-id="${order.id}"][data-key="name"]`);
     if (targetCell) beginEdit(targetCell);
   }, 0);
+}
+
+function getTodayDateLocal() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 async function addBlankRow() {
@@ -4554,6 +4562,5 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
-
 
 
