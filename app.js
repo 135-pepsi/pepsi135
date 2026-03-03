@@ -145,11 +145,14 @@ let currentRenderUnitFlags = new Map();
 const orderRowDomCache = new Map();
 let pendingViewportRenderRaf = 0;
 let pendingFilterRenderTimer = 0;
+let pendingLocalSaveTimer = 0;
+let localSaveDirty = false;
 let kanbanScaffoldReady = false;
 let kanbanTotalPill = null;
 const kanbanStatusPills = new Map();
 const kanbanColState = new Map();
 const kanbanCardCache = new Map();
+let lastKanbanRenderStamp = "";
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -817,6 +820,9 @@ function bindEvents() {
   window.addEventListener("scroll", updateBackTopBtn);
   if (tableWrap) tableWrap.addEventListener("scroll", handleTableWrapScroll);
   window.addEventListener("resize", updateStickyColumnOffsets);
+  window.addEventListener("beforeunload", () => {
+    saveOrdersLocal({ immediate: true });
+  });
   window.addEventListener("resize", () => {
     updatePinnedOffsets();
     syncFilterPanelForViewport();
@@ -1588,6 +1594,9 @@ function buildOrderUnitFlags(rows) {
 function renderKanban(rows) {
   if (!kanbanBoard || !boardSummary) return;
   ensureKanbanScaffold();
+  const stamp = `${ordersSyncCursor || ""}|${rows.length}`;
+  if (kanbanScaffoldReady && stamp === lastKanbanRenderStamp) return;
+  lastKanbanRenderStamp = stamp;
   const effectiveOrderNoMap = buildEffectiveOrderNoMap(rows);
   const effectiveCustomerMap = buildEffectiveCustomerMap(rows);
 
@@ -3485,7 +3494,30 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
   }
 }
 
-function saveOrdersLocal() {
+function saveOrdersLocal({ immediate = false, delayMs = 120 } = {}) {
+  localSaveDirty = true;
+  if (immediate) {
+    flushOrdersLocalSave();
+    return;
+  }
+  scheduleOrdersLocalSave(delayMs);
+}
+
+function scheduleOrdersLocalSave(delayMs = 120) {
+  if (pendingLocalSaveTimer) return;
+  pendingLocalSaveTimer = setTimeout(() => {
+    pendingLocalSaveTimer = 0;
+    flushOrdersLocalSave();
+  }, Math.max(0, Number(delayMs) || 0));
+}
+
+function flushOrdersLocalSave() {
+  if (pendingLocalSaveTimer) {
+    clearTimeout(pendingLocalSaveTimer);
+    pendingLocalSaveTimer = 0;
+  }
+  if (!localSaveDirty) return;
+  localSaveDirty = false;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
 }
 
@@ -3538,17 +3570,26 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
     if (!shouldFullSync && ordersSyncCursor) query = query.gt("updated_at", ordersSyncCursor);
     const { data, error } = await query;
     if (error) throw error;
+
     const remoteList = (data || []).map(fromDbRow);
+    let hasChanges = false;
+
     if (shouldFullSync) {
+      const prevCursor = ordersSyncCursor;
+      const nextCursor = computeOrdersSyncCursor(remoteList);
+      const prevLen = orders.length;
       orders = remoteList.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
       orderIncrementalSyncCount = 0;
       resetOrderDerivedCaches();
+      hasChanges = nextCursor !== prevCursor || prevLen !== orders.length;
     } else if (remoteList.length > 0) {
       mergeRemoteOrders(remoteList);
       orderIncrementalSyncCount += 1;
+      hasChanges = true;
     } else {
       orderIncrementalSyncCount += 1;
     }
+
     ordersSyncCursor = computeOrdersSyncCursor(orders);
 
     if (orders.length === 0) {
@@ -3556,10 +3597,13 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
       resetOrderDerivedCaches();
       ordersSyncCursor = computeOrdersSyncCursor(orders);
       await persistOrders({ changed: orders });
+      hasChanges = true;
     }
 
-    saveOrdersLocal();
-    render();
+    if (hasChanges) {
+      saveOrdersLocal();
+      render();
+    }
     setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
@@ -4897,6 +4941,10 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
+
+
+
+
 
 
 
