@@ -2154,7 +2154,8 @@ function syncGroupHeights() {
 
     if (!materialGroups.length || !amountGroups.length || !statusGroups.length || !opGroups.length) {
       if (summaryBox instanceof HTMLElement) {
-        const fallbackHeight = Math.max(80, tr.offsetHeight - 8);
+        // Keep empty/incomplete rows at a stable summary height to avoid periodic jump.
+        const fallbackHeight = 80;
         summaryBox.style.height = `${fallbackHeight}px`;
         summaryBox.style.maxHeight = `${fallbackHeight}px`;
       }
@@ -3211,6 +3212,7 @@ function showInfo(message, title = "提示") {
   openDialog(el.infoDialog);
 }
 function closeInfo() { closeDialog(el.infoDialog); }
+
 
 
 
