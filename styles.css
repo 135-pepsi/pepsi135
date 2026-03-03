@@ -193,6 +193,13 @@ main {
   min-height: 92px;
   box-shadow: var(--panel-shadow);
 }
+.kpi-card.kpi-jumpable {
+  cursor: pointer;
+}
+.kpi-card.kpi-jumpable:hover {
+  border-color: #61b2ff;
+  box-shadow: 0 0 0 1px rgba(97, 178, 255, 0.35) inset;
+}
 .kpi-card span { color: #bad4f5; font-size: 13px; }
 .kpi-card strong {
   display: block;
@@ -1451,6 +1458,7 @@ td.editing {
 #orderTable tbody tr.row-working > td { background: rgba(98, 78, 10, 0.2); }
 #orderTable tbody tr.row-shipped > td { background: rgba(18, 103, 57, 0.2); }
 #orderTable tbody tr.row-saved > td { animation: rowSavedPulse 1.5s ease; }
+#orderTable tbody tr.row-kpi-hit > td { animation: rowKpiHitPulse 3s ease; }
 #orderTable tbody tr.order-unit > td {
   background-image: linear-gradient(180deg, rgba(112, 201, 255, 0.06), rgba(112, 201, 255, 0.02));
 }
@@ -1500,6 +1508,11 @@ td.editing {
 @keyframes rowSavedPulse {
   0% { box-shadow: inset 0 0 0 999px rgba(88, 214, 141, 0.24); }
   100% { box-shadow: inset 0 0 0 999px rgba(88, 214, 141, 0); }
+}
+
+@keyframes rowKpiHitPulse {
+  0% { box-shadow: inset 0 0 0 999px rgba(62, 209, 255, 0.32); }
+  100% { box-shadow: inset 0 0 0 999px rgba(62, 209, 255, 0); }
 }
 
 body:not(.material-page) #orderTable tbody td {
@@ -2287,6 +2300,10 @@ body:not(.material-page) #orderTable td:nth-child(11) {
     grid-template-columns: 1fr;
   }
 }
+
+
+
+
 
 
 

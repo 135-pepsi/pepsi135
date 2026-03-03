@@ -127,6 +127,7 @@ let transientCellErrors = new Map();
 let ruleCellErrors = new Map();
 let rowSavedUntil = new Map();
 let saveFeedbackTimer = 0;
+const kpiHighlightTimers = new Map();
 let attachmentLatestTimeByLineId = new Map();
 let dirtyCellMarks = new Set();
 let pendingDeleteOrderId = "";
@@ -892,6 +893,7 @@ function bindEvents() {
       exportXlsx();
     }
   });
+  bindKpiJumpEvents();
   updateBackTopBtn();
   updateAuthUi();
   syncReconnectButton();
@@ -3291,6 +3293,81 @@ function getMonthFromOrderNo(v) {
   return "";
 }
 
+function clearOrderFiltersForKpiJump() {
+  filters.q = "";
+  filters.month = "";
+  filters.machine = "";
+  filters.status = "";
+  filters.orderNo = "";
+  filters.statusColor = "";
+  const searchInput = document.getElementById("searchInput");
+  const filterMonth = document.getElementById("filterMonth");
+  const filterMachine = document.getElementById("filterMachine");
+  const filterStatus = document.getElementById("filterStatus");
+  const filterOrderNo = document.getElementById("filterOrderNo");
+  if (searchInput) searchInput.value = "";
+  if (filterMonth) filterMonth.value = "";
+  if (filterMachine) filterMachine.value = "";
+  if (filterStatus) filterStatus.value = "";
+  if (filterOrderNo) filterOrderNo.value = "";
+  syncStatusColorFilterButtons();
+}
+
+function highlightOrderRowForKpi(orderId, durationMs = 3000) {
+  if (!tableBody) return;
+  const row = tableBody.querySelector(`tr[data-id="${orderId}"]`);
+  if (!row) return;
+  const prevTimer = kpiHighlightTimers.get(orderId);
+  if (prevTimer) clearTimeout(prevTimer);
+  row.classList.remove("row-kpi-hit");
+  requestAnimationFrame(() => {
+    row.classList.add("row-kpi-hit");
+    const timer = setTimeout(() => {
+      row.classList.remove("row-kpi-hit");
+      kpiHighlightTimers.delete(orderId);
+    }, Math.max(500, Number(durationMs) || 3000));
+    kpiHighlightTimers.set(orderId, timer);
+  });
+}
+
+function jumpToOrderFromKpi(kind) {
+  const getTarget = () => {
+    if (kind === "total") return orders[0] || null;
+    if (kind === "production") return orders.find((x) => x.status === "加工中") || null;
+    if (kind === "dueToday") return orders.find((x) => isDueToday(x.dueDate)) || null;
+    if (kind === "abnormal") return orders.find((x) => isAbnormalOrder(x)) || null;
+    return null;
+  };
+  const target = getTarget();
+  if (!target) {
+    showInfoDialog("当前指标没有可跳转的明细。", "提示");
+    return;
+  }
+  if (!currentRenderRows.some((x) => x.id === target.id)) {
+    clearOrderFiltersForKpiJump();
+    render();
+  }
+  focusOrderRow(target.id);
+  setTimeout(() => highlightOrderRowForKpi(target.id, 3000), 120);
+}
+
+function bindKpiCard(cardId, kind) {
+  const valueEl = document.getElementById(cardId);
+  if (!valueEl) return;
+  const card = valueEl.closest(".kpi-card");
+  if (!card) return;
+  if (card.dataset.kpiJumpBound === "1") return;
+  card.dataset.kpiJumpBound = "1";
+  card.classList.add("kpi-jumpable");
+  card.addEventListener("click", () => jumpToOrderFromKpi(kind));
+}
+
+function bindKpiJumpEvents() {
+  bindKpiCard("kpiTotalOrders", "total");
+  bindKpiCard("kpiInProduction", "production");
+  bindKpiCard("kpiDueToday", "dueToday");
+  bindKpiCard("kpiAbnormalCount", "abnormal");
+}
 function renderKpis(data) {
   const totalOrders = data.length;
   const inProduction = data.filter((x) => x.status === "加工中").length;
@@ -4768,6 +4845,11 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
+
+
+
+
+
 
 
 
