@@ -122,6 +122,8 @@ const screenshotObjectUrlCache = new Map();
 const parsedGroupCache = new Map();
 let supplierFilterDirty = true;
 let pendingGroupHeightRaf = 0;
+let suppressNextGroupHeightSync = false;
+const pendingStatusPersistKeys = new Set();
 let materialSyncCursor = "";
 let materialIncrementalSyncCount = 0;
 const rowDomCache = new Map();
@@ -1388,8 +1390,13 @@ function renderViewportRows() {
   if (bottomPad > 0) frag.appendChild(createPadRow(bottomPad));
   el.tableBody.replaceChildren(frag);
   if (shouldSyncGroupHeights(total)) {
-    scheduleGroupHeightSync();
+    if (suppressNextGroupHeightSync) {
+      suppressNextGroupHeightSync = false;
+    } else {
+      scheduleGroupHeightSync();
+    }
   } else {
+    suppressNextGroupHeightSync = false;
     if (pendingGroupHeightRaf) {
       cancelAnimationFrame(pendingGroupHeightRaf);
       pendingGroupHeightRaf = 0;
@@ -1540,6 +1547,9 @@ async function saveAmountEditDialog() {
   render();
 }
 
+function makeGroupActionKey(rowId, groupIndex) {
+  return `${String(rowId || "")}:${Number(groupIndex || 0)}`;
+}
 function statusDetailCell(row, extra, visibleEntries = null) {
   const td = document.createElement("td");
   td.className = "material-status-cell";
@@ -1561,24 +1571,65 @@ function statusDetailCell(row, extra, visibleEntries = null) {
     btn.type = "button";
     btn.className = "action-btn-secondary material-status-btn";
     const statusText = normalizeStatus(g?.status, row, extra);
-    btn.textContent = statusText;
+    const sourceIndex = Number(g.__sourceIndex ?? idx);
+    const pendingKey = makeGroupActionKey(row.id, sourceIndex);
+    const isPending = pendingStatusPersistKeys.has(pendingKey);
+    btn.textContent = isPending ? `${statusText}...` : statusText;
     btn.dataset.status = statusText;
-    btn.title = "点击切换状态";
+    btn.title = isPending ? "同步中" : "点击切换状态";
     btn.dataset.action = "cycle-status";
     btn.dataset.rowId = row.id;
-    btn.dataset.groupIndex = String(Number(g.__sourceIndex ?? idx));
+    btn.dataset.groupIndex = String(sourceIndex);
+    btn.disabled = isPending;
     group.appendChild(btn);
     td.appendChild(group);
   });
   return td;
 }
 
-async function cycleGroupStatus(rowId, groupIndex) {
+function patchRenderedRow(rowId) {
+  if (!el.tableBody) return false;
+  const row = rows.find((r) => r.id === rowId);
+  if (!row) return false;
+  const currentTr = el.tableBody.querySelector(`tr[data-row-id="${rowId}"]`);
+  if (!(currentTr instanceof HTMLTableRowElement)) return false;
+  const extra = getExtra(rowId);
+  const visibleEntries = getVisibleGroupEntries(row, extra);
+  currentRenderExtraMap.set(rowId, extra);
+  rowDomCache.delete(rowId);
+  const nextTr = getRowTr(row, extra, visibleEntries);
+  currentTr.replaceWith(nextTr);
+  syncGroupHeightsForRow(nextTr);
+  return true;
+}
+
+function applyStatusUiUpdate(rowId) {
+  const hasGroupFilter = Boolean(filterState.supplier || filterState.status);
+  const isVirtual = isVirtualRenderEnabled(currentRenderList.length);
+  const inCurrent = currentRenderList.some((x) => x.id === rowId);
+
+  if (!hasGroupFilter && !isVirtual && inCurrent) {
+    const patched = patchRenderedRow(rowId);
+    if (patched) {
+      renderMaterialSummary(currentRenderList, currentRenderExtraMap);
+      renderKpi(currentRenderList, currentRenderExtraMap);
+      return;
+    }
+  }
+
+  suppressNextGroupHeightSync = true;
+  render();
+}
+function cycleGroupStatus(rowId, groupIndex) {
+  const key = makeGroupActionKey(rowId, groupIndex);
+  if (pendingStatusPersistKeys.has(key)) return;
+
   const row = rows.find((r) => r.id === rowId);
   if (!row) return;
   const extra = getExtra(row.id);
   const groups = parseMaterialGroups(row, extra);
   if (!groups[groupIndex]) return;
+
   const current = normalizeStatus(groups[groupIndex]?.status, row, extra);
   const idx = STATUS_LIST.indexOf(current);
   const next = STATUS_LIST[(idx + 1) % STATUS_LIST.length] || STATUS_LIST[0];
@@ -1586,6 +1637,7 @@ async function cycleGroupStatus(rowId, groupIndex) {
   if (next === "下单" && !groups[groupIndex].orderedAt) groups[groupIndex].orderedAt = nowIso();
   if (next === "采购" && !groups[groupIndex].purchasedAt) groups[groupIndex].purchasedAt = nowIso();
   if (next === "到货") groups[groupIndex].arrivedAt = nowIso();
+
   const serialized = serializeMaterialGroups(groups);
   row.material = serialized.material;
   row.spec = serialized.spec;
@@ -1600,8 +1652,17 @@ async function cycleGroupStatus(rowId, groupIndex) {
     supplier: serialized.supplier,
     status: hasAbnormal ? "异常" : allArrived ? "到货" : hasPurchased ? "采购" : hasOrdered ? "下单" : "下单",
   });
-  await persist({ changed: [row], notifyAuth: false });
-  render();
+
+  pendingStatusPersistKeys.add(key);
+  applyStatusUiUpdate(row.id);
+
+  void persist({ changed: [row], notifyAuth: false })
+    .catch((e) => console.error("status persist failed", e))
+    .finally(() => {
+      pendingStatusPersistKeys.delete(key);
+      rowDomCache.delete(row.id);
+      applyStatusUiUpdate(row.id);
+    });
 }
 
 function materialDetailCell(row, extra, visibleEntries = null) {
@@ -2136,6 +2197,52 @@ function scheduleGroupHeightSync() {
   });
 }
 
+function syncGroupHeightsForRow(tr) {
+  if (!(tr instanceof HTMLElement)) return;
+  const materialGroups = tr.querySelectorAll("td:nth-child(3) .material-detail-group");
+  const amountGroups = tr.querySelectorAll("td:nth-child(4) .material-amount-group");
+  const statusGroups = tr.querySelectorAll("td:nth-child(5) .material-status-group");
+  const opGroups = tr.querySelectorAll("td:nth-child(6) .material-op-group");
+  const summaryBox = tr.querySelector("td:nth-child(7) .material-summary-box");
+
+  if (!materialGroups.length || !amountGroups.length || !statusGroups.length || !opGroups.length) {
+    if (summaryBox instanceof HTMLElement) {
+      const fallbackHeight = 80;
+      summaryBox.style.height = `${fallbackHeight}px`;
+      summaryBox.style.maxHeight = `${fallbackHeight}px`;
+    }
+    return;
+  }
+
+  const count = Math.min(materialGroups.length, amountGroups.length, statusGroups.length, opGroups.length);
+  for (let i = 0; i < count; i += 1) {
+    const m = materialGroups[i];
+    const a = amountGroups[i];
+    const s = statusGroups[i];
+    const o = opGroups[i];
+    m.style.minHeight = "";
+    a.style.minHeight = "";
+    s.style.minHeight = "";
+    o.style.minHeight = "";
+    const height = Math.max(m.offsetHeight, a.offsetHeight, s.offsetHeight, o.offsetHeight);
+    m.style.minHeight = `${height}px`;
+    a.style.minHeight = `${height}px`;
+    s.style.minHeight = `${height}px`;
+    o.style.minHeight = `${height}px`;
+  }
+
+  if (summaryBox instanceof HTMLElement) {
+    let materialTotalHeight = 0;
+    for (let i = 0; i < materialGroups.length; i += 1) {
+      materialTotalHeight += materialGroups[i].offsetHeight;
+      if (i > 0) materialTotalHeight += 5;
+    }
+    const targetHeight = Math.max(80, Math.floor(materialTotalHeight));
+    summaryBox.style.height = `${targetHeight}px`;
+    summaryBox.style.maxHeight = `${targetHeight}px`;
+  }
+}
+
 function syncGroupHeights() {
   if (!shouldSyncGroupHeights()) return;
   if (!el.tableBody) return;
@@ -2146,49 +2253,7 @@ function syncGroupHeights() {
       const rect = tr.getBoundingClientRect();
       if (rect.bottom < wrapRect.top - visiblePadding || rect.top > wrapRect.bottom + visiblePadding) return;
     }
-    const materialGroups = tr.querySelectorAll("td:nth-child(3) .material-detail-group");
-    const amountGroups = tr.querySelectorAll("td:nth-child(4) .material-amount-group");
-    const statusGroups = tr.querySelectorAll("td:nth-child(5) .material-status-group");
-    const opGroups = tr.querySelectorAll("td:nth-child(6) .material-op-group");
-    const summaryBox = tr.querySelector("td:nth-child(7) .material-summary-box");
-
-    if (!materialGroups.length || !amountGroups.length || !statusGroups.length || !opGroups.length) {
-      if (summaryBox instanceof HTMLElement) {
-        // Keep empty/incomplete rows at a stable summary height to avoid periodic jump.
-        const fallbackHeight = 80;
-        summaryBox.style.height = `${fallbackHeight}px`;
-        summaryBox.style.maxHeight = `${fallbackHeight}px`;
-      }
-      return;
-    }
-
-    const count = Math.min(materialGroups.length, amountGroups.length, statusGroups.length, opGroups.length);
-    for (let i = 0; i < count; i += 1) {
-      const m = materialGroups[i];
-      const a = amountGroups[i];
-      const s = statusGroups[i];
-      const o = opGroups[i];
-      m.style.minHeight = "";
-      a.style.minHeight = "";
-      s.style.minHeight = "";
-      o.style.minHeight = "";
-      const height = Math.max(m.offsetHeight, a.offsetHeight, s.offsetHeight, o.offsetHeight);
-      m.style.minHeight = `${height}px`;
-      a.style.minHeight = `${height}px`;
-      s.style.minHeight = `${height}px`;
-      o.style.minHeight = `${height}px`;
-    }
-
-    if (summaryBox instanceof HTMLElement) {
-      let materialTotalHeight = 0;
-      for (let i = 0; i < materialGroups.length; i += 1) {
-        materialTotalHeight += materialGroups[i].offsetHeight;
-        if (i > 0) materialTotalHeight += 5;
-      }
-      const targetHeight = Math.max(80, Math.floor(materialTotalHeight));
-      summaryBox.style.height = `${targetHeight}px`;
-      summaryBox.style.maxHeight = `${targetHeight}px`;
-    }
+    syncGroupHeightsForRow(tr);
   });
 }
 
@@ -3212,6 +3277,9 @@ function showInfo(message, title = "提示") {
   openDialog(el.infoDialog);
 }
 function closeInfo() { closeDialog(el.infoDialog); }
+
+
+
 
 
 
