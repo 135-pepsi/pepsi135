@@ -2,7 +2,8 @@
 const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
 const SHIFT_DEFAULTS_KEY = "mini_mes_shift_defaults_v1";
 
-const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "可发货"];
+const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "可发货", "已发货"];
+const KANBAN_STATUSES = STATUS.filter((s) => s !== "已发货");
 const MACHINES = ["机台1", "机台2", "机台3", "机台4", "机台5"];
 const FIXED_COL_WIDTHS = { 12: 90 };
 const SURFACE_OPTIONS = ["", "阳极氧化", "发黑", "喷砂", "喷漆", "电镀", "拉丝", "抛光", "热处理", "钝化"];
@@ -141,7 +142,6 @@ let ordersSyncCursor = "";
 let orderIncrementalSyncCount = 0;
 let currentRenderRows = [];
 let currentRenderUnitFlags = new Map();
-let currentEffectiveOrderNoMap = new Map();
 const orderRowDomCache = new Map();
 let pendingViewportRenderRaf = 0;
 let pendingFilterRenderTimer = 0;
@@ -1411,7 +1411,7 @@ function buildOrderRow(order, idx, flags, now) {
   const tr = document.createElement("tr");
   tr.dataset.id = order.id;
   const stateClass =
-    order.isDelayed === "延期" ? "row-delayed" : order.status === "加工中" ? "row-working" : order.status === "可发货" ? "row-shipped" : "";
+    order.isDelayed === "延期" ? "row-delayed" : order.status === "加工中" ? "row-working" : order.status === "可发货" || order.status === "已发货" ? "row-shipped" : "";
   if (stateClass) tr.classList.add(stateClass);
   if ((rowSavedUntil.get(order.id) || 0) > now) tr.classList.add("row-saved");
   if (flags?.unit) tr.classList.add("order-unit");
@@ -1526,7 +1526,6 @@ function render() {
   rebuildRuleCellErrors();
   currentRenderRows = getFilteredOrders();
   currentRenderUnitFlags = buildOrderUnitFlags(currentRenderRows);
-  currentEffectiveOrderNoMap = buildEffectiveOrderNoMap(currentRenderRows);
   const aliveIds = new Set(orders.map((x) => x.id));
   orderRowDomCache.forEach((_v, id) => {
     if (!aliveIds.has(id)) orderRowDomCache.delete(id);
@@ -1543,7 +1542,7 @@ function render() {
   });
 
   queueStickyColumnOffsets();
-  renderKanban(currentRenderRows);
+  renderKanban(orders);
   renderKpis(orders);
 }
 
@@ -1589,13 +1588,14 @@ function buildOrderUnitFlags(rows) {
 function renderKanban(rows) {
   if (!kanbanBoard || !boardSummary) return;
   ensureKanbanScaffold();
-  const effectiveOrderNoMap = currentEffectiveOrderNoMap && currentEffectiveOrderNoMap.size ? currentEffectiveOrderNoMap : buildEffectiveOrderNoMap(rows);
+  const effectiveOrderNoMap = buildEffectiveOrderNoMap(rows);
+  const effectiveCustomerMap = buildEffectiveCustomerMap(rows);
 
   const total = rows.length;
-  if (kanbanTotalPill) kanbanTotalPill.textContent = `当前订单 ${total}`;
+  if (kanbanTotalPill) kanbanTotalPill.textContent = `全部订单 ${total}`;
   const activeCardIds = new Set();
 
-  STATUS.forEach((status) => {
+  KANBAN_STATUSES.forEach((status) => {
     const list = rows.filter((o) => o.status === status);
     const statusPill = kanbanStatusPills.get(status);
     if (statusPill) statusPill.textContent = `${status} ${list.length}`;
@@ -1609,7 +1609,8 @@ function renderKanban(rows) {
     const nodes = list.map((order) => {
       activeCardIds.add(order.id);
       const displayOrderNo = effectiveOrderNoMap.get(order.id) || "";
-      return getKanbanCardNode(order, displayOrderNo);
+      const displayCustomer = effectiveCustomerMap.get(order.id) || "";
+      return getKanbanCardNode(order, displayOrderNo, displayCustomer);
     });
     col.bodyEl.replaceChildren(...nodes);
   });
@@ -1619,7 +1620,7 @@ function renderKanban(rows) {
   });
 }
 
-function createKanbanCard(order, displayOrderNo = "") {
+function createKanbanCard(order, displayOrderNo = "", displayCustomer = "") {
   const card = document.createElement("button");
   card.type = "button";
   card.className = "kanban-card";
@@ -1629,7 +1630,7 @@ function createKanbanCard(order, displayOrderNo = "") {
   top.className = "kanban-card-top";
   const orderNo = document.createElement("span");
   orderNo.className = "kanban-order";
-  orderNo.textContent = displayOrderNo || "未填订单号";
+  orderNo.textContent = displayOrderNo;
   top.appendChild(orderNo);
 
   const name = document.createElement("div");
@@ -1638,7 +1639,7 @@ function createKanbanCard(order, displayOrderNo = "") {
 
   const meta = document.createElement("div");
   meta.className = "kanban-meta";
-  meta.appendChild(createKanbanTag(order.customer || "未填客户"));
+  if (displayCustomer) meta.appendChild(createKanbanTag(displayCustomer));
   if (order.machine) meta.appendChild(createKanbanTag(order.machine));
   if (order.status === "加工中" && normalizeStepValue(order.processStepCurrent)) {
     const step = normalizeStepValue(order.processStepCurrent);
@@ -1667,7 +1668,7 @@ function ensureKanbanScaffold() {
   kanbanTotalPill.className = "board-pill";
   boardSummary.appendChild(kanbanTotalPill);
 
-  STATUS.forEach((status) => {
+  KANBAN_STATUSES.forEach((status) => {
     const statusPill = document.createElement("span");
     statusPill.className = "board-pill";
     boardSummary.appendChild(statusPill);
@@ -1696,13 +1697,13 @@ function ensureKanbanScaffold() {
   kanbanScaffoldReady = true;
 }
 
-function makeKanbanCardSignature(order, displayOrderNo = "") {
+function makeKanbanCardSignature(order, displayOrderNo = "", displayCustomer = "") {
   return JSON.stringify({
     id: order.id,
     orderNo: String(displayOrderNo || ""),
     name: String(order.name || ""),
     drawingNo: String(order.drawingNo || ""),
-    customer: String(order.customer || ""),
+    customer: String(displayCustomer || ""),
     machine: String(order.machine || ""),
     status: String(order.status || ""),
     step: String(order.processStepCurrent || ""),
@@ -1712,11 +1713,11 @@ function makeKanbanCardSignature(order, displayOrderNo = "") {
   });
 }
 
-function getKanbanCardNode(order, displayOrderNo = "") {
-  const signature = makeKanbanCardSignature(order, displayOrderNo);
+function getKanbanCardNode(order, displayOrderNo = "", displayCustomer = "") {
+  const signature = makeKanbanCardSignature(order, displayOrderNo, displayCustomer);
   const hit = kanbanCardCache.get(order.id);
   if (hit && hit.signature === signature && hit.node) return hit.node;
-  const node = createKanbanCard(order, displayOrderNo);
+  const node = createKanbanCard(order, displayOrderNo, displayCustomer);
   kanbanCardCache.set(order.id, { signature, node });
   return node;
 }
@@ -1732,6 +1733,17 @@ function buildEffectiveOrderNoMap(rows) {
   return map;
 }
 
+
+function buildEffectiveCustomerMap(rows) {
+  const map = new Map();
+  let current = "";
+  rows.forEach((row) => {
+    const raw = String(row.customer || "").trim();
+    if (raw) current = raw;
+    map.set(row.id, raw || current);
+  });
+  return map;
+}
 function createKanbanTag(text, delayed = false) {
   const tag = document.createElement("span");
   tag.className = delayed ? "kanban-tag kanban-delay" : "kanban-tag";
@@ -2120,7 +2132,7 @@ function getStatusClassName(status) {
   if (s === "加工中") return "status-working";
   if (s === "完成待检") return "status-done";
   if (s === "返工") return "status-rework";
-  if (s === "可发货") return "status-done";
+  if (s === "可发货" || s === "已发货") return "status-done";
   return "status-pending";
 }
 
@@ -2623,6 +2635,9 @@ async function saveStatusDialog() {
   }
   const nextStatus = String(statusInput?.value || "待排产").trim() || "待排产";
   const prevStatus = String(order.status || "").trim();
+  const prevStep = String(order.processStepCurrent || "");
+  const prevCompletionDate = String(order.completionDate || "");
+  const prevNote = String(order.note || "");
   const maxStep = getMaxProcessStep(order);
   let nextStep = "";
   if (nextStatus === "加工中") {
@@ -2637,14 +2652,30 @@ async function saveStatusDialog() {
     }
     nextStep = rawStep;
   }
-  const changed = order.status !== nextStatus || String(order.processStepCurrent || "") !== nextStep;
+
   order.status = nextStatus;
   order.processStepCurrent = nextStep;
+
   if (nextStatus === "可发货") {
     order.completionDate = new Date().toISOString().slice(0, 10);
-  } else if (prevStatus === "可发货" && nextStatus !== "可发货") {
+  } else if (nextStatus === "已发货") {
+    if (!normalizeDateOnlyInput(order.completionDate)) {
+      order.completionDate = new Date().toISOString().slice(0, 10);
+    }
+  } else if ((prevStatus === "可发货" || prevStatus === "已发货") && nextStatus !== "可发货" && nextStatus !== "已发货") {
     order.completionDate = "";
   }
+
+  if (nextStatus === "已发货") {
+    order.note = upsertShipTimeInNote(order.note, getTodayDateLocal());
+  }
+
+  const changed =
+    prevStatus !== String(order.status || "") ||
+    prevStep !== String(order.processStepCurrent || "") ||
+    prevCompletionDate !== String(order.completionDate || "") ||
+    prevNote !== String(order.note || "");
+
   if (changed) {
     await persistOrders({ changed: [order] });
     markRowSaved(order.id);
@@ -2686,6 +2717,13 @@ function applyStatusNextStep() {
   }
   if (current === "完成待检") {
     statusInput.value = "可发货";
+    if (statusStepInput) statusStepInput.value = "";
+    syncStatusStepVisibility();
+    syncStatusStepHint();
+    return;
+  }
+  if (current === "可发货") {
+    statusInput.value = "已发货";
     if (statusStepInput) statusStepInput.value = "";
     syncStatusStepVisibility();
     syncStatusStepHint();
@@ -2735,7 +2773,7 @@ function syncStatusProcessContext() {
 function syncStatusNextButtonState() {
   if (!statusNextBtn || !statusInput) return;
   const current = String(statusInput.value || "").trim() || "待排产";
-  statusNextBtn.disabled = current === "可发货";
+  statusNextBtn.disabled = current === "已发货";
   if (current === "待排产") {
     statusNextBtn.textContent = "下一步：已排产";
     return;
@@ -2750,6 +2788,10 @@ function syncStatusNextButtonState() {
   }
   if (current === "完成待检") {
     statusNextBtn.textContent = "下一步：可发货";
+    return;
+  }
+  if (current === "可发货") {
+    statusNextBtn.textContent = "下一步：已发货";
     return;
   }
   statusNextBtn.textContent = "已完成";
@@ -3191,9 +3233,19 @@ function toMonthDay(value) {
 }
 
 function calcDelayed(order) {
-  if (!order.dueDate || order.status === "可发货") return "";
+  if (!order.dueDate || order.status === "可发货" || order.status === "已发货") return "";
   const due = new Date(order.dueDate + "T23:59:59");
   return Date.now() > due.getTime() ? "延期" : "正常";
+}
+
+function upsertShipTimeInNote(noteValue, shipDate = "") {
+  const shipped = normalizeDateOnlyInput(shipDate) || getTodayDateLocal();
+  const base = String(noteValue || "")
+    .replace(/\s*发货时间\s*[:：]\s*\d{4}-\d{2}-\d{2}\s*/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+  return base ? `${base}\n发货时间：${shipped}` : `发货时间：${shipped}`;
 }
 
 function removeOrder(id) {
@@ -3270,7 +3322,7 @@ function isStatusColorMatch(status, color) {
   if (color === "yellow") return s === "待排产";
   if (color === "blue") return s === "已排产";
   if (color === "orange") return s === "加工中";
-  if (color === "green") return s === "完成待检" || s === "可发货";
+  if (color === "green") return s === "完成待检" || s === "可发货" || s === "已发货";
   if (color === "red") return s === "返工";
   return true;
 }
@@ -4845,6 +4897,25 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
