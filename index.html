@@ -79,12 +79,8 @@
           <button class="status-color-btn is-green" type="button" data-color="green" title="完成待检/可发货">完成</button>
           <button class="status-color-btn is-red" type="button" data-color="red" title="返工">返工</button>
         </div>
-        <input id="qaOrderNo" placeholder="编号(如:30)" />
-        <input id="qaCustomer" placeholder="客户" />
-        <button id="quickAddBtn" class="btn btn-primary">新增订单</button>
       </div>
       <div class="order-control-right">
-        <button id="compactModeBtn" class="btn btn-secondary" type="button">紧凑模式: 关</button>
         <button id="saveBtn" class="btn btn-secondary" type="button">导出Excel</button>
         <label class="btn btn-secondary upload-btn">
           导入Excel
@@ -116,6 +112,11 @@
       </table>
     </section>
     <div class="table-footer-actions">
+      <div class="table-footer-quick-add">
+        <input id="qaOrderNo" placeholder="编号(如:30)" />
+        <input id="qaCustomer" placeholder="客户" />
+        <button id="quickAddBtn" class="btn btn-primary" type="button">新增订单</button>
+      </div>
       <button id="addBlankBottomBtn" class="btn btn-secondary" type="button">添加空白行</button>
     </div>
 
@@ -292,6 +293,26 @@
     </section>
   </div>
 
+  <div id="quickEditDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel quick-edit-panel" role="dialog" aria-modal="true" aria-labelledby="quickEditTitle">
+      <header class="dialog-head">
+        <h3 id="quickEditTitle">字段编辑</h3>
+        <button id="quickEditCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="quickEditSubTitle" class="dialog-subtitle"></p>
+      <div class="auth-login-form quick-edit-form">
+        <label class="auth-login-field" for="quickEditInput">
+          <span>编辑值</span>
+          <input id="quickEditInput" type="text" />
+        </label>
+      </div>
+      <div class="quick-edit-actions">
+        <button id="quickEditCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="quickEditSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
   <div id="deleteConfirmDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
       <header class="dialog-head">
@@ -331,6 +352,20 @@
     </section>
   </div>
 
+  <div id="actionConfirmDialog" class="dialog-backdrop" hidden>
+    <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="actionConfirmTitle">
+      <header class="dialog-head">
+        <h3 id="actionConfirmTitle">确认操作</h3>
+        <button id="actionConfirmCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <p id="actionConfirmText" class="dialog-subtitle"></p>
+      <div class="confirm-actions">
+        <button id="actionConfirmCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="actionConfirmOkBtn" class="btn btn-primary" type="button">确认</button>
+      </div>
+    </section>
+  </div>
+
   <div id="infoDialog" class="dialog-backdrop" hidden>
     <section class="dialog-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="infoDialogTitle">
       <header class="dialog-head">
@@ -363,6 +398,12 @@
   <script src="app.js?v=20260301b"></script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 

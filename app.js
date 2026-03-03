@@ -1,7 +1,6 @@
 ﻿﻿const STORAGE_KEY = "mini_mes_orders_v1";
 const COL_WIDTH_KEY = "mini_mes_col_widths_v1";
 const SHIFT_DEFAULTS_KEY = "mini_mes_shift_defaults_v1";
-const COMPACT_MODE_KEY = "mini_mes_compact_mode_v1";
 
 const STATUS = ["待排产", "已排产", "加工中", "完成待检", "返工", "可发货"];
 const MACHINES = ["机台1", "机台2", "机台3", "机台4", "机台5"];
@@ -110,7 +109,6 @@ let lastSyncAt = "";
 let stickyOffsetRaf = 0;
 let columnWidths = loadColumnWidths();
 let shiftDefaults = loadShiftDefaults();
-let compactMode = loadCompactMode();
 let attachmentPanelOrderId = "";
 let attachmentItems = [];
 let attachmentLoading = false;
@@ -123,6 +121,8 @@ let dateEditingOrderId = "";
 let dateEditingKey = "";
 let surfaceEditingOrderId = "";
 let noteEditingOrderId = "";
+let quickEditOrderId = "";
+let quickEditKey = "";
 let transientCellErrors = new Map();
 let ruleCellErrors = new Map();
 let rowSavedUntil = new Map();
@@ -134,6 +134,7 @@ let authLoginSubmitting = false;
 let authLoginSubmittingMode = "";
 let authLoginCooldownUntil = 0;
 let authLoginCooldownTimer = 0;
+let actionConfirmResolver = null;
 let processCraftOrderSeq = 0;
 let ordersSyncCursor = "";
 let orderIncrementalSyncCount = 0;
@@ -230,7 +231,13 @@ const noteCloseBtn = document.getElementById("noteCloseBtn");
 const noteCancelBtn = document.getElementById("noteCancelBtn");
 const noteClearBtn = document.getElementById("noteClearBtn");
 const noteSaveBtn = document.getElementById("noteSaveBtn");
-const compactModeBtn = document.getElementById("compactModeBtn");
+const quickEditDialog = document.getElementById("quickEditDialog");
+const quickEditTitle = document.getElementById("quickEditTitle");
+const quickEditSubTitle = document.getElementById("quickEditSubTitle");
+const quickEditInput = document.getElementById("quickEditInput");
+const quickEditCloseBtn = document.getElementById("quickEditCloseBtn");
+const quickEditCancelBtn = document.getElementById("quickEditCancelBtn");
+const quickEditSaveBtn = document.getElementById("quickEditSaveBtn");
 const saveFeedback = document.getElementById("saveFeedback");
 const deleteConfirmDialog = document.getElementById("deleteConfirmDialog");
 const deleteConfirmText = document.getElementById("deleteConfirmText");
@@ -249,6 +256,12 @@ const infoDialogTitle = document.getElementById("infoDialogTitle");
 const infoDialogText = document.getElementById("infoDialogText");
 const infoDialogCloseBtn = document.getElementById("infoDialogCloseBtn");
 const infoDialogOkBtn = document.getElementById("infoDialogOkBtn");
+const actionConfirmDialog = document.getElementById("actionConfirmDialog");
+const actionConfirmTitle = document.getElementById("actionConfirmTitle");
+const actionConfirmText = document.getElementById("actionConfirmText");
+const actionConfirmCloseBtn = document.getElementById("actionConfirmCloseBtn");
+const actionConfirmCancelBtn = document.getElementById("actionConfirmCancelBtn");
+const actionConfirmOkBtn = document.getElementById("actionConfirmOkBtn");
 const PROCESS_TIME_TITLE_BASE = "预计工时设置";
 const STATUS_TITLE_BASE = "状态设置";
 const DATE_TITLE_BASE = "日期设置";
@@ -259,8 +272,6 @@ init();
 async function init() {
   syncPageActionLabels();
   bindEvents();
-  applyCompactMode();
-  setupColumnResizers();
   updatePinnedOffsets();
   if (REMOTE_ENABLED) {
     await initAuth();
@@ -378,8 +389,9 @@ function rebuildRuleCellErrors() {
 
   orders.forEach((order) => {
     const qtyRaw = String(order.qty ?? "").trim();
-    if (qtyRaw !== "" && !Number.isFinite(Number(qtyRaw))) {
-      next.set(getErrorKey(order.id, "qty"), "数量必须为数字");
+    const qtyNum = Number(qtyRaw);
+    if (qtyRaw !== "" && (!Number.isFinite(qtyNum) || qtyNum < 0 || !Number.isInteger(qtyNum))) {
+      next.set(getErrorKey(order.id, "qty"), "数量必须为大于等于0的整数");
     }
     const start = normalizeDateOnlyInput(order.startTime);
     const due = normalizeDateOnlyInput(order.dueDate);
@@ -422,13 +434,6 @@ function bindDialogEnterSave(dialogEl, saveFn) {
 function bindEvents() {
   const quickAddBtn = document.getElementById("quickAddBtn");
   if (quickAddBtn) quickAddBtn.addEventListener("click", quickAdd);
-  if (compactModeBtn) {
-    compactModeBtn.addEventListener("click", () => {
-      compactMode = !compactMode;
-      saveCompactMode(compactMode);
-      applyCompactMode();
-    });
-  }
   const addRowBtn = document.getElementById("addRowBtn");
   if (addRowBtn) addRowBtn.addEventListener("click", addBlankRow);
   const addBlankBottomBtn = document.getElementById("addBlankBottomBtn");
@@ -629,6 +634,17 @@ function bindEvents() {
     });
   }
   bindDialogEnterSave(noteDialog, saveNoteDialog);
+  if (quickEditCloseBtn) quickEditCloseBtn.addEventListener("click", closeQuickEditDialog);
+  if (quickEditCancelBtn) quickEditCancelBtn.addEventListener("click", closeQuickEditDialog);
+  if (quickEditSaveBtn) quickEditSaveBtn.addEventListener("click", () => {
+    void saveQuickEditDialog();
+  });
+  if (quickEditDialog) {
+    quickEditDialog.addEventListener("click", (event) => {
+      if (event.target === quickEditDialog) closeQuickEditDialog();
+    });
+  }
+  bindDialogEnterSave(quickEditDialog, saveQuickEditDialog);
   if (deleteConfirmCloseBtn) {
     deleteConfirmCloseBtn.addEventListener("click", closeDeleteConfirmDialog);
   }
@@ -695,6 +711,20 @@ function bindEvents() {
   if (infoDialog) {
     infoDialog.addEventListener("click", (event) => {
       if (event.target === infoDialog) closeInfoDialog();
+    });
+  }
+  if (actionConfirmCloseBtn) {
+    actionConfirmCloseBtn.addEventListener("click", () => closeActionConfirmDialog(false));
+  }
+  if (actionConfirmCancelBtn) {
+    actionConfirmCancelBtn.addEventListener("click", () => closeActionConfirmDialog(false));
+  }
+  if (actionConfirmOkBtn) {
+    actionConfirmOkBtn.addEventListener("click", () => closeActionConfirmDialog(true));
+  }
+  if (actionConfirmDialog) {
+    actionConfirmDialog.addEventListener("click", (event) => {
+      if (event.target === actionConfirmDialog) closeActionConfirmDialog(false);
     });
   }
   bindDialogEnterSave(surfaceDialog, saveSurfaceDialog);
@@ -823,6 +853,11 @@ function bindEvents() {
       closeNoteDialog();
       return;
     }
+    if (e.key === "Escape" && quickEditDialog && !quickEditDialog.hidden) {
+      e.preventDefault();
+      closeQuickEditDialog();
+      return;
+    }
     if (e.key === "Escape" && attachmentDialog && !attachmentDialog.hidden) {
       e.preventDefault();
       closeAttachmentDialog();
@@ -836,6 +871,11 @@ function bindEvents() {
     if (e.key === "Escape" && authLoginDialog && !authLoginDialog.hidden) {
       e.preventDefault();
       closeAuthLoginDialog();
+      return;
+    }
+    if (e.key === "Escape" && actionConfirmDialog && !actionConfirmDialog.hidden) {
+      e.preventDefault();
+      closeActionConfirmDialog(false);
       return;
     }
     if (e.key === "Escape" && infoDialog && !infoDialog.hidden) {
@@ -945,7 +985,7 @@ function closeAuthLoginDialog() {
 
 function showInfoDialog(message, title = "提示") {
   if (!infoDialog || !infoDialogText) {
-    alert(message);
+    console.warn("info dialog not found", message);
     return;
   }
   if (infoDialogTitle) infoDialogTitle.textContent = title;
@@ -973,9 +1013,49 @@ function closeInfoDialog() {
     document.body.style.overflow = "hidden";
   } else if (authLoginDialog && !authLoginDialog.hidden) {
     document.body.style.overflow = "hidden";
+  } else if (actionConfirmDialog && !actionConfirmDialog.hidden) {
+    document.body.style.overflow = "hidden";
   } else {
     document.body.style.overflow = "";
   }
+}
+
+
+function showActionConfirmDialog(message, title = "确认操作", okText = "确认", cancelText = "取消") {
+  if (!actionConfirmDialog || !actionConfirmText) {
+    return Promise.resolve(false);
+  }
+  if (actionConfirmTitle) actionConfirmTitle.textContent = String(title || "确认操作");
+  actionConfirmText.textContent = String(message || "");
+  if (actionConfirmOkBtn) actionConfirmOkBtn.textContent = String(okText || "确认");
+  if (actionConfirmCancelBtn) actionConfirmCancelBtn.textContent = String(cancelText || "取消");
+  actionConfirmDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+  return new Promise((resolve) => {
+    actionConfirmResolver = resolve;
+  });
+}
+
+function closeActionConfirmDialog(confirmed) {
+  if (!actionConfirmDialog) return;
+  actionConfirmDialog.hidden = true;
+  const resolver = actionConfirmResolver;
+  actionConfirmResolver = null;
+  if (typeof resolver === "function") resolver(Boolean(confirmed));
+  const hasOpenDialog = [
+    attachmentDialog,
+    previewDialog,
+    processTimeDialog,
+    statusDialog,
+    dateDialog,
+    surfaceDialog,
+    noteDialog,
+    deleteConfirmDialog,
+    authLoginDialog,
+    infoDialog,
+    quickEditDialog,
+  ].some((dialogEl) => dialogEl && !dialogEl.hidden);
+  document.body.style.overflow = hasOpenDialog ? "hidden" : "";
 }
 
 function setAuthLoginSubmitting(submitting, mode = "") {
@@ -1037,12 +1117,12 @@ async function submitEmailLoginFromDialog() {
   if (authLoginSubmitting) return;
   const cooldown = getAuthLoginCooldownSeconds();
   if (cooldown > 0) {
-    alert(`请求过于频繁，请 ${cooldown} 秒后重试。`);
+    showInfoDialog(`请求过于频繁，请 ${cooldown} 秒后重试。`);
     return;
   }
   const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   if (!email) {
-    alert("请输入登录邮箱。");
+    showInfoDialog("请输入登录邮箱。");
     return;
   }
   setAuthLoginSubmitting(true, "otp");
@@ -1057,17 +1137,17 @@ async function submitEmailLoginFromDialog() {
     if (error) throw error;
     startAuthLoginCooldown(60);
     closeAuthLoginDialog();
-    alert("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
+    showInfoDialog("登录邮件已发送，请在邮箱中点击登录链接后返回本页。");
   } catch (e) {
     if (isRateLimitError(e)) {
       const retry = getRetryAfterSeconds(e, 120);
       startAuthLoginCooldown(retry);
-      alert(`发送过于频繁，请 ${retry} 秒后再试。`);
+      showInfoDialog(`发送过于频繁，请 ${retry} 秒后再试。`);
       setAuthLoginSubmitting(false);
       return;
     }
     const detail = e?.message || e?.error_description || "未知错误";
-    alert(`发送登录邮件失败：${detail}`);
+    showInfoDialog(`发送登录邮件失败：${detail}`);
     setAuthLoginSubmitting(false);
   }
 }
@@ -1078,11 +1158,11 @@ async function submitPasswordLoginFromDialog() {
   const email = String(authLoginEmailInput?.value || "").trim().toLowerCase();
   const password = String(authLoginPasswordInput?.value || "");
   if (!email) {
-    alert("请输入登录邮箱。");
+    showInfoDialog("请输入登录邮箱。");
     return;
   }
   if (!password) {
-    alert("请输入登录密码。");
+    showInfoDialog("请输入登录密码。");
     return;
   }
   setAuthLoginSubmitting(true, "password");
@@ -1093,7 +1173,7 @@ async function submitPasswordLoginFromDialog() {
     showInfoDialog("登录成功。", "登录成功");
   } catch (e) {
     const detail = e?.message || e?.error_description || "未知错误";
-    alert(`密码登录失败：${detail}`);
+    showInfoDialog(`密码登录失败：${detail}`);
     setAuthLoginSubmitting(false);
   }
 }
@@ -1108,7 +1188,7 @@ async function logoutAuth() {
     setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
   } catch (e) {
     const detail = e?.message || e?.error_description || "未知错误";
-    alert(`退出失败：${detail}`);
+    showInfoDialog(`退出失败：${detail}`);
   }
 }
 
@@ -1159,27 +1239,6 @@ function saveShiftDefaultsPatch(patch = {}) {
     // ignore write failure
   }
 }
-function loadCompactMode() {
-  try {
-    return localStorage.getItem(COMPACT_MODE_KEY) === "1";
-  } catch (_e) {
-    return false;
-  }
-}
-
-function saveCompactMode(enabled) {
-  try {
-    localStorage.setItem(COMPACT_MODE_KEY, enabled ? "1" : "0");
-  } catch (_e) {
-    // ignore write failure
-  }
-}
-
-function applyCompactMode() {
-  document.body.classList.toggle("compact-mode", compactMode);
-  if (compactModeBtn) compactModeBtn.textContent = `紧凑模式: ${compactMode ? "开" : "关"}`;
-  updatePinnedOffsets();
-}
 function canWriteRemote(notify = true) {
   if (!REMOTE_ENABLED) return false;
   if (authSession) return true;
@@ -1223,11 +1282,16 @@ async function quickAdd() {
   const customer = valueOf("qaCustomer");
 
   if (!orderNoInput) {
-    alert("请填写编号");
+    showInfoDialog("请填写编号");
     return;
   }
   if (!orderNo) {
-    alert("编号格式无效，请输入1-3位数字（如 30 或 030）");
+    showInfoDialog("编号格式无效，请输入1-3位数字（如 30 或 030）");
+    return;
+  }
+  const duplicateOrderNo = orders.some((o) => String(o.orderNo || "").trim().toUpperCase() === orderNo);
+  if (duplicateOrderNo) {
+    showInfoDialog(`订单号 ${orderNo} 已存在，请更换编号。`);
     return;
   }
 
@@ -1267,8 +1331,6 @@ async function addBlankRow() {
   await persistOrders({ changed: [order] });
   render();
   focusOrderRow(order.id);
-  const firstEditable = tableBody.querySelector(`td[data-id="${order.id}"][data-key='orderNo']`);
-  if (firstEditable) beginEdit(firstEditable);
 }
 
 function isVirtualRenderEnabled(total) {
@@ -1459,7 +1521,6 @@ function scheduleViewportRender() {
 }
 
 function render() {
-  ensureTableColGroup();
   rebuildRuleCellErrors();
   currentRenderRows = getFilteredOrders();
   currentRenderUnitFlags = buildOrderUnitFlags(currentRenderRows);
@@ -1479,7 +1540,6 @@ function render() {
     if (until <= now) rowSavedUntil.delete(id);
   });
 
-  applyColumnWidths();
   queueStickyColumnOffsets();
   renderKanban(currentRenderRows);
   renderKpis(orders);
@@ -1713,7 +1773,13 @@ function editCell(order, key, type = "text") {
   if (key === "note") td.title = String(display || "");
   appendDirtyCellDot(td, order.id, key);
   appendCellError(td, order.id, key);
-  td.addEventListener("dblclick", () => beginEdit(td, type));
+  td.addEventListener("dblclick", () => {
+    if (isQuickEditKey(key)) {
+      openQuickEditDialog(order.id, key);
+      return;
+    }
+    beginEdit(td, type);
+  });
   return td;
 }
 
@@ -1750,6 +1816,9 @@ function previewEditCell(order, key, type = "text") {
   text.addEventListener("dblclick", (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (isQuickEditKey(key)) {
+      openQuickEditDialog(order.id, key);
+    }
   });
   wrap.appendChild(text);
   const uploadedAt = attachmentLatestTimeByLineId.get(order.id) || "";
@@ -1762,7 +1831,13 @@ function previewEditCell(order, key, type = "text") {
   appendDirtyCellDot(td, order.id, key);
   td.appendChild(wrap);
 
-  td.addEventListener("dblclick", () => beginEdit(td, type));
+  td.addEventListener("dblclick", () => {
+    if (isQuickEditKey(key)) {
+      openQuickEditDialog(order.id, key);
+      return;
+    }
+    beginEdit(td, type);
+  });
   return td;
 }
 
@@ -2259,12 +2334,12 @@ async function saveDateDialog() {
   const month = Number(dateMonthInput?.value || 0);
   const day = Number(dateDayInput?.value || 0);
   if (!month || !day) {
-    alert("请选择月份和日期。");
+    showInfoDialog("请选择月份和日期。");
     return;
   }
   const maxDay = getDaysInMonthForCurrentYear(month);
   if (day > maxDay) {
-    alert("日期无效，请重新选择。");
+    showInfoDialog("日期无效，请重新选择。");
     return;
   }
   const year = new Date().getFullYear();
@@ -2551,11 +2626,11 @@ async function saveStatusDialog() {
   if (nextStatus === "加工中") {
     const rawStep = normalizeStepValue(statusStepInput?.value || "");
     if (!rawStep) {
-      alert("请选择加工序号。");
+      showInfoDialog("请选择加工序号。");
       return;
     }
     if (Number(rawStep) > maxStep) {
-      alert(`当前工序总数为 ${maxStep}，加工序号不能超过第${maxStep}序。`);
+      showInfoDialog(`当前工序总数为 ${maxStep}，加工序号不能超过第${maxStep}序。`);
       return;
     }
     nextStep = rawStep;
@@ -2750,7 +2825,7 @@ async function saveProcessTimeDialog() {
   const nextSurface = hasSurfaceCraft ? String(processSurfaceInput?.value || "").trim() : "";
   const nextMinutes = normalizeValue("plannedHours", minuteRaw);
   if (minuteRaw !== "" && nextMinutes === "") {
-    alert("工时格式无效，请输入整数分钟。");
+    showInfoDialog("工时格式无效，请输入整数分钟。");
     return;
   }
   const prevStep = String(target.processStepCurrent || "");
@@ -2781,11 +2856,87 @@ async function saveProcessTimeDialog() {
   closeProcessTimeDialog();
 }
 
+const QUICK_EDIT_FIELDS = {
+  orderNo: { label: "订单号", type: "text", placeholder: "请输入订单号（如 30 或 ZZ2602030）" },
+  customer: { label: "客户", type: "text", placeholder: "请输入客户" },
+  name: { label: "名称", type: "text", placeholder: "请输入名称" },
+  drawingNo: { label: "图号", type: "text", placeholder: "请输入图号" },
+  qty: { label: "数量", type: "number", placeholder: "请输入数量" },
+};
+
+function isQuickEditKey(key) {
+  return Object.prototype.hasOwnProperty.call(QUICK_EDIT_FIELDS, String(key || ""));
+}
+
+function openQuickEditDialog(orderId, key) {
+  if (!isQuickEditKey(key) || !quickEditDialog || !quickEditInput) return;
+  const order = orders.find((x) => x.id === orderId);
+  if (!order) return;
+  const meta = QUICK_EDIT_FIELDS[String(key)];
+  quickEditOrderId = orderId;
+  quickEditKey = String(key);
+  if (quickEditTitle) quickEditTitle.textContent = `${meta.label}编辑`;
+  if (quickEditSubTitle) {
+    const parts = [];
+    if (order.orderNo) parts.push(`订单号 ${order.orderNo}`);
+    if (order.drawingNo) parts.push(`图号 ${order.drawingNo}`);
+    if (order.name) parts.push(`名称 ${order.name}`);
+    quickEditSubTitle.textContent = parts.join(" · ") || "编辑字段";
+  }
+  quickEditInput.type = meta.type;
+  quickEditInput.placeholder = meta.placeholder;
+  quickEditInput.removeAttribute("min");
+  quickEditInput.removeAttribute("step");
+  quickEditInput.removeAttribute("inputmode");
+  if (quickEditKey === "qty") {
+    quickEditInput.min = "0";
+    quickEditInput.step = "1";
+    quickEditInput.setAttribute("inputmode", "numeric");
+  }
+  quickEditInput.value = String(order[key] ?? "");
+  quickEditDialog.hidden = false;
+  document.body.style.overflow = "hidden";
+  quickEditInput.focus();
+  quickEditInput.select();
+}
+
+function closeQuickEditDialog() {
+  if (!quickEditDialog) return;
+  quickEditDialog.hidden = true;
+  quickEditOrderId = "";
+  quickEditKey = "";
+  if (quickEditTitle) quickEditTitle.textContent = "字段编辑";
+  const hasOpenDialog = [
+    attachmentDialog,
+    previewDialog,
+    processTimeDialog,
+    statusDialog,
+    dateDialog,
+    surfaceDialog,
+    noteDialog,
+    deleteConfirmDialog,
+    authLoginDialog,
+    infoDialog,
+  ].some((dialogEl) => dialogEl && !dialogEl.hidden);
+  document.body.style.overflow = hasOpenDialog ? "hidden" : "";
+}
+
+async function saveQuickEditDialog() {
+  if (!quickEditOrderId || !quickEditKey || !quickEditInput) return;
+  const ok = await updateOrder(quickEditOrderId, quickEditKey, quickEditInput.value);
+  if (!ok) return;
+  closeQuickEditDialog();
+}
 function beginEdit(td, type = "text") {
-  if (td.classList.contains("editing")) return;
-  const oldValue = td.dataset.raw ?? td.textContent;
+  if (!td) return;
   const orderId = td.dataset.id;
   const key = td.dataset.key;
+  if (isQuickEditKey(key)) {
+    openQuickEditDialog(orderId, key);
+    return;
+  }
+  if (td.classList.contains("editing")) return;
+  const oldValue = td.dataset.raw ?? td.textContent;
   td.classList.add("editing");
   td.innerHTML = "";
 
@@ -2924,11 +3075,14 @@ async function updateOrder(id, key, value) {
 
   const raw = String(value ?? "").trim();
   const normalized = normalizeValue(key, value);
-  if (key === "qty" && raw !== "" && !Number.isFinite(Number(raw))) {
-    setDirtyCellMark(id, key, true);
-    setTransientCellError(id, "qty", "数量必须为数字");
-    render();
-    return false;
+  if (key === "qty" && raw !== "") {
+    const qtyNum = Number(raw);
+    if (!Number.isFinite(qtyNum) || qtyNum < 0 || !Number.isInteger(qtyNum)) {
+      setDirtyCellMark(id, key, true);
+      setTransientCellError(id, "qty", "数量必须为大于等于0的整数");
+      render();
+      return false;
+    }
   }
   if (key === "orderNo") {
     if (raw !== "" && normalized === "") {
@@ -2938,7 +3092,7 @@ async function updateOrder(id, key, value) {
       return false;
     }
     const dup = normalized
-      ? orders.some((o) => o.id !== id && String(o.orderNo || "").trim() === normalized)
+      ? orders.some((o) => o.id !== id && String(o.orderNo || "").trim().toUpperCase() === normalized)
       : false;
     if (dup) {
       setDirtyCellMark(id, key, true);
@@ -2985,12 +3139,19 @@ async function updateOrder(id, key, value) {
 }
 
 function normalizeValue(key, value) {
-  if (key === "qty" || key === "plannedHours") {
-    if (value === "") return "";
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "";
-    if (key === "plannedHours") return Math.max(0, Math.round(num));
+  if (key === "qty") {
+    const raw = String(value ?? "").trim();
+    if (raw === "") return "";
+    const num = Number(raw);
+    if (!Number.isFinite(num) || num < 0 || !Number.isInteger(num)) return "";
     return num;
+  }
+  if (key === "plannedHours") {
+    const raw = String(value ?? "").trim();
+    if (raw === "") return "";
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return "";
+    return Math.max(0, Math.round(num));
   }
   if (key === "dueDate") return normalizeDateOnlyInput(value);
   if (key === "startTime") return normalizeDateOnlyInput(value);
@@ -3058,6 +3219,7 @@ function closeDeleteConfirmDialog() {
     statusDialog,
     dateDialog,
     surfaceDialog,
+    quickEditDialog,
   ].some((dialogEl) => dialogEl && !dialogEl.hidden);
   document.body.style.overflow = hasOpenDialog ? "hidden" : "";
 }
@@ -3185,7 +3347,7 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
       authWriteHintNotified = false;
       updateAuthUi();
       setModeText(remoteOnline ? "云端只读（未登录）" : "本地模式（云连接失败）");
-      alert("写入失败：登录态已失效，请重新登录。");
+      showInfoDialog("写入失败：登录态已失效，请重新登录。");
       return;
     }
     handleRemoteError("云端同步失败", e);
@@ -3272,7 +3434,7 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
     setLastSyncTime();
     reconnectDelayMs = 5000;
     remoteErrorNotified = false;
-    if (showAlert) alert("已从云端刷新最新数据");
+    if (showAlert) showInfoDialog("已从云端刷新最新数据");
   } catch (e) {
     if (isAuthError(e) && !authSession) {
       remoteOnline = true;
@@ -3306,7 +3468,7 @@ function handleRemoteError(prefix, err) {
   if (!remoteErrorNotified) {
     remoteErrorNotified = true;
     const detail = err?.message || err?.error_description || "未知错误";
-    alert(`${prefix}：${detail}\n已自动切换本地模式。`);
+    showInfoDialog(`${prefix}：${detail}\n已自动切换本地模式。`);
   }
 }
 
@@ -3340,14 +3502,14 @@ async function tryReconnectRemote(manual = false) {
     reconnectDelayMs = 5000;
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemoteIncremental(false, false);
-    if (manual) alert("云端连接已恢复");
+    if (manual) showInfoDialog("云端连接已恢复");
   } catch (e) {
     remoteOnline = false;
     setModeText("本地模式（云连接失败）");
     scheduleReconnect();
     if (manual) {
       const detail = e?.message || e?.error_description || "未知错误";
-      alert(`重连失败：${detail}`);
+      showInfoDialog(`重连失败：${detail}`);
     }
   }
 }
@@ -3548,25 +3710,25 @@ async function openLinePreview(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order) return;
   if (!canUseStorageBucket(ORDER_TEXT_BUCKET)) {
-    alert(`未登录或未配置 Storage bucket，请先设置 order-attachments（当前: ${ORDER_TEXT_BUCKET || "未配置"}）。`);
+    showInfoDialog(`未登录或未配置 Storage bucket，请先设置 order-attachments（当前: ${ORDER_TEXT_BUCKET || "未配置"}）。`);
     return;
   }
   try {
     const items = await storageListOrderFiles(orderId, ORDER_TEXT_BUCKET);
     setAttachmentStateFromItems(orderId, items);
     if (items.length === 0) {
-      alert("该零件暂无可预览图纸，请点击文字执行截图上传。");
+      showInfoDialog("该零件暂无可预览图纸，请点击文字执行截图上传。");
       return;
     }
     const previewable = items.find((item) => isPreviewableFile(item));
     if (!previewable) {
-      alert("当前图纸类型不支持在线预览。");
+      showInfoDialog("当前图纸类型不支持在线预览。");
       return;
     }
     await previewOrderFile(previewable, order);
   } catch (e) {
     const detail = e?.message || "未知错误";
-    alert(`预览失败：${detail}`);
+    showInfoDialog(`预览失败：${detail}`);
   }
 }
 
@@ -3688,7 +3850,7 @@ async function loadOrderFiles(orderId) {
     );
   } catch (e) {
     const detail = e?.message || "未知错误";
-    alert(`加载附件失败：${detail}`);
+    showInfoDialog(`加载附件失败：${detail}`);
     attachmentItems = [];
   } finally {
     attachmentLoading = false;
@@ -3706,12 +3868,12 @@ async function uploadAttachmentFromInput(event) {
 async function uploadAttachmentFile(orderId, file, refreshDialogList = false) {
   if (!file || !orderId) return;
   if (!canUseStorageBucket(ORDER_BUTTON_BUCKET)) {
-    alert(`未登录或未配置 Storage bucket（图纸按钮使用: ${ORDER_BUTTON_BUCKET || "未配置"}）。`);
+    showInfoDialog(`未登录或未配置 Storage bucket（图纸按钮使用: ${ORDER_BUTTON_BUCKET || "未配置"}）。`);
     return;
   }
   const validateMsg = validateAttachmentFile(file);
   if (validateMsg) {
-    alert(validateMsg);
+    showInfoDialog(validateMsg);
     return;
   }
 
@@ -3724,7 +3886,7 @@ async function uploadAttachmentFile(orderId, file, refreshDialogList = false) {
     render();
   } catch (e) {
     const detail = e?.message || "未知错误";
-    alert(`上传失败：${detail}`);
+    showInfoDialog(`上传失败：${detail}`);
   }
 }
 
@@ -3732,7 +3894,7 @@ async function captureAndUploadScreenshot(orderId) {
   const order = orders.find((x) => x.id === orderId);
   if (!order) return;
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    alert("当前浏览器不支持截屏上传，请使用图纸按钮手动上传。");
+    showInfoDialog("当前浏览器不支持截屏上传，请使用图纸按钮手动上传。");
     return;
   }
   let stream = null;
@@ -3769,7 +3931,7 @@ async function captureAndUploadScreenshot(orderId) {
     const message = String(e?.message || "");
     const canceled = message.toLowerCase().includes("permission denied") || message.toLowerCase().includes("cancel");
     if (!canceled) {
-      alert(`截屏上传失败：${message || "未知错误"}`);
+      showInfoDialog(`截屏上传失败：${message || "未知错误"}`);
     }
   } finally {
     if (stream) stream.getTracks().forEach((t) => t.stop());
@@ -3779,12 +3941,12 @@ async function captureAndUploadScreenshot(orderId) {
 async function uploadLinePreviewFile(orderId, file) {
   if (!file || !orderId) return;
   if (!canUseStorageBucket(ORDER_TEXT_BUCKET)) {
-    alert(`未登录或未配置 Storage bucket（文字点击使用: ${ORDER_TEXT_BUCKET || "未配置"}）。`);
+    showInfoDialog(`未登录或未配置 Storage bucket（文字点击使用: ${ORDER_TEXT_BUCKET || "未配置"}）。`);
     return;
   }
   const validateMsg = validateAttachmentFile(file);
   if (validateMsg) {
-    alert(validateMsg);
+    showInfoDialog(validateMsg);
     return;
   }
   await storageUploadOrderFile(orderId, file, ORDER_TEXT_BUCKET);
@@ -3795,7 +3957,8 @@ async function uploadLinePreviewFile(orderId, file) {
 async function deleteOrderFile(item) {
   const path = String(item?.path || "");
   if (!path) return;
-  if (!confirm(`确认删除附件“${getAttachmentName(item)}”吗？`)) return;
+  const confirmedDelete = await showActionConfirmDialog(`确认删除附件“${getAttachmentName(item)}”吗？`, "确认删除", "确认", "取消");
+  if (!confirmedDelete) return;
   try {
     await storageDeleteOrderFile(path, String(item?.bucket_id || ORDER_BUTTON_BUCKET));
     attachmentItems = attachmentItems.filter((x) => String(x?.path || "") !== path);
@@ -3803,7 +3966,7 @@ async function deleteOrderFile(item) {
     render();
   } catch (e) {
     const detail = e?.message || "未知错误";
-    alert(`删除失败：${detail}`);
+    showInfoDialog(`删除失败：${detail}`);
   }
 }
 
@@ -3822,7 +3985,7 @@ async function downloadOrderFile(item) {
     URL.revokeObjectURL(url);
   } catch (e) {
     const detail = e?.message || "未知错误";
-    alert(`下载失败：${detail}`);
+    showInfoDialog(`下载失败：${detail}`);
   }
 }
 
@@ -4147,7 +4310,7 @@ async function parseHttpError(resp) {
 
 function exportXlsx() {
   if (!window.XLSX) {
-    alert("Excel组件加载失败，请刷新页面后重试");
+    showInfoDialog("Excel组件加载失败，请刷新页面后重试");
     return;
   }
   const rows = orders.map((o) => {
@@ -4167,7 +4330,7 @@ async function importXlsx(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (!window.XLSX) {
-    alert("Excel组件加载失败，请刷新页面后重试");
+    showInfoDialog("Excel组件加载失败，请刷新页面后重试");
     event.target.value = "";
     return;
   }
@@ -4189,14 +4352,29 @@ async function importXlsx(event) {
         existingIdByKey.set(key, item.id);
       });
 
+      const invalidOrderNoRows = [];
+      const invalidQtyRows = [];
       const imported = rows.map((row, idx) => {
         const next = createEmptyOrder();
+        const rowNo = idx + 2;
         Object.keys(row).forEach((title) => {
           const key = titleToKey[title];
           if (!key) return;
           let value = row[title];
           if (key === "startTime" || key === "dueDate") value = normalizeImportedDate(value);
-          if (key === "qty" || key === "plannedHours") value = normalizeImportedNumber(value);
+          if (key === "orderNo") {
+            const rawOrderNo = String(value ?? "").trim();
+            const normalizedOrderNo = normalizeOrderNoInput(rawOrderNo);
+            if (rawOrderNo !== "" && normalizedOrderNo === "") invalidOrderNoRows.push(rowNo);
+            value = normalizedOrderNo;
+          }
+          if (key === "qty") {
+            const qtySource = normalizeImportedNumber(value);
+            const normalizedQty = normalizeValue("qty", qtySource);
+            if (String(value ?? "").trim() !== "" && normalizedQty === "") invalidQtyRows.push(rowNo);
+            value = normalizedQty;
+          }
+          if (key === "plannedHours") value = normalizeImportedNumber(value);
           next[key] = value;
         });
         next.processName = String(next.processName || "").trim();
@@ -4213,6 +4391,16 @@ async function importXlsx(event) {
         next.isDelayed = calcDelayed(next);
         return next;
       });
+      if (invalidOrderNoRows.length) {
+        const rowsText = Array.from(new Set(invalidOrderNoRows)).sort((a, b) => a - b).join("、");
+        showInfoDialog(`导入失败：订单号格式无效（仅支持 ZZ+7位数字，或1-3位编号）\n问题行：${rowsText}`);
+        return;
+      }
+      if (invalidQtyRows.length) {
+        const rowsText = Array.from(new Set(invalidQtyRows)).sort((a, b) => a - b).join("、");
+        showInfoDialog(`导入失败：数量必须为大于等于0的整数\n问题行：${rowsText}`);
+        return;
+      }
       const incomingKeys = new Set(imported.map((x) => getOrderImportMatchKey(x)).filter(Boolean));
       const previousCount = orders.length;
       let updateCount = 0;
@@ -4232,22 +4420,29 @@ async function importXlsx(event) {
           insertCount += 1;
         }
       });
+      const duplicateOrderNos = findDuplicateOrderNos(merged);
+      if (duplicateOrderNos.length) {
+        const sample = duplicateOrderNos.slice(0, 6).join("、");
+        const extra = duplicateOrderNos.length > 6 ? ` 等${duplicateOrderNos.length}个` : "";
+        showInfoDialog(`导入失败：存在重复订单号（${sample}${extra}），请先处理重复后再导入。`);
+        return;
+      }
       const untouched = Math.max(0, previousCount - updateCount);
-      const confirmed = confirm(
+      const confirmed = await showActionConfirmDialog(
         `导入预览：\n新增 ${insertCount} 条\n覆盖 ${updateCount} 条\n保留历史 ${untouched} 条\n\n确认继续导入吗？`
       );
       if (!confirmed) return;
       orders = merged;
       await persistOrders({ changed: imported });
       render();
-      alert("导入成功：已覆盖同键订单并新增新订单，未删除未包含在Excel中的历史订单。");
+      showInfoDialog("导入成功：已覆盖同键订单并新增新订单，未删除未包含在Excel中的历史订单。");
     } catch (e) {
       console.error(e);
       const msg = (e && e.message) ? e.message : "";
       if (msg.includes("item_name")) {
-        alert("导入失败：云端表缺少 item_name 字段，请在 Supabase 执行最新 supabase_schema.sql 后重试。");
+        showInfoDialog("导入失败：云端表缺少 item_name 字段，请在 Supabase 执行最新 supabase_schema.sql 后重试。");
       } else {
-        alert("导入失败：请使用系统导出的 Excel 或包含标准列名的 Excel");
+        showInfoDialog("导入失败：请使用系统导出的 Excel 或包含标准列名的 Excel");
       }
     }
   };
@@ -4262,6 +4457,19 @@ function getOrderImportMatchKey(order) {
   const name = String(order?.name || "").trim().toUpperCase();
   if (!orderNo && !drawingNo && !name) return "";
   return `${orderNo}|${drawingNo}|${name}`;
+}
+
+function findDuplicateOrderNos(list = []) {
+  const countByNo = new Map();
+  list.forEach((row) => {
+    const orderNo = String(row?.orderNo || "").trim().toUpperCase();
+    if (!orderNo) return;
+    countByNo.set(orderNo, (countByNo.get(orderNo) || 0) + 1);
+  });
+  return Array.from(countByNo.entries())
+    .filter(([, count]) => count > 1)
+    .map(([orderNo]) => orderNo)
+    .sort((a, b) => a.localeCompare(b));
 }
 
 function normalizeImportedDate(v) {
@@ -4397,7 +4605,6 @@ function normalizeStartTimeInput(v) {
 
 
 function setupColumnResizers() {
-  ensureTableColGroup();
   const headers = document.querySelectorAll("#orderTable thead th");
   headers.forEach((th, index) => {
     const colIndex = index + 1;
@@ -4410,7 +4617,6 @@ function setupColumnResizers() {
     handle.addEventListener("mousedown", (e) => startResize(e, colIndex));
     th.appendChild(handle);
   });
-  applyColumnWidths();
   queueStickyColumnOffsets();
 }
 
@@ -4562,5 +4768,22 @@ function sanitizeColumnWidths(input) {
   });
   return next;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

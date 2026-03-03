@@ -3,8 +3,8 @@
 ## 1. Supabase 初始化
 1. 创建 Supabase 项目。
 2. 打开 SQL Editor，执行 `supabase_schema.sql`。
-3. 执行 `supabase_migration_20260215_datetime.sql`（将订单开始时间/交期迁移到日期时间字段）。
-4. 如需使用物料页面，再执行 `supabase_materials_schema.sql`。
+3. 如需使用物料页面，再执行 `supabase_materials_schema.sql`。
+4. 若你之前执行过 `owner_id` 隔离策略（或出现“不同账号无法互相同步”），再执行 `supabase_migration_20260301_shared_rw_policy.sql`。
 5. 在项目设置复制：
 - `Project URL`
 - `anon public key`
@@ -29,7 +29,7 @@ window.MES_CONFIG = {
 };
 ```
 
-> 安全说明：当前 SQL 策略为“仅登录用户可读写，且按 owner_id 做用户隔离”。如未接入 Supabase 登录（Auth），页面将无法读取和写入云端数据。
+> 安全说明：当前推荐 SQL 策略为“未登录可读（只读），登录后可写（共享同一份数据）”。前端也会在未登录时阻止写入操作。
 > 配置说明：`config.example.js` / `config.prod.js` / `config.runtime.example.js` 可以提交；`config.runtime.js` 与 `config.js` 建议仅本地/部署环境维护（已在 `.gitignore` 中）。
 
 ## 3. 本地验证

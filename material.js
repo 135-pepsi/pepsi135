@@ -121,7 +121,6 @@ let screenshotPreviewRenderToken = 0;
 const screenshotObjectUrlCache = new Map();
 const parsedGroupCache = new Map();
 let supplierFilterDirty = true;
-let pendingGroupHeightSync = 0;
 let pendingGroupHeightRaf = 0;
 let materialSyncCursor = "";
 let materialIncrementalSyncCount = 0;
@@ -200,6 +199,11 @@ const el = {
   infoText: document.getElementById("infoDialogText"),
   infoClose: document.getElementById("infoDialogCloseBtn"),
   infoOk: document.getElementById("infoDialogOkBtn"),
+  supplierCustomDialog: document.getElementById("supplierCustomDialog"),
+  supplierCustomClose: document.getElementById("supplierCustomCloseBtn"),
+  supplierCustomCancel: document.getElementById("supplierCustomCancelBtn"),
+  supplierCustomSave: document.getElementById("supplierCustomSaveBtn"),
+  supplierCustomInput: document.getElementById("supplierCustomInput"),
   imagePreviewDialog: document.getElementById("imagePreviewDialog"),
   imagePreviewClose: document.getElementById("imagePreviewCloseBtn"),
   imagePreviewBody: document.getElementById("imagePreviewBody"),
@@ -245,6 +249,7 @@ async function init() {
   ensureAmountEditDialog();
   ensureImagePreviewDialog();
   ensureDeleteConfirmDialog();
+  ensureSupplierCustomDialog();
   bindEvents();
   document.addEventListener("selectionchange", () => {
     if (hasActiveSummarySelection()) extendSummarySelectionHold();
@@ -270,6 +275,7 @@ async function init() {
     }
     setInterval(() => {
       if (Date.now() < summarySelectionHoldUntil || hasActiveSummarySelection()) return;
+      if (isEditingDialogOpen()) return;
       if (!syncing && remoteOnline && !shouldUseLocalOnlyMode()) void refreshFromRemote(false, true);
     }, AUTO_REFRESH_MS);
   } else {
@@ -348,6 +354,7 @@ function bindEvents() {
       closeDialog(el.materialItemDialog);
       closeDialog(el.otherDialog);
       closeDialog(el.amountDialog);
+      closeSupplierCustomDialog();
       closeInfo();
       closeImagePreview();
       closeDeleteConfirm(false);
@@ -610,6 +617,45 @@ function ensureDeleteConfirmDialog() {
   el.deleteConfirmText = document.getElementById("deleteConfirmText");
 }
 
+function ensureSupplierCustomDialog() {
+  const existing = document.getElementById("supplierCustomDialog");
+  if (existing) {
+    el.supplierCustomDialog = existing;
+    el.supplierCustomClose = document.getElementById("supplierCustomCloseBtn");
+    el.supplierCustomCancel = document.getElementById("supplierCustomCancelBtn");
+    el.supplierCustomSave = document.getElementById("supplierCustomSaveBtn");
+    el.supplierCustomInput = document.getElementById("supplierCustomInput");
+    return;
+  }
+  const dialog = document.createElement("div");
+  dialog.id = "supplierCustomDialog";
+  dialog.className = "dialog-backdrop";
+  dialog.hidden = true;
+  dialog.innerHTML = `
+    <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="supplierCustomTitle">
+      <header class="dialog-head">
+        <h3 id="supplierCustomTitle">新增供应商</h3>
+        <button id="supplierCustomCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <div class="auth-login-form">
+        <label class="auth-login-field" for="supplierCustomInput">
+          <span>供应商名称</span>
+          <input id="supplierCustomInput" type="text" placeholder="请输入供应商名称" />
+        </label>
+      </div>
+      <div class="auth-login-actions">
+        <button id="supplierCustomCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="supplierCustomSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  `;
+  document.body.appendChild(dialog);
+  el.supplierCustomDialog = dialog;
+  el.supplierCustomClose = document.getElementById("supplierCustomCloseBtn");
+  el.supplierCustomCancel = document.getElementById("supplierCustomCancelBtn");
+  el.supplierCustomSave = document.getElementById("supplierCustomSaveBtn");
+  el.supplierCustomInput = document.getElementById("supplierCustomInput");
+}
 function ensureOtherItemDialog() {
   const existing = document.getElementById("otherItemDialog");
   if (existing) {
@@ -646,13 +692,13 @@ function ensureOtherItemDialog() {
           <label class="auth-login-field"><span>名称</span><input id="otherItemName" type="text" placeholder="请输入名称" /></label>
           <label class="auth-login-field"><span>供应商（自定义）</span><input id="otherItemSupplier" type="text" placeholder="请输入供应商" /></label>
           <label class="auth-login-field"><span>链接</span><input id="otherItemSupplierLink" type="text" placeholder="https://..." /></label>
+        </div>
+        <div class="material-item-col material-item-col-lines">
           <div class="auth-login-field">
             <span>规格与数量</span>
             <div id="otherLineList" class="material-line-list"></div>
             <button id="otherLineAddBtn" class="btn btn-secondary" type="button">新增规格行</button>
           </div>
-        </div>
-        <div class="material-item-col material-item-col-lines">
           <div class="auth-login-field">
             <span>截图</span>
             <div id="otherScreenshotPreview" class="other-screenshot-preview">未上传截图</div>
@@ -720,18 +766,9 @@ function bindSupplierCustomAdd() {
   supplierCustomBound = true;
   el.materialSupplierInput.addEventListener("change", () => {
     if (el.materialSupplierInput.value !== "__custom__") return;
-    const input = prompt("请输入新的供应商名称");
-    const name = String(input || "").trim();
-    if (!name) {
-      el.materialSupplierInput.value = "";
-      return;
-    }
-    addCustomSupplierOption(name);
-    populateMaterialItemSelects();
-    setSelectValueWithFallback(el.materialSupplierInput, name, "请选择供应商");
+    openSupplierCustomDialog();
   });
 }
-
 function loadCustomSupplierOptions() {
   const raw = localStorage.getItem(SUPPLIER_CUSTOM_KEY);
   if (!raw) return [];
@@ -772,6 +809,39 @@ function addCustomSupplierOption(name) {
   }
 }
 
+function openSupplierCustomDialog() {
+  if (!el.supplierCustomDialog) return;
+  if (el.materialSupplierInput) el.materialSupplierInput.value = "";
+  if (el.supplierCustomInput) {
+    el.supplierCustomInput.value = "";
+  }
+  openDialog(el.supplierCustomDialog);
+  if (el.supplierCustomInput) {
+    el.supplierCustomInput.focus();
+    el.supplierCustomInput.select();
+  }
+}
+
+function closeSupplierCustomDialog() {
+  closeDialog(el.supplierCustomDialog);
+  if (el.supplierCustomInput) el.supplierCustomInput.value = "";
+}
+
+async function saveSupplierCustomDialog() {
+  const raw = String(el.supplierCustomInput?.value || "").trim();
+  if (!raw) {
+    showInfo("请输入供应商名称。", "校验失败");
+    return;
+  }
+  if (SUPPLIER_BLOCKLIST.has(raw)) {
+    showInfo("该供应商名称不可用，请更换名称。", "校验失败");
+    return;
+  }
+  addCustomSupplierOption(raw);
+  populateMaterialItemSelects();
+  setSelectValueWithFallback(el.materialSupplierInput, raw, "请选择供应商");
+  closeSupplierCustomDialog();
+}
 function setSelectValueWithFallback(selectEl, value, placeholderText = "请选择") {
   if (!selectEl) return;
   const normalized = String(value || "").trim();
@@ -888,6 +958,7 @@ function bindDialogEvents() {
   bindActionDialog(el.materialItemDialog, [el.materialItemClose, el.materialItemCancel], () => void saveMaterialItemDetail(), el.materialItemSave);
   bindActionDialog(el.otherDialog, [el.otherClose, el.otherCancel], () => void saveOtherItemDetail(), el.otherSave);
   bindActionDialog(el.amountDialog, [el.amountClose, el.amountCancel], () => void saveAmountEditDialog(), el.amountSave);
+  bindActionDialog(el.supplierCustomDialog, [el.supplierCustomClose, el.supplierCustomCancel], () => void saveSupplierCustomDialog(), el.supplierCustomSave);
   if (el.materialItemClear) el.materialItemClear.addEventListener("click", clearMaterialItemDetail);
   if (el.otherClear) el.otherClear.addEventListener("click", clearOtherItemDetail);
   if (el.materialLineAddBtn) el.materialLineAddBtn.addEventListener("click", () => appendMaterialLineRow("", ""));
@@ -907,12 +978,32 @@ function bindDialogEvents() {
       if (e.target === el.deleteConfirmDialog) closeDeleteConfirm(false);
     });
   }
+  if (el.supplierCustomInput) {
+    el.supplierCustomInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void saveSupplierCustomDialog();
+      }
+    });
+  }
 }
 
 function bindActionDialog(dialogEl, closeButtons, saveFn, saveBtn) {
   closeButtons.forEach((b) => { if (b) b.addEventListener("click", () => closeDialog(dialogEl)); });
   if (saveBtn) saveBtn.addEventListener("click", saveFn);
   if (dialogEl) dialogEl.addEventListener("click", (e) => { if (e.target === dialogEl) closeDialog(dialogEl); });
+}
+
+function isEditingDialogOpen() {
+  return [
+    el.poDialog,
+    el.arrivalDialog,
+    el.abnormalDialog,
+    el.materialItemDialog,
+    el.otherDialog,
+    el.amountDialog,
+    el.supplierCustomDialog,
+  ].some((d) => d && !d.hidden);
 }
 
 function setFilterDefaults() { if (el.filterMonth) el.filterMonth.value = filterState.month; }
@@ -1004,6 +1095,27 @@ function getStatus(row, extra) {
   if (statuses.some((s) => s === "采购")) return "采购";
   return "下单";
 }
+
+function summarizeGroupStatus(row, extra, groups = []) {
+  const activeGroups = (Array.isArray(groups) ? groups : []).filter((g) => {
+    const lines = Array.isArray(g?.lines) ? g.lines : [];
+    return Boolean(
+      String(g?.material || "").trim()
+      || String(g?.supplier || "").trim()
+      || lines.some((line) => String(line?.size || "").trim() || line?.qty !== "" || line?.amount !== "")
+      || g?.amount !== ""
+    );
+  });
+
+  if (!activeGroups.length) return { status: "下单", isReady: "否" };
+
+  const statuses = activeGroups.map((g) => normalizeStatus(g?.status, row, extra));
+  const hasAbnormal = statuses.some((s) => s === "异常");
+  const allArrived = statuses.every((s) => s === "到货");
+  const hasPurchased = statuses.some((s) => s === "采购");
+  const status = hasAbnormal ? "异常" : allArrived ? "到货" : hasPurchased ? "采购" : "下单";
+  return { status, isReady: allArrived ? "是" : "否" };
+}
 function isOverdue(row, extra) {
   if (getStatus(row, extra) === "到货") return false;
   if (!extra.promiseDate) return false;
@@ -1058,6 +1170,14 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function todayLocalDateString() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function formatDateTimeText(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -1070,38 +1190,87 @@ function formatDateTimeText(value) {
   return `${y}-${m}-${day} ${hh}:${mm}`;
 }
 
+function getLineAmountValue(line) {
+  const value = Number(line?.amount);
+  return Number.isFinite(value) && value >= 0 ? Number(value.toFixed(2)) : null;
+}
+
+function getGroupAmountValue(group) {
+  const lines = Array.isArray(group?.lines) ? group.lines : [];
+  const lineTotal = lines.reduce((sum, line) => {
+    const amount = getLineAmountValue(line);
+    return amount == null ? sum : sum + amount;
+  }, 0);
+  if (lineTotal > 0) return Number(lineTotal.toFixed(2));
+  const fallback = Number(group?.amount);
+  return Number.isFinite(fallback) && fallback >= 0 ? Number(fallback.toFixed(2)) : null;
+}
+
+function formatLineQtyText(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 0 ? String(Math.floor(num)) : "-";
+}
+
 function buildContentSummary(row, extra, visibleEntries = null) {
   const orderNo = String(row.orderNo || "").trim();
   const customer = String(row.customer || "").trim();
   const groups = Array.isArray(visibleEntries)
     ? visibleEntries.map((entry) => entry.group)
     : getCachedMaterialGroups(row, extra);
-  const header = [
+
+  const lines = [
     `订单号: ${orderNo || "-"}`,
     `客户: ${customer || "-"}`,
   ];
+
   if (!groups.length) {
     const fallback = getOrderSummary(row.orderNo, row.summary || "");
-    return [...header, `物料内容: ${fallback || "-"}`].join(" | ");
+    lines.push("", `物料内容: ${fallback || "-"}`);
+    return lines.join("\n");
   }
-  const body = groups.map((g, idx) => {
+
+  groups.forEach((g, idx) => {
     const status = normalizeStatus(g?.status, row, extra);
-    const amount = g?.amount === "" || g?.amount == null ? "-" : formatCurrency(g.amount);
-    const lineText = (Array.isArray(g.lines) ? g.lines : [])
+    const groupAmount = getGroupAmountValue(g);
+    const amountText = groupAmount == null ? "-" : formatCurrency(groupAmount);
+    const detailLines = (Array.isArray(g.lines) ? g.lines : [])
       .map((line) => {
         const size = String(line?.size || "").trim();
-        const qty = line?.qty === "" || line?.qty == null ? "" : `${line.qty}件`;
-        return [size, qty].filter(Boolean).join(" ");
+        const qty = formatLineQtyText(line?.qty);
+        const lineAmount = getLineAmountValue(line);
+        const lineAmountText = lineAmount == null ? "-" : formatCurrency(lineAmount);
+        const parts = [];
+        if (size) parts.push(`尺寸 ${size}`);
+        if (qty !== "-") parts.push(`数量 ${qty}`);
+        if (lineAmountText !== "-") parts.push(`金额 ${lineAmountText}`);
+        return parts.length ? `  - ${parts.join("   ")}` : "";
       })
+      .filter(Boolean);
+
+    const materialText = [String(g.material || "").trim(), String(g.supplier || "").trim()]
       .filter(Boolean)
-      .join("、");
+      .join(" / ");
     const orderedAtValue = g?.orderedAt || (status === "下单" ? (row?.createdAt || row?.updatedAt || "") : "");
-    const orderedAtText = `下单时间:${formatDateTimeText(orderedAtValue) || "-"}`;
-    const purchasedAtText = `采购时间:${formatDateTimeText(g?.purchasedAt) || "-"}`;
-    const arrivedAtText = status === "异常" ? "" : ` | 到货时间:${formatDateTimeText(g?.arrivedAt) || "-"}`;
-    return `${idx + 1}.${[String(g.material || "").trim(), lineText].filter(Boolean).join(" ")} | 金额:${amount} | 状态:${status} | ${orderedAtText} | ${purchasedAtText}${arrivedAtText}`;
+    const orderedAtText = formatDateTimeText(orderedAtValue) || "-";
+    const purchasedAtText = formatDateTimeText(g?.purchasedAt) || "-";
+    const arrivedAtText = status === "异常" ? "-" : (formatDateTimeText(g?.arrivedAt) || "-");
+
+    lines.push("");
+    lines.push(`${idx + 1}. ${materialText || "未填写材质/供应商"}`);
+    if (detailLines.length) {
+      lines.push("  明细:");
+      lines.push(...detailLines);
+    } else {
+      lines.push("  明细: -");
+    }
+    lines.push(`  金额合计: ${amountText}`);
+    lines.push(`  状态: ${status}`);
+    lines.push(`  下单时间: ${orderedAtText}`);
+    lines.push(`  采购时间: ${purchasedAtText}`);
+    lines.push(`  到货时间: ${arrivedAtText}`);
   });
-  return [...header, ...body].join("\n");
+
+  return lines.join("\n");
 }
 
 function getSupplierFilterText(row, extra) {
@@ -1159,7 +1328,7 @@ function makeRowRenderSignature(row, extra, visibleEntries) {
         st: String(entry.group?.status || ""),
         a: String(entry.group?.amount ?? ""),
         l: Array.isArray(entry.group?.lines)
-          ? entry.group.lines.map((line) => `${String(line?.size || "")}:${String(line?.qty ?? "")}`).join("|")
+          ? entry.group.lines.map((line) => `${String(line?.size || "")}:${String(line?.qty ?? "")}:${String(line?.amount ?? "")}`).join("|")
           : "",
       }))
       : [],
@@ -1221,10 +1390,6 @@ function renderViewportRows() {
   if (shouldSyncGroupHeights(total)) {
     scheduleGroupHeightSync();
   } else {
-    if (pendingGroupHeightSync) {
-      clearTimeout(pendingGroupHeightSync);
-      pendingGroupHeightSync = 0;
-    }
     if (pendingGroupHeightRaf) {
       cancelAnimationFrame(pendingGroupHeightRaf);
       pendingGroupHeightRaf = 0;
@@ -1268,8 +1433,8 @@ function renderMaterialSummary(list, extraMap = new Map()) {
     const extra = extraMap.get(row.id) || createDefaultExtra();
     const visibleEntries = getVisibleGroupEntries(row, extra);
     const rowAmount = visibleEntries.reduce((groupSum, entry) => {
-      const value = Number(entry?.group?.amount);
-      return Number.isFinite(value) && value >= 0 ? groupSum + value : groupSum;
+      const value = getGroupAmountValue(entry?.group);
+      return value == null ? groupSum : groupSum + value;
     }, 0);
     return sum + rowAmount;
   }, 0);
@@ -1279,8 +1444,13 @@ function renderMaterialSummary(list, extraMap = new Map()) {
 function summaryCell(text) {
   const td = document.createElement("td");
   td.className = "material-summary-cell";
-  td.textContent = String(text || "");
   td.title = "可选中后复制";
+
+  const box = document.createElement("div");
+  box.className = "material-summary-box";
+  box.textContent = String(text || "");
+  td.appendChild(box);
+
   // Keep text selection stable: avoid row click re-render when selecting/copying summary text.
   ["mousedown", "mouseup", "click", "dblclick"].forEach((evt) => {
     td.addEventListener(evt, (event) => event.stopPropagation());
@@ -1302,23 +1472,11 @@ function amountDetailCell(row, extra, visibleEntries = null) {
     const group = document.createElement("div");
     group.className = "material-amount-group";
     if (idx > 0) group.classList.add("is-group-gap");
-    const value = Number(g.amount);
     const amountText = document.createElement("div");
     amountText.className = "material-amount-value";
-    amountText.textContent = Number.isFinite(value) && value >= 0 ? formatCurrency(value) : "未填写";
-    const groupActions = document.createElement("div");
-    groupActions.className = "material-detail-group-actions";
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "material-icon-btn";
-    editBtn.setAttribute("aria-label", "编辑");
-    editBtn.title = "编辑";
-    editBtn.dataset.action = "edit-amount";
-    editBtn.dataset.rowId = row.id;
-    editBtn.dataset.groupIndex = String(Number(g.__sourceIndex ?? idx));
-    groupActions.appendChild(editBtn);
+    const value = getGroupAmountValue(g);
+    amountText.textContent = value == null ? "未填写" : formatCurrency(value);
     group.appendChild(amountText);
-    group.appendChild(groupActions);
     td.appendChild(group);
   });
   return td;
@@ -1342,10 +1500,22 @@ async function editGroupAmount(rowId, groupIndex) {
 
 async function saveAmountEditDialog() {
   const row = rows.find((r) => r.id === amountEditingRowId);
-  if (!row) return;
+  if (!row) {
+    showInfo("当前记录已被刷新或删除，请关闭弹窗后重试。", "保存失败");
+    amountEditingRowId = "";
+    amountEditingGroupIndex = -1;
+    closeDialog(el.amountDialog);
+    return;
+  }
   const extra = getExtra(amountEditingRowId);
   const groups = parseMaterialGroups(row, extra);
-  if (!groups[amountEditingGroupIndex]) return;
+  if (!groups[amountEditingGroupIndex]) {
+    showInfo("当前分组已变化，请重新打开后再保存。", "保存失败");
+    amountEditingRowId = "";
+    amountEditingGroupIndex = -1;
+    closeDialog(el.amountDialog);
+    return;
+  }
   const trimmed = String(el.amountInput?.value || "").trim();
   if (!trimmed) {
     groups[amountEditingGroupIndex].amount = "";
@@ -1448,13 +1618,13 @@ function materialDetailCell(row, extra, visibleEntries = null) {
   const groups = Array.isArray(visibleEntries)
     ? visibleEntries.map((entry) => ({ ...entry.group, __sourceIndex: entry.index }))
     : getCachedMaterialGroups(row, extra).map((g, idx) => ({ ...g, __sourceIndex: idx }));
-  const hasContent = groups.some((g) => g.material || g.supplier || g.lines.some((x) => x.size || x.qty !== ""));
+  const hasContent = groups.some((g) => g.material || g.supplier || g.lines.some((x) => x.size || x.qty !== "" || x.amount !== ""));
   if (!hasContent) {
     const empty = document.createElement("div");
     empty.className = "material-detail-group";
     const emptyLine = document.createElement("div");
     emptyLine.className = "material-detail-line";
-    emptyLine.textContent = "点击填写材质、尺寸、数量、供应商";
+    emptyLine.textContent = "点击填写材质、尺寸、数量、金额、供应商";
     empty.appendChild(emptyLine);
     const groupActions = document.createElement("div");
     groupActions.className = "material-detail-group-actions";
@@ -1517,21 +1687,31 @@ function materialDetailCell(row, extra, visibleEntries = null) {
       g.lines.forEach((line) => {
         const item = document.createElement("div");
         item.className = "material-detail-line";
-        const size = String(line.size || "").trim();
-        const qty = String(line.qty ?? "").trim();
+        const size = String(line.size || "").trim() || "-";
+        const qtyText = formatLineQtyText(line.qty);
+        const amountValue = getLineAmountValue(line);
+        const amountText = amountValue == null ? "-" : formatCurrency(amountValue);
+
+        const hasQty = qtyText !== "-";
+        const hasAmount = amountText !== "-";
+
         const sizeText = document.createElement("span");
         sizeText.className = "material-detail-size";
         sizeText.textContent = size;
         item.appendChild(sizeText);
+
         const qtyTag = document.createElement("span");
         qtyTag.className = "material-detail-qty";
-        if (qty) {
-          qtyTag.textContent = `${qty}件`;
-        } else {
-          qtyTag.classList.add("is-empty");
-          qtyTag.textContent = "-";
-        }
+        qtyTag.textContent = hasQty ? qtyText : "-";
+        if (!hasQty) qtyTag.classList.add("is-empty");
         item.appendChild(qtyTag);
+
+        const amountTag = document.createElement("span");
+        amountTag.className = "material-detail-amount";
+        amountTag.textContent = amountText;
+        if (!hasAmount) amountTag.classList.add("is-empty");
+        item.appendChild(amountTag);
+
         group.appendChild(item);
       });
       const groupActions = document.createElement("div");
@@ -1670,8 +1850,17 @@ function beginEdit(td) {
       row.customer = resolveCustomer(next, row.customer);
     }
     if (key === "quantity") {
-      const n = Number(next);
-      next = Number.isFinite(n) ? String(n) : "";
+      if (next === "") {
+        row[key] = "";
+      } else {
+        const n = Number(next);
+        if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+          td.textContent = old;
+          showInfo("数量必须为大于等于 0 的整数。", "校验失败");
+          return;
+        }
+        next = String(Math.floor(n));
+      }
     }
     row[key] = next;
     await persist({ changed: [row] });
@@ -1773,9 +1962,27 @@ function openPoDialog(id) {
 
 async function savePo() {
   const row = rows.find((r) => r.id === activeRowId);
-  if (!row) return;
-  const qty = Math.max(0, Number(el.poQty?.value || 0));
-  const price = Math.max(0, Number(el.poPrice?.value || 0));
+  if (!row) {
+    showInfo("当前记录已被刷新或删除，请关闭弹窗后重试。", "保存失败");
+    activeRowId = "";
+    closeDialog(el.poDialog);
+    return;
+  }
+  const qtyRaw = String(el.poQty?.value || "").trim();
+  const qtyNum = Number(qtyRaw);
+  if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
+    showInfo("请填写大于 0 的下单数量。", "校验失败");
+    return;
+  }
+  const qty = Math.floor(qtyNum);
+
+  const priceRaw = String(el.poPrice?.value || "").trim();
+  const priceNum = priceRaw === "" ? 0 : Number(priceRaw);
+  if (!Number.isFinite(priceNum) || priceNum < 0) {
+    showInfo("单价必须是大于等于 0 的数字。", "校验失败");
+    return;
+  }
+  const price = Number(priceNum.toFixed(2));
   const old = getExtra(row.id);
   const extra = getExtra(row.id);
   const groups = parseMaterialGroups(row, extra);
@@ -1802,12 +2009,20 @@ async function savePo() {
   render();
 }
 
-function openArrivalDialog(id) { activeRowId = id; if (el.arrivalQty) el.arrivalQty.value = ""; if (el.arrivalDate) el.arrivalDate.value = new Date().toISOString().slice(0, 10); openDialog(el.arrivalDialog); }
+function openArrivalDialog(id) { activeRowId = id; if (el.arrivalQty) el.arrivalQty.value = ""; if (el.arrivalDate) el.arrivalDate.value = todayLocalDateString(); openDialog(el.arrivalDialog); }
 async function saveArrival() {
   const row = rows.find((r) => r.id === activeRowId);
-  if (!row) return;
-  const qty = Math.max(0, Number(el.arrivalQty?.value || 0));
-  if (qty <= 0) { showInfo("请填写大于 0 的到货数量。", "校验失败"); return; }
+  if (!row) {
+    showInfo("当前记录已被刷新或删除，请关闭弹窗后重试。", "保存失败");
+    activeRowId = "";
+    closeDialog(el.arrivalDialog);
+    return;
+  }
+  const qtyRaw = String(el.arrivalQty?.value || "").trim();
+  const qtyNum = Number(qtyRaw);
+  if (!Number.isFinite(qtyNum) || qtyNum <= 0 || !Number.isInteger(qtyNum)) { showInfo("请填写大于 0 的整数到货数量。", "校验失败"); return; }
+  const qty = Math.floor(qtyNum);
+  const stockBefore = getCurrentStock(row);
   const e = getExtra(row.id);
   const left = Math.max(0, Number(e.inTransit || 0) - qty);
   const status = left > 0 ? "采购" : "到货";
@@ -1824,7 +2039,7 @@ async function saveArrival() {
   row.quantity = serialized.quantity;
   row.amount = serialized.amount;
   saveExtra(row.id, { inTransit: left, actualDate: String(el.arrivalDate?.value || "").trim(), status });
-  row.quantity = getCurrentStock(row) + qty;
+  row.quantity = stockBefore + qty;
   row.isReady = status === "到货" ? "是" : "否";
   await persist({ changed: [row] });
   closeDialog(el.arrivalDialog);
@@ -1834,7 +2049,12 @@ async function saveArrival() {
 function openAbnormalDialog(id) { activeRowId = id; const e = getExtra(id); if (el.abnormalReason) el.abnormalReason.value = e.abnormalReason || ""; if (el.abnormalAlt) el.abnormalAlt.value = e.abnormalAltMaterial || ""; if (el.abnormalRecover) el.abnormalRecover.value = e.abnormalRecoverDate || ""; openDialog(el.abnormalDialog); }
 async function saveAbnormal() {
   const row = rows.find((r) => r.id === activeRowId);
-  if (!row) return;
+  if (!row) {
+    showInfo("当前记录已被刷新或删除，请关闭弹窗后重试。", "保存失败");
+    activeRowId = "";
+    closeDialog(el.abnormalDialog);
+    return;
+  }
   const extra = getExtra(row.id);
   const groups = parseMaterialGroups(row, extra);
   groups.forEach((g) => { g.status = "异常"; });
@@ -1852,12 +2072,13 @@ async function saveAbnormal() {
 
 function openDialog(d) { if (!d) return; d.hidden = false; document.body.style.overflow = "hidden"; }
 function closeDialog(d) { if (!d) return; d.hidden = true; refreshBodyOverflow(); }
-function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.otherDialog, el.amountDialog, el.infoDialog, el.imagePreviewDialog, el.deleteConfirmDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
+function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.otherDialog, el.amountDialog, el.supplierCustomDialog, el.infoDialog, el.imagePreviewDialog, el.deleteConfirmDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
 
 function openDeleteConfirm(message) {
   return new Promise((resolve) => {
     if (!el.deleteConfirmDialog) {
-      resolve(confirm(message));
+      showInfo(message || "确认执行删除操作吗？", "确认删除");
+      resolve(false);
       return;
     }
     deleteConfirmResolver = resolve;
@@ -1908,15 +2129,11 @@ function shouldSyncGroupHeights(totalRows = currentRenderList.length) {
 
 function scheduleGroupHeightSync() {
   if (!shouldSyncGroupHeights()) return;
-  if (pendingGroupHeightSync) clearTimeout(pendingGroupHeightSync);
-  pendingGroupHeightSync = setTimeout(() => {
-    pendingGroupHeightSync = 0;
-    if (pendingGroupHeightRaf) cancelAnimationFrame(pendingGroupHeightRaf);
-    pendingGroupHeightRaf = requestAnimationFrame(() => {
-      pendingGroupHeightRaf = 0;
-      syncGroupHeights();
-    });
-  }, 40);
+  if (pendingGroupHeightRaf) cancelAnimationFrame(pendingGroupHeightRaf);
+  pendingGroupHeightRaf = requestAnimationFrame(() => {
+    pendingGroupHeightRaf = 0;
+    syncGroupHeights();
+  });
 }
 
 function syncGroupHeights() {
@@ -1933,7 +2150,17 @@ function syncGroupHeights() {
     const amountGroups = tr.querySelectorAll("td:nth-child(4) .material-amount-group");
     const statusGroups = tr.querySelectorAll("td:nth-child(5) .material-status-group");
     const opGroups = tr.querySelectorAll("td:nth-child(6) .material-op-group");
-    if (!materialGroups.length || !amountGroups.length || !statusGroups.length || !opGroups.length) return;
+    const summaryBox = tr.querySelector("td:nth-child(7) .material-summary-box");
+
+    if (!materialGroups.length || !amountGroups.length || !statusGroups.length || !opGroups.length) {
+      if (summaryBox instanceof HTMLElement) {
+        const fallbackHeight = Math.max(80, tr.offsetHeight - 8);
+        summaryBox.style.height = `${fallbackHeight}px`;
+        summaryBox.style.maxHeight = `${fallbackHeight}px`;
+      }
+      return;
+    }
+
     const count = Math.min(materialGroups.length, amountGroups.length, statusGroups.length, opGroups.length);
     for (let i = 0; i < count; i += 1) {
       const m = materialGroups[i];
@@ -1949,6 +2176,17 @@ function syncGroupHeights() {
       a.style.minHeight = `${height}px`;
       s.style.minHeight = `${height}px`;
       o.style.minHeight = `${height}px`;
+    }
+
+    if (summaryBox instanceof HTMLElement) {
+      let materialTotalHeight = 0;
+      for (let i = 0; i < materialGroups.length; i += 1) {
+        materialTotalHeight += materialGroups[i].offsetHeight;
+        if (i > 0) materialTotalHeight += 5;
+      }
+      const targetHeight = Math.max(80, Math.floor(materialTotalHeight));
+      summaryBox.style.height = `${targetHeight}px`;
+      summaryBox.style.maxHeight = `${targetHeight}px`;
     }
   });
 }
@@ -1977,15 +2215,15 @@ function openMaterialItemDialog(rowId, options = {}) {
 
 function clearMaterialItemDetail() {
   if (el.materialInput) el.materialInput.value = "";
-  renderMaterialLineRows([{ size: "", qty: "" }]);
+  renderMaterialLineRows([{ size: "", qty: "", amount: "" }]);
   if (el.materialSupplierInput) el.materialSupplierInput.value = "";
 }
 
 function createEmptyMaterialGroup(kind = "material") {
-  return { itemKind: kind, material: "", supplier: "", supplierLink: "", amount: "", status: "下单", orderedAt: "", purchasedAt: "", arrivedAt: "", screenshot: "", lines: [{ size: "", qty: "" }] };
+  return { itemKind: kind, material: "", supplier: "", supplierLink: "", amount: "", status: "下单", orderedAt: "", purchasedAt: "", arrivedAt: "", screenshot: "", lines: [{ size: "", qty: "", amount: "" }] };
 }
 
-function appendMaterialLineRow(size = "", qty = "") {
+function appendMaterialLineRow(size = "", qty = "", amount = "") {
   if (!el.materialLineList) return;
   const row = document.createElement("div");
   row.className = "material-line-row";
@@ -1994,6 +2232,7 @@ function appendMaterialLineRow(size = "", qty = "") {
   sizeInput.className = "material-line-size";
   sizeInput.placeholder = "尺寸";
   sizeInput.value = String(size || "");
+
   const qtyInput = document.createElement("input");
   qtyInput.type = "number";
   qtyInput.min = "0";
@@ -2001,16 +2240,27 @@ function appendMaterialLineRow(size = "", qty = "") {
   qtyInput.className = "material-line-qty";
   qtyInput.placeholder = "数量";
   qtyInput.value = qty === "" ? "" : String(qty);
+
+  const amountInput = document.createElement("input");
+  amountInput.type = "number";
+  amountInput.min = "0";
+  amountInput.step = "0.01";
+  amountInput.className = "material-line-amount";
+  amountInput.placeholder = "金额";
+  amountInput.value = amount === "" ? "" : String(amount);
+
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "action-btn";
   removeBtn.textContent = "删除";
   removeBtn.addEventListener("click", () => {
     row.remove();
-    if (!el.materialLineList?.children.length) appendMaterialLineRow("", "");
+    if (!el.materialLineList?.children.length) appendMaterialLineRow("", "", "");
   });
+
   row.appendChild(sizeInput);
   row.appendChild(qtyInput);
+  row.appendChild(amountInput);
   row.appendChild(removeBtn);
   el.materialLineList.appendChild(row);
 }
@@ -2019,10 +2269,10 @@ function renderMaterialLineRows(lines = []) {
   if (!el.materialLineList) return;
   el.materialLineList.innerHTML = "";
   if (!lines.length) {
-    appendMaterialLineRow("", "");
+    appendMaterialLineRow("", "", "");
     return;
   }
-  lines.forEach((line) => appendMaterialLineRow(line.size, line.qty));
+  lines.forEach((line) => appendMaterialLineRow(line.size, line.qty, line.amount));
 }
 
 function collectMaterialLineRows() {
@@ -2031,14 +2281,21 @@ function collectMaterialLineRows() {
   el.materialLineList.querySelectorAll(".material-line-row").forEach((rowEl) => {
     const size = String(rowEl.querySelector(".material-line-size")?.value || "").trim();
     const qtyRaw = String(rowEl.querySelector(".material-line-qty")?.value || "").trim();
+    const amountRaw = String(rowEl.querySelector(".material-line-amount")?.value || "").trim();
     const qtyNum = qtyRaw === "" ? NaN : Number(qtyRaw);
-    if (!size && !qtyRaw) return;
-    lines.push({ size, qty: Number.isFinite(qtyNum) && qtyNum >= 0 ? Math.floor(qtyNum) : null });
+    const amountNum = amountRaw === "" ? NaN : Number(amountRaw);
+    if (!size && !qtyRaw && !amountRaw) return;
+    if (!size) return;
+    lines.push({
+      size,
+      qty: Number.isFinite(qtyNum) && qtyNum >= 0 ? Math.floor(qtyNum) : null,
+      amount: Number.isFinite(amountNum) && amountNum >= 0 ? Number(amountNum.toFixed(2)) : null,
+    });
   });
   return lines;
 }
 
-function appendOtherLineRow(size = "", qty = "") {
+function appendOtherLineRow(size = "", qty = "", amount = "") {
   if (!el.otherLineList) return;
   const row = document.createElement("div");
   row.className = "material-line-row";
@@ -2047,6 +2304,7 @@ function appendOtherLineRow(size = "", qty = "") {
   sizeInput.className = "other-line-size";
   sizeInput.placeholder = "规格";
   sizeInput.value = String(size || "");
+
   const qtyInput = document.createElement("input");
   qtyInput.type = "number";
   qtyInput.min = "0";
@@ -2054,16 +2312,27 @@ function appendOtherLineRow(size = "", qty = "") {
   qtyInput.className = "other-line-qty";
   qtyInput.placeholder = "数量";
   qtyInput.value = qty === "" ? "" : String(qty);
+
+  const amountInput = document.createElement("input");
+  amountInput.type = "number";
+  amountInput.min = "0";
+  amountInput.step = "0.01";
+  amountInput.className = "other-line-amount";
+  amountInput.placeholder = "金额";
+  amountInput.value = amount === "" ? "" : String(amount);
+
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "action-btn";
   removeBtn.textContent = "删除";
   removeBtn.addEventListener("click", () => {
     row.remove();
-    if (!el.otherLineList?.children.length) appendOtherLineRow("", "");
+    if (!el.otherLineList?.children.length) appendOtherLineRow("", "", "");
   });
+
   row.appendChild(sizeInput);
   row.appendChild(qtyInput);
+  row.appendChild(amountInput);
   row.appendChild(removeBtn);
   el.otherLineList.appendChild(row);
 }
@@ -2072,10 +2341,10 @@ function renderOtherLineRows(lines = []) {
   if (!el.otherLineList) return;
   el.otherLineList.innerHTML = "";
   if (!lines.length) {
-    appendOtherLineRow("", "");
+    appendOtherLineRow("", "", "");
     return;
   }
-  lines.forEach((line) => appendOtherLineRow(line.size, line.qty));
+  lines.forEach((line) => appendOtherLineRow(line.size, line.qty, line.amount));
 }
 
 function collectOtherLineRows() {
@@ -2084,9 +2353,16 @@ function collectOtherLineRows() {
   el.otherLineList.querySelectorAll(".material-line-row").forEach((rowEl) => {
     const size = String(rowEl.querySelector(".other-line-size")?.value || "").trim();
     const qtyRaw = String(rowEl.querySelector(".other-line-qty")?.value || "").trim();
+    const amountRaw = String(rowEl.querySelector(".other-line-amount")?.value || "").trim();
     const qtyNum = qtyRaw === "" ? NaN : Number(qtyRaw);
-    if (!size && !qtyRaw) return;
-    lines.push({ size, qty: Number.isFinite(qtyNum) && qtyNum >= 0 ? Math.floor(qtyNum) : null });
+    const amountNum = amountRaw === "" ? NaN : Number(amountRaw);
+    if (!size && !qtyRaw && !amountRaw) return;
+    if (!size) return;
+    lines.push({
+      size,
+      qty: Number.isFinite(qtyNum) && qtyNum >= 0 ? Math.floor(qtyNum) : null,
+      amount: Number.isFinite(amountNum) && amountNum >= 0 ? Number(amountNum.toFixed(2)) : null,
+    });
   });
   return lines;
 }
@@ -2120,7 +2396,7 @@ function clearOtherItemDetail() {
   if (el.otherSupplierInput) el.otherSupplierInput.value = "";
   if (el.otherSupplierLinkInput) el.otherSupplierLinkInput.value = "";
   clearOtherScreenshot();
-  renderOtherLineRows([{ size: "", qty: "" }]);
+  renderOtherLineRows([{ size: "", qty: "", amount: "" }]);
 }
 
 async function captureOtherScreenshot() {
@@ -2346,8 +2622,9 @@ function parseSpecLines(specValue, qtyValue) {
             .map((x) => ({
               size: String(x?.size || "").trim(),
               qty: Number.isFinite(Number(x?.qty)) ? Math.floor(Math.max(0, Number(x.qty))) : "",
+              amount: Number.isFinite(Number(x?.amount)) ? Number(Math.max(0, Number(x.amount)).toFixed(2)) : "",
             }))
-            .filter((x) => x.size || x.qty !== ""),
+            .filter((x) => x.size || x.qty !== "" || x.amount !== ""),
         };
       }
     } catch {
@@ -2355,7 +2632,7 @@ function parseSpecLines(specValue, qtyValue) {
     }
   }
   return {
-    lines: [{ size: raw, qty: qtyValue === "" ? "" : Number(qtyValue) || "" }],
+    lines: [{ size: raw, qty: qtyValue === "" ? "" : Number(qtyValue) || "", amount: "" }],
   };
 }
 
@@ -2382,8 +2659,9 @@ function parseMaterialGroups(row, extra) {
                 .map((line) => ({
                   size: String(line?.size || "").trim(),
                   qty: line?.qty === "" || line?.qty == null ? "" : Math.max(0, Math.floor(Number(line.qty) || 0)),
+                  amount: line?.amount === "" || line?.amount == null ? "" : Number(Math.max(0, Number(line.amount) || 0).toFixed(2)),
                 }))
-                .filter((line) => line.size || line.qty !== "")
+                .filter((line) => line.size || line.qty !== "" || line.amount !== "")
               : [],
           }))
           .filter((g) => g.material || g.supplier || g.lines.length > 0 || g.amount !== "");
@@ -2414,7 +2692,7 @@ function parseMaterialGroups(row, extra) {
     purchasedAt: "",
     arrivedAt: "",
     screenshot: "",
-    lines: fallbackLines,
+    lines: fallbackLines.map((line) => ({ ...line, amount: line?.amount ?? "" })),
   }];
 }
 
@@ -2435,8 +2713,9 @@ function serializeMaterialGroups(groups = []) {
         .map((line) => ({
           size: String(line?.size || "").trim(),
           qty: line?.qty === "" || line?.qty == null ? "" : Math.max(0, Math.floor(Number(line.qty) || 0)),
+          amount: line?.amount === "" || line?.amount == null ? "" : Number(Math.max(0, Number(line.amount) || 0).toFixed(2)),
         }))
-        .filter((line) => line.size || line.qty !== ""),
+        .filter((line) => line.size || line.qty !== "" || line.amount !== ""),
     }))
     .filter((g) => g.material || g.supplier || g.lines.length > 0 || g.amount !== "");
   if (!normalized.length) return { material: "", spec: "", quantity: "", supplier: "", amount: "" };
@@ -2444,7 +2723,10 @@ function serializeMaterialGroups(groups = []) {
     const groupQty = g.lines.reduce((sub, line) => sub + (line.qty === "" ? 0 : Number(line.qty)), 0);
     return sum + groupQty;
   }, 0);
-  const amountTotal = normalized.reduce((sum, g) => sum + (g.amount === "" ? 0 : Number(g.amount)), 0);
+  const amountTotal = normalized.reduce((sum, g) => {
+    const groupAmount = getGroupAmountValue(g);
+    return groupAmount == null ? sum : sum + groupAmount;
+  }, 0);
   const materialText = normalized.map((g) => g.material).filter(Boolean).join(" / ");
   const primarySupplier = normalized.find((g) => g.supplier)?.supplier || "";
   return {
@@ -2471,22 +2753,18 @@ function serializeSpecLines(lines) {
 
 async function saveMaterialItemDetail() {
   const row = rows.find((r) => r.id === materialItemEditingRowId);
-  if (!row) return;
+  if (!row) {
+    showInfo("当前记录已被刷新或删除，请关闭弹窗后重试。", "保存失败");
+    materialItemEditingRowId = "";
+    materialItemEditingGroups = [];
+    materialItemEditingGroupIndex = 0;
+    closeDialog(el.materialItemDialog);
+    return;
+  }
   const material = String(el.materialInput?.value || "").trim();
   const supplier = String(el.materialSupplierInput?.value || "").trim();
   const lines = collectMaterialLineRows();
-  if (!material) {
-    showInfo("请选择材质。", "校验失败");
-    return;
-  }
-  if (!lines.length) {
-    showInfo("请至少填写一行规格和数量。", "校验失败");
-    return;
-  }
-  if (lines.some((line) => !line.size || line.qty == null)) {
-    showInfo("每行都需要填写有效的规格和数量。", "校验失败");
-    return;
-  }
+
   const currentGroups = materialItemEditingGroups.length
     ? materialItemEditingGroups
     : parseMaterialGroups(row, getExtra(row.id));
@@ -2504,7 +2782,9 @@ async function saveMaterialItemDetail() {
   row.spec = serializedGroups.spec;
   row.quantity = serializedGroups.quantity;
   row.amount = serializedGroups.amount;
-  saveExtra(row.id, { supplier: serializedGroups.supplier });
+  const statusSummary = summarizeGroupStatus(row, getExtra(row.id), currentGroups);
+  row.isReady = statusSummary.isReady;
+  saveExtra(row.id, { supplier: serializedGroups.supplier, status: statusSummary.status });
   await persist({ changed: [row] });
   materialItemEditingRowId = "";
   materialItemEditingGroups = [];
@@ -2515,15 +2795,19 @@ async function saveMaterialItemDetail() {
 
 async function saveOtherItemDetail() {
   const row = rows.find((r) => r.id === otherItemEditingRowId);
-  if (!row) return;
+  if (!row) {
+    showInfo("当前记录已被刷新或删除，请关闭弹窗后重试。", "保存失败");
+    otherItemEditingRowId = "";
+    otherItemEditingGroupIndex = 0;
+    materialItemEditingGroups = [];
+    closeDialog(el.otherDialog);
+    return;
+  }
   const material = String(el.otherNameInput?.value || "").trim();
   const supplier = String(el.otherSupplierInput?.value || "").trim();
   const supplierLink = String(el.otherSupplierLinkInput?.value || "").trim();
   const lines = collectOtherLineRows();
-  if (lines.some((line) => line.qty == null)) {
-    showInfo("如填写明细行，数量必须为有效数字。", "校验失败");
-    return;
-  }
+
   const currentGroups = materialItemEditingGroups.length
     ? materialItemEditingGroups
     : parseMaterialGroups(row, getExtra(row.id));
@@ -2539,7 +2823,9 @@ async function saveOtherItemDetail() {
   row.spec = serializedGroups.spec;
   row.quantity = serializedGroups.quantity;
   row.amount = serializedGroups.amount;
-  saveExtra(row.id, { supplier: serializedGroups.supplier });
+  const statusSummary = summarizeGroupStatus(row, getExtra(row.id), currentGroups);
+  row.isReady = statusSummary.isReady;
+  saveExtra(row.id, { supplier: serializedGroups.supplier, status: statusSummary.status });
   await persist({ changed: [row] });
   otherItemEditingRowId = "";
   otherItemEditingGroupIndex = 0;
@@ -2919,9 +3205,19 @@ async function parseHttpError(resp) {
 }
 
 function showInfo(message, title = "提示") {
-  if (!el.infoDialog || !el.infoText) { alert(message); return; }
+  if (!el.infoDialog || !el.infoText) { console.warn("info dialog not found", title, message); return; }
   if (el.infoTitle) el.infoTitle.textContent = title;
   el.infoText.textContent = String(message || "");
   openDialog(el.infoDialog);
 }
 function closeInfo() { closeDialog(el.infoDialog); }
+
+
+
+
+
+
+
+
+
+
