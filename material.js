@@ -3,6 +3,7 @@ const STORAGE_KEY = "mini_mes_materials_v2";
 const EXTRA_KEY = "mini_mes_materials_extra_v2";
 const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
 const SUPPLIER_CUSTOM_KEY = "mini_mes_supplier_options_v1";
+const MATERIAL_CUSTOM_KEY = "mini_mes_material_options_v1";
 
 const MES_CONFIG = window.MES_CONFIG || {};
 const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
@@ -70,9 +71,10 @@ function toSafeExternalHttpUrl(raw) {
 }
 
 const STATUS_LIST = ["下单", "采购", "到货", "异常"];
-const MATERIAL_OPTIONS = ["", "45#钢", "40Cr", "铝6061", "铝7075", "铝2A12", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
+const MATERIAL_BASE_OPTIONS = ["", "45#钢", "40Cr", "铝5052", "铝6061", "铝7075", "铝2A12", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
 const SUPPLIER_BASE_OPTIONS = [""];
 const SUPPLIER_BLOCKLIST = new Set(["供应商A", "供应商B", "供应商C", "供应商D", "sdf"]);
+let materialOptions = buildMaterialOptions(loadCustomMaterialOptions());
 let supplierOptions = buildSupplierOptions(loadCustomSupplierOptions());
 const SPEC_LINES_PREFIX = "@LINES:";
 const MATERIAL_GROUPS_PREFIX = "@MATS:";
@@ -115,6 +117,7 @@ let amountEditingRowId = "";
 let amountEditingGroupIndex = -1;
 let selectedRowId = "";
 let summarySelectionHoldUntil = 0;
+let materialCustomBound = false;
 let supplierCustomBound = false;
 let otherScreenshotDataUrl = "";
 let screenshotPreviewRenderToken = 0;
@@ -201,6 +204,11 @@ const el = {
   infoText: document.getElementById("infoDialogText"),
   infoClose: document.getElementById("infoDialogCloseBtn"),
   infoOk: document.getElementById("infoDialogOkBtn"),
+  materialCustomDialog: document.getElementById("materialCustomDialog"),
+  materialCustomClose: document.getElementById("materialCustomCloseBtn"),
+  materialCustomCancel: document.getElementById("materialCustomCancelBtn"),
+  materialCustomSave: document.getElementById("materialCustomSaveBtn"),
+  materialCustomInput: document.getElementById("materialCustomInput"),
   supplierCustomDialog: document.getElementById("supplierCustomDialog"),
   supplierCustomClose: document.getElementById("supplierCustomCloseBtn"),
   supplierCustomCancel: document.getElementById("supplierCustomCancelBtn"),
@@ -251,6 +259,7 @@ async function init() {
   ensureAmountEditDialog();
   ensureImagePreviewDialog();
   ensureDeleteConfirmDialog();
+  ensureMaterialCustomDialog();
   ensureSupplierCustomDialog();
   bindEvents();
   document.addEventListener("selectionchange", () => {
@@ -356,6 +365,7 @@ function bindEvents() {
       closeDialog(el.materialItemDialog);
       closeDialog(el.otherDialog);
       closeDialog(el.amountDialog);
+      closeMaterialCustomDialog();
       closeSupplierCustomDialog();
       closeInfo();
       closeImagePreview();
@@ -468,6 +478,7 @@ function ensureMaterialItemDialog() {
     el.materialLineList = document.getElementById("materialLineList");
     el.materialLineAddBtn = document.getElementById("materialLineAddBtn");
     populateMaterialItemSelects();
+    bindMaterialCustomAdd();
     bindSupplierCustomAdd();
     return;
   }
@@ -514,6 +525,7 @@ function ensureMaterialItemDialog() {
   el.materialLineList = document.getElementById("materialLineList");
   el.materialLineAddBtn = document.getElementById("materialLineAddBtn");
   populateMaterialItemSelects();
+  bindMaterialCustomAdd();
   bindSupplierCustomAdd();
 }
 
@@ -658,6 +670,46 @@ function ensureSupplierCustomDialog() {
   el.supplierCustomSave = document.getElementById("supplierCustomSaveBtn");
   el.supplierCustomInput = document.getElementById("supplierCustomInput");
 }
+
+function ensureMaterialCustomDialog() {
+  const existing = document.getElementById("materialCustomDialog");
+  if (existing) {
+    el.materialCustomDialog = existing;
+    el.materialCustomClose = document.getElementById("materialCustomCloseBtn");
+    el.materialCustomCancel = document.getElementById("materialCustomCancelBtn");
+    el.materialCustomSave = document.getElementById("materialCustomSaveBtn");
+    el.materialCustomInput = document.getElementById("materialCustomInput");
+    return;
+  }
+  const dialog = document.createElement("div");
+  dialog.id = "materialCustomDialog";
+  dialog.className = "dialog-backdrop";
+  dialog.hidden = true;
+  dialog.innerHTML = `
+    <section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="materialCustomTitle">
+      <header class="dialog-head">
+        <h3 id="materialCustomTitle">新增材质</h3>
+        <button id="materialCustomCloseBtn" class="btn btn-secondary" type="button">关闭</button>
+      </header>
+      <div class="auth-login-form">
+        <label class="auth-login-field" for="materialCustomInput">
+          <span>材质名称</span>
+          <input id="materialCustomInput" type="text" placeholder="请输入材质名称" />
+        </label>
+      </div>
+      <div class="auth-login-actions">
+        <button id="materialCustomCancelBtn" class="btn btn-secondary" type="button">取消</button>
+        <button id="materialCustomSaveBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </section>
+  `;
+  document.body.appendChild(dialog);
+  el.materialCustomDialog = dialog;
+  el.materialCustomClose = document.getElementById("materialCustomCloseBtn");
+  el.materialCustomCancel = document.getElementById("materialCustomCancelBtn");
+  el.materialCustomSave = document.getElementById("materialCustomSaveBtn");
+  el.materialCustomInput = document.getElementById("materialCustomInput");
+}
 function ensureOtherItemDialog() {
   const existing = document.getElementById("otherItemDialog");
   if (existing) {
@@ -741,12 +793,16 @@ function ensureOtherItemDialog() {
 function populateMaterialItemSelects() {
   if (el.materialInput) {
     el.materialInput.innerHTML = "";
-    MATERIAL_OPTIONS.forEach((name, idx) => {
+    materialOptions.forEach((name, idx) => {
       const option = document.createElement("option");
       option.value = name;
       option.textContent = idx === 0 ? "请选择材质" : name;
       el.materialInput.appendChild(option);
     });
+    const customOption = document.createElement("option");
+    customOption.value = "__custom__";
+    customOption.textContent = "＋ 自定义材质";
+    el.materialInput.appendChild(customOption);
   }
   if (el.materialSupplierInput) {
     el.materialSupplierInput.innerHTML = "";
@@ -763,6 +819,15 @@ function populateMaterialItemSelects() {
   }
 }
 
+function bindMaterialCustomAdd() {
+  if (!el.materialInput || materialCustomBound) return;
+  materialCustomBound = true;
+  el.materialInput.addEventListener("change", () => {
+    if (el.materialInput.value !== "__custom__") return;
+    openMaterialCustomDialog();
+  });
+}
+
 function bindSupplierCustomAdd() {
   if (!el.materialSupplierInput || supplierCustomBound) return;
   supplierCustomBound = true;
@@ -771,6 +836,72 @@ function bindSupplierCustomAdd() {
     openSupplierCustomDialog();
   });
 }
+function loadCustomMaterialOptions() {
+  const raw = localStorage.getItem(MATERIAL_CUSTOM_KEY);
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw);
+    return Array.isArray(list)
+      ? list.map((x) => String(x || "").trim()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomMaterialOptions() {
+  const custom = materialOptions.filter((name) => name && !MATERIAL_BASE_OPTIONS.includes(name));
+  localStorage.setItem(MATERIAL_CUSTOM_KEY, JSON.stringify(custom));
+}
+
+function buildMaterialOptions(customList = []) {
+  const set = new Set(MATERIAL_BASE_OPTIONS);
+  customList.forEach((name) => {
+    const v = String(name || "").trim();
+    if (v) set.add(v);
+  });
+  return Array.from(set);
+}
+
+function addCustomMaterialOption(name) {
+  const v = String(name || "").trim();
+  if (!v) return;
+  if (!materialOptions.includes(v)) {
+    materialOptions.push(v);
+    saveCustomMaterialOptions();
+  }
+}
+
+function openMaterialCustomDialog() {
+  if (!el.materialCustomDialog) return;
+  if (el.materialInput) el.materialInput.value = "";
+  if (el.materialCustomInput) {
+    el.materialCustomInput.value = "";
+  }
+  openDialog(el.materialCustomDialog);
+  if (el.materialCustomInput) {
+    el.materialCustomInput.focus();
+    el.materialCustomInput.select();
+  }
+}
+
+function closeMaterialCustomDialog() {
+  closeDialog(el.materialCustomDialog);
+  if (el.materialCustomInput) el.materialCustomInput.value = "";
+}
+
+async function saveMaterialCustomDialog() {
+  const raw = String(el.materialCustomInput?.value || "").trim();
+  if (!raw) {
+    showInfo("请输入材质名称。", "校验失败");
+    return;
+  }
+  addCustomMaterialOption(raw);
+  populateMaterialItemSelects();
+  setSelectValueWithFallback(el.materialInput, raw, "请选择材质");
+  closeMaterialCustomDialog();
+}
+
 function loadCustomSupplierOptions() {
   const raw = localStorage.getItem(SUPPLIER_CUSTOM_KEY);
   if (!raw) return [];
@@ -960,6 +1091,7 @@ function bindDialogEvents() {
   bindActionDialog(el.materialItemDialog, [el.materialItemClose, el.materialItemCancel], () => void saveMaterialItemDetail(), el.materialItemSave);
   bindActionDialog(el.otherDialog, [el.otherClose, el.otherCancel], () => void saveOtherItemDetail(), el.otherSave);
   bindActionDialog(el.amountDialog, [el.amountClose, el.amountCancel], () => void saveAmountEditDialog(), el.amountSave);
+  bindActionDialog(el.materialCustomDialog, [el.materialCustomClose, el.materialCustomCancel], () => void saveMaterialCustomDialog(), el.materialCustomSave);
   bindActionDialog(el.supplierCustomDialog, [el.supplierCustomClose, el.supplierCustomCancel], () => void saveSupplierCustomDialog(), el.supplierCustomSave);
   if (el.materialItemClear) el.materialItemClear.addEventListener("click", clearMaterialItemDetail);
   if (el.otherClear) el.otherClear.addEventListener("click", clearOtherItemDetail);
@@ -978,6 +1110,14 @@ function bindDialogEvents() {
   if (el.deleteConfirmDialog) {
     el.deleteConfirmDialog.addEventListener("click", (e) => {
       if (e.target === el.deleteConfirmDialog) closeDeleteConfirm(false);
+    });
+  }
+  if (el.materialCustomInput) {
+    el.materialCustomInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void saveMaterialCustomDialog();
+      }
     });
   }
   if (el.supplierCustomInput) {
@@ -1004,6 +1144,7 @@ function isEditingDialogOpen() {
     el.materialItemDialog,
     el.otherDialog,
     el.amountDialog,
+    el.materialCustomDialog,
     el.supplierCustomDialog,
   ].some((d) => d && !d.hidden);
 }
@@ -2133,7 +2274,23 @@ async function saveAbnormal() {
 
 function openDialog(d) { if (!d) return; d.hidden = false; document.body.style.overflow = "hidden"; }
 function closeDialog(d) { if (!d) return; d.hidden = true; refreshBodyOverflow(); }
-function refreshBodyOverflow() { const open = [el.authDialog, el.poDialog, el.arrivalDialog, el.abnormalDialog, el.materialItemDialog, el.otherDialog, el.amountDialog, el.supplierCustomDialog, el.infoDialog, el.imagePreviewDialog, el.deleteConfirmDialog].some((d) => d && !d.hidden); if (!open) document.body.style.overflow = ""; }
+function refreshBodyOverflow() {
+  const open = [
+    el.authDialog,
+    el.poDialog,
+    el.arrivalDialog,
+    el.abnormalDialog,
+    el.materialItemDialog,
+    el.otherDialog,
+    el.amountDialog,
+    el.materialCustomDialog,
+    el.supplierCustomDialog,
+    el.infoDialog,
+    el.imagePreviewDialog,
+    el.deleteConfirmDialog,
+  ].some((d) => d && !d.hidden);
+  if (!open) document.body.style.overflow = "";
+}
 
 function openDeleteConfirm(message) {
   return new Promise((resolve) => {
