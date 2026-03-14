@@ -139,6 +139,7 @@ let deleteConfirmResolver = null;
 const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
   supplier: "",
+  customer: "",
   status: "",
 };
 
@@ -155,6 +156,7 @@ const el = {
 
   filterMonth: document.getElementById("materialFilterMonth"),
   filterSupplier: document.getElementById("materialFilterSupplier"),
+  filterCustomer: document.getElementById("materialFilterCustomer"),
   filterStatus: document.getElementById("materialFilterStatus"),
   summaryAmountTotal: document.getElementById("materialSummaryAmountTotal"),
 
@@ -266,6 +268,7 @@ async function init() {
     if (hasActiveSummarySelection()) extendSummarySelectionHold();
   });
   initStatusFilterOptions();
+  initCustomerFilterOptions();
   initSupplierFilterOptions();
   supplierFilterDirty = false;
   setFilterDefaults();
@@ -1048,6 +1051,32 @@ function initSupplierFilterOptions() {
   filterState.supplier = normalizeSupplierSearchText(el.filterSupplier.value || "");
 }
 
+function initCustomerFilterOptions() {
+  if (!el.filterCustomer) return;
+  const current = String(filterState.customer || el.filterCustomer.value || "").trim();
+  const list = Array.from(
+    new Set(
+      rows
+        .map((row) => String(row.customer || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "zh-CN"))
+    )
+  );
+  el.filterCustomer.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "全部";
+  el.filterCustomer.appendChild(all);
+  list.forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    el.filterCustomer.appendChild(option);
+  });
+  el.filterCustomer.value = list.includes(current) ? current : "";
+  filterState.customer = String(el.filterCustomer.value || "").trim();
+}
+
 function setupOrderHintPanel() {
   if (el.orderHintList) {
     orderHintListEl = el.orderHintList;
@@ -1072,6 +1101,7 @@ function setupOrderHintPanel() {
 function bindFilterEvents() {
   if (el.filterMonth) el.filterMonth.addEventListener("change", (e) => { filterState.month = String(e.target.value || ""); render(); });
   if (el.filterSupplier) el.filterSupplier.addEventListener("change", (e) => { filterState.supplier = normalizeSupplierSearchText(e.target.value || ""); render(); });
+  if (el.filterCustomer) el.filterCustomer.addEventListener("change", (e) => { filterState.customer = String(e.target.value || "").trim(); render(); });
   if (el.filterStatus) el.filterStatus.addEventListener("change", (e) => { filterState.status = String(e.target.value || ""); render(); });
 }
 function bindAuthEvents() {
@@ -1149,7 +1179,10 @@ function isEditingDialogOpen() {
   ].some((d) => d && !d.hidden);
 }
 
-function setFilterDefaults() { if (el.filterMonth) el.filterMonth.value = filterState.month; }
+function setFilterDefaults() {
+  if (el.filterMonth) el.filterMonth.value = filterState.month;
+  if (el.filterCustomer) el.filterCustomer.value = filterState.customer;
+}
 function createEmptyRow() {
   const now = new Date().toISOString();
   return { id: crypto.randomUUID(), createdAt: now, updatedAt: now, orderNo: "", customer: "", material: "", spec: "", quantity: "", amount: "", isReady: "" };
@@ -1297,6 +1330,8 @@ function getFilteredRows() {
     const extra = getExtra(row.id);
     const monthOk = !filterState.month || getMonthFromOrderNo(row.orderNo) === filterState.month;
     if (!monthOk) return false;
+    const customerOk = !filterState.customer || String(row.customer || "").trim() === filterState.customer;
+    if (!customerOk) return false;
     const hasGroupFilter = Boolean(filterState.supplier || filterState.status);
     if (!hasGroupFilter) return true;
     return getVisibleGroupEntries(row, extra).length > 0;
@@ -1560,6 +1595,7 @@ function scheduleViewportRender() {
 
 function render() {
   cleanupExtras();
+  initCustomerFilterOptions();
   if (supplierFilterDirty) {
     initSupplierFilterOptions();
     supplierFilterDirty = false;
