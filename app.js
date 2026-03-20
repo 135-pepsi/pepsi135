@@ -1333,9 +1333,25 @@ function getTodayDateLocal() {
   return `${y}-${m}-${d}`;
 }
 
+function findBlankRowInsertIndex() {
+  const orderNoFilter = String(filters.orderNo || "").trim().toLowerCase();
+  if (!orderNoFilter) return orders.length;
+
+  let lastMatchIndex = -1;
+  for (let i = 0; i < orders.length; i += 1) {
+    const effectiveOrderNo = String(getEffectiveOrderNoForMonthFilter(orders, i) || "").toLowerCase();
+    if (effectiveOrderNo && effectiveOrderNo.includes(orderNoFilter)) {
+      lastMatchIndex = i;
+    }
+  }
+
+  return lastMatchIndex >= 0 ? lastMatchIndex + 1 : orders.length;
+}
+
 async function addBlankRow() {
   const order = createEmptyOrder();
-  orders.push(order);
+  const insertIndex = findBlankRowInsertIndex();
+  orders.splice(insertIndex, 0, order);
   await persistOrders({ changed: [order] });
   render();
   focusOrderRow(order.id);
