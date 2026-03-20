@@ -144,6 +144,7 @@ const reconnectBtn = document.getElementById("reconnectBtn");
 const authUser = document.getElementById("authUser");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const auditPageLink = document.getElementById("auditPageLink");
 const lastSyncTime = document.getElementById("lastSyncTime");
 const abnormalFilterBtn = document.getElementById("abnormalFilterBtn");
 const orderFilters = document.getElementById("orderFilters");
@@ -1185,6 +1186,7 @@ function updateAuthUi() {
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
+  if (auditPageLink) auditPageLink.style.display = authSession ? "inline-flex" : "none";
   updatePinnedOffsets();
 }
 

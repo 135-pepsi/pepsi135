@@ -133,6 +133,7 @@ const el = {
   authUser: document.getElementById("authUser"),
   loginBtn: document.getElementById("loginBtn"),
   logoutBtn: document.getElementById("logoutBtn"),
+  auditPageLink: document.getElementById("auditPageLink"),
   reconnectBtn: document.getElementById("reconnectBtn"),
 
   filterMonth: document.getElementById("materialFilterMonth"),
@@ -3102,7 +3103,7 @@ async function initAuth() {
   });
 }
 
-function updateAuthUi() { if (el.authUser) el.authUser.textContent = authSession?.user?.email || "未登录"; if (el.loginBtn) el.loginBtn.style.display = authSession ? "none" : "inline-flex"; if (el.logoutBtn) el.logoutBtn.style.display = authSession ? "inline-flex" : "none"; }
+function updateAuthUi() { if (el.authUser) el.authUser.textContent = authSession?.user?.email || "未登录"; if (el.loginBtn) el.loginBtn.style.display = authSession ? "none" : "inline-flex"; if (el.logoutBtn) el.logoutBtn.style.display = authSession ? "inline-flex" : "none"; if (el.auditPageLink) el.auditPageLink.style.display = authSession ? "inline-flex" : "none"; }
 function openAuthDialog() { if (!REMOTE_ENABLED || !db?.auth) return; if (el.authEmail) el.authEmail.value = ""; if (el.authPassword) el.authPassword.value = ""; openDialog(el.authDialog); }
 function closeAuthDialog() { closeDialog(el.authDialog); }
 

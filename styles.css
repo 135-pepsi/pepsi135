@@ -2309,6 +2309,75 @@ body:not(.material-page) #orderTable td:nth-child(11) {
   }
 }
 
+.audit-page #auditTable {
+  min-width: 1280px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.audit-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.audit-fields-cell {
+  text-align: left;
+  color: #cfe6ff;
+}
+
+.audit-detail-cell {
+  text-align: left;
+}
+
+.audit-detail summary {
+  cursor: pointer;
+  color: #8fd0ff;
+}
+
+.audit-detail-block {
+  margin-top: 8px;
+}
+
+.audit-detail-block strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #dcecff;
+}
+
+.audit-detail pre {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #28476e;
+  background: rgba(8, 19, 38, 0.92);
+  color: #dbeeff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.audit-empty-cell {
+  color: var(--muted);
+  padding: 24px 12px;
+}
+
+@media (max-width: 980px) {
+  .audit-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .audit-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 
 

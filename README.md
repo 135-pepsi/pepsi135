@@ -5,7 +5,8 @@
 2. 打开 SQL Editor，执行 `supabase_schema.sql`。
 3. 如需使用物料页面，再执行 `supabase_materials_schema.sql`。
 4. 若你之前执行过 `owner_id` 隔离策略（或出现“不同账号无法互相同步”），再执行 `supabase_migration_20260301_shared_rw_policy.sql`。
-5. 在项目设置复制：
+5. 如需使用“修改记录”审计页面，再执行 `supabase_migration_20260321_audit_logs.sql`，并向 `mes_audit_admins` 表插入允许查看审计日志的邮箱。
+6. 在项目设置复制：
 - `Project URL`
 - `anon public key`
 
@@ -108,3 +109,4 @@ window.MES_CONFIG = {
 - 支持在线预览（图片 / PDF），不支持类型可下载查看
 - 上传后名称/图号预览位显示“已上传时间”
 - 图纸接口依赖 `UPLOAD_API_BASE`，未配置时仅提示，不影响订单基础功能
+- `audit.html` 为修改记录页，仅登录且已加入 `mes_audit_admins` 的账号可查看；日志由数据库触发器自动记录订单/物料的新增、修改、删除
