@@ -29,15 +29,28 @@ const XLSX_COLUMNS = [
   { key: "note", title: "备注" },
 ];
 
-const MES_CONFIG = window.MES_CONFIG || {};
-const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
+const MES_SHARED = window.MES_SHARED || {};
+const MES_CONFIG = typeof MES_SHARED.getMesConfig === "function" ? MES_SHARED.getMesConfig() : (window.MES_CONFIG || {});
+const supabaseSetup =
+  typeof MES_SHARED.createSupabaseClient === "function"
+    ? MES_SHARED.createSupabaseClient(MES_CONFIG, window.supabase)
+    : {
+        remoteEnabled: Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase),
+        db: MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase
+          ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY)
+          : null,
+      };
+const REMOTE_ENABLED = Boolean(supabaseSetup.remoteEnabled);
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 15) * 1000);
 const ORDER_TEXT_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS || "order-attachments").trim();
 const ORDER_BUTTON_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET_TUZHI || "tuzhi").trim();
-const UPLOAD_API_BASE = normalizeUploadApiBase(MES_CONFIG.UPLOAD_API_BASE);
+const UPLOAD_API_BASE =
+  typeof MES_SHARED.normalizeUploadApiBase === "function"
+    ? MES_SHARED.normalizeUploadApiBase(MES_CONFIG.UPLOAD_API_BASE, location.href)
+    : String(MES_CONFIG.UPLOAD_API_BASE || "").trim();
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar");
-const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
+const db = supabaseSetup.db;
 const FORCE_FULL_SYNC_INTERVAL = 12;
 const VIRTUAL_ENABLED_THRESHOLD = 160;
 const VIRTUAL_ROW_ESTIMATE = 46;
@@ -52,42 +65,6 @@ window.__MES_BOOT__ = {
   orderTextBucket: ORDER_TEXT_BUCKET,
   orderButtonBucket: ORDER_BUTTON_BUCKET,
 };
-
-function isPrivateIpv4Host(hostname) {
-  const m = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!m) return false;
-  const a = Number(m[1]);
-  const b = Number(m[2]);
-  const c = Number(m[3]);
-  const d = Number(m[4]);
-  if ([a, b, c, d].some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-  if (a === 10) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  return false;
-}
-
-function normalizeUploadApiBase(raw) {
-  const text = String(raw || "").trim();
-  if (!text) return "";
-  try {
-    const u = new URL(text, location.href);
-    const protocol = String(u.protocol || "").toLowerCase();
-    const host = String(u.hostname || "").toLowerCase();
-    if (protocol === "https:") return u.href.replace(/\/+$/, "");
-    if (
-      protocol === "http:" &&
-      (host === "localhost" || host === "127.0.0.1" || host === "::1" || isPrivateIpv4Host(host))
-    ) {
-      return u.href.replace(/\/+$/, "");
-    }
-    console.warn("UPLOAD_API_BASE 已忽略：仅允许 https，或局域网/本机 http。", text);
-    return "";
-  } catch (_e) {
-    console.warn("UPLOAD_API_BASE 格式无效，已忽略。", text);
-    return "";
-  }
-}
 
 let orders = [];
 let filters = {
@@ -145,14 +122,16 @@ let currentRenderUnitFlags = new Map();
 const orderRowDomCache = new Map();
 let pendingViewportRenderRaf = 0;
 let pendingFilterRenderTimer = 0;
-let pendingLocalSaveTimer = 0;
-let localSaveDirty = false;
 let kanbanScaffoldReady = false;
 let kanbanTotalPill = null;
 const kanbanStatusPills = new Map();
 const kanbanColState = new Map();
 const kanbanCardCache = new Map();
 let lastKanbanRenderStamp = "";
+const orderLocalStore =
+  typeof MES_SHARED.createBufferedJsonStorage === "function"
+    ? MES_SHARED.createBufferedJsonStorage(STORAGE_KEY, () => orders, window.localStorage)
+    : null;
 
 const tableBody = document.getElementById("tableBody");
 const systemMode = document.getElementById("systemMode");
@@ -3486,14 +3465,25 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
 
   syncing = true;
   try {
-    if (changed.length > 0) {
-      const payload = changed.map((item) => toDbRow(item, item.updatedAt || new Date().toISOString()));
-      const { error } = await db.from("mes_orders").upsert(payload, { onConflict: "id" });
-      if (error) throw error;
-    }
-    if (deletedId) {
-      const { error } = await db.from("mes_orders").delete().eq("id", deletedId);
-      if (error) throw error;
+    if (typeof MES_SHARED.syncSupabaseChanges === "function") {
+      await MES_SHARED.syncSupabaseChanges({
+        db,
+        tableName: "mes_orders",
+        changed,
+        deletedId,
+        onConflict: "id",
+        mapChangedRow: (item) => toDbRow(item, item.updatedAt || new Date().toISOString()),
+      });
+    } else {
+      if (changed.length > 0) {
+        const payload = changed.map((item) => toDbRow(item, item.updatedAt || new Date().toISOString()));
+        const { error } = await db.from("mes_orders").upsert(payload, { onConflict: "id" });
+        if (error) throw error;
+      }
+      if (deletedId) {
+        const { error } = await db.from("mes_orders").delete().eq("id", deletedId);
+        if (error) throw error;
+      }
     }
   } catch (e) {
     if (isAuthError(e)) {
@@ -3511,33 +3501,36 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
 }
 
 function saveOrdersLocal({ immediate = false, delayMs = 120 } = {}) {
-  localSaveDirty = true;
-  if (immediate) {
-    flushOrdersLocalSave();
+  if (orderLocalStore) {
+    orderLocalStore.save({ immediate, delayMs });
     return;
   }
-  scheduleOrdersLocalSave(delayMs);
-}
-
-function scheduleOrdersLocalSave(delayMs = 120) {
-  if (pendingLocalSaveTimer) return;
-  pendingLocalSaveTimer = setTimeout(() => {
-    pendingLocalSaveTimer = 0;
-    flushOrdersLocalSave();
-  }, Math.max(0, Number(delayMs) || 0));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
 }
 
 function flushOrdersLocalSave() {
-  if (pendingLocalSaveTimer) {
-    clearTimeout(pendingLocalSaveTimer);
-    pendingLocalSaveTimer = 0;
+  if (orderLocalStore) {
+    orderLocalStore.flush();
+    return;
   }
-  if (!localSaveDirty) return;
-  localSaveDirty = false;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
 }
 
 function loadOrdersLocal() {
+  if (typeof MES_SHARED.loadJsonList === "function") {
+    return MES_SHARED.loadJsonList(STORAGE_KEY, {
+      storage: window.localStorage,
+      fallback: demoData,
+      onError: (error) => console.warn("读取本地缓存失败", error),
+      mapItem: (x, idx) => ({
+        ...createEmptyOrder(),
+        ...x,
+        createdAt: x.createdAt || new Date(Date.now() + idx).toISOString(),
+        updatedAt: x.updatedAt || x.createdAt || new Date(Date.now() + idx).toISOString(),
+      }),
+    });
+  }
+
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
     try {
@@ -3562,6 +3555,9 @@ async function refreshFromRemote(showAlert = false) {
 }
 
 function computeOrdersSyncCursor(list = []) {
+  if (typeof MES_SHARED.computeLatestCursor === "function") {
+    return MES_SHARED.computeLatestCursor(list, (row) => String(row?.updatedAt || row?.createdAt || ""));
+  }
   return list.reduce((max, row) => {
     const value = String(row?.updatedAt || row?.createdAt || "");
     return value > max ? value : max;
@@ -3582,12 +3578,26 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
   if (!remoteOnline) return;
   try {
     const shouldFullSync = !preferIncremental || !ordersSyncCursor || orderIncrementalSyncCount >= FORCE_FULL_SYNC_INTERVAL;
-    let query = db.from("mes_orders").select("*").order("updated_at", { ascending: true });
-    if (!shouldFullSync && ordersSyncCursor) query = query.gt("updated_at", ordersSyncCursor);
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const remoteList = (data || []).map(fromDbRow);
+    const remoteList =
+      typeof MES_SHARED.fetchSupabaseRows === "function"
+        ? await MES_SHARED.fetchSupabaseRows({
+            db,
+            tableName: "mes_orders",
+            select: "*",
+            orderBy: "updated_at",
+            ascending: true,
+            useCursor: !shouldFullSync,
+            cursor: ordersSyncCursor,
+            cursorColumn: "updated_at",
+            mapRow: fromDbRow,
+          })
+        : await (async () => {
+            let query = db.from("mes_orders").select("*").order("updated_at", { ascending: true });
+            if (!shouldFullSync && ordersSyncCursor) query = query.gt("updated_at", ordersSyncCursor);
+            const { data, error } = await query;
+            if (error) throw error;
+            return (data || []).map(fromDbRow);
+          })();
     let hasChanges = false;
 
     if (shouldFullSync) {

@@ -5,57 +5,34 @@ const ORDER_STORAGE_KEY = "mini_mes_orders_v1";
 const SUPPLIER_CUSTOM_KEY = "mini_mes_supplier_options_v1";
 const MATERIAL_CUSTOM_KEY = "mini_mes_material_options_v1";
 
-const MES_CONFIG = window.MES_CONFIG || {};
-const REMOTE_ENABLED = Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase);
+const MES_SHARED = window.MES_SHARED || {};
+const MES_CONFIG = typeof MES_SHARED.getMesConfig === "function" ? MES_SHARED.getMesConfig() : (window.MES_CONFIG || {});
+const supabaseSetup =
+  typeof MES_SHARED.createSupabaseClient === "function"
+    ? MES_SHARED.createSupabaseClient(MES_CONFIG, window.supabase)
+    : {
+        remoteEnabled: Boolean(MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase),
+        db: MES_CONFIG.SUPABASE_URL && MES_CONFIG.SUPABASE_ANON_KEY && window.supabase
+          ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY)
+          : null,
+      };
+const REMOTE_ENABLED = Boolean(supabaseSetup.remoteEnabled);
 const IS_LOCAL_DEBUG = location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const AUTO_REFRESH_MS = Math.max(5000, Number(MES_CONFIG.AUTO_REFRESH_SECONDS || 5) * 1000);
 const SUMMARY_SELECTION_HOLD_MS = Math.max(5000, Number(MES_CONFIG.SUMMARY_SELECTION_HOLD_SECONDS || 15) * 1000);
 const STORAGE_BUCKET = String(MES_CONFIG.SUPABASE_STORAGE_BUCKET || "material-screenshots").trim();
 const STORAGE_SIGNED_EXPIRES = Math.max(60, Number(MES_CONFIG.SUPABASE_STORAGE_SIGNED_EXPIRES || 3600));
-const UPLOAD_API_BASE = normalizeUploadApiBase(MES_CONFIG.UPLOAD_API_BASE);
+const UPLOAD_API_BASE =
+  typeof MES_SHARED.normalizeUploadApiBase === "function"
+    ? MES_SHARED.normalizeUploadApiBase(MES_CONFIG.UPLOAD_API_BASE, location.href)
+    : String(MES_CONFIG.UPLOAD_API_BASE || "").trim();
 const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
-const db = REMOTE_ENABLED ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY) : null;
+const db = supabaseSetup.db;
 const FORCE_FULL_SYNC_INTERVAL = 12;
 const DEBUG_PERF = Boolean(MES_CONFIG.DEBUG_PERF);
 const VIRTUAL_ENABLED_THRESHOLD = 120;
 const VIRTUAL_ROW_ESTIMATE = 88;
 const VIRTUAL_OVERSCAN_ROWS = 10;
-
-function isPrivateIpv4Host(hostname) {
-  const m = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!m) return false;
-  const a = Number(m[1]);
-  const b = Number(m[2]);
-  const c = Number(m[3]);
-  const d = Number(m[4]);
-  if ([a, b, c, d].some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-  if (a === 10) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  return false;
-}
-
-function normalizeUploadApiBase(raw) {
-  const text = String(raw || "").trim();
-  if (!text) return "";
-  try {
-    const u = new URL(text, location.href);
-    const protocol = String(u.protocol || "").toLowerCase();
-    const host = String(u.hostname || "").toLowerCase();
-    if (protocol === "https:") return u.href.replace(/\/+$/, "");
-    if (
-      protocol === "http:" &&
-      (host === "localhost" || host === "127.0.0.1" || host === "::1" || isPrivateIpv4Host(host))
-    ) {
-      return u.href.replace(/\/+$/, "");
-    }
-    console.warn("UPLOAD_API_BASE 已忽略：仅允许 https，或局域网/本机 http。", text);
-    return "";
-  } catch (_e) {
-    console.warn("UPLOAD_API_BASE 格式无效，已忽略。", text);
-    return "";
-  }
-}
 
 function toSafeExternalHttpUrl(raw) {
   const text = String(raw || "").trim();
@@ -135,6 +112,10 @@ let currentRenderExtraMap = new Map();
 let pendingViewportRenderRaf = 0;
 let tableDelegateBound = false;
 let deleteConfirmResolver = null;
+const materialLocalStore =
+  typeof MES_SHARED.createBufferedJsonStorage === "function"
+    ? MES_SHARED.createBufferedJsonStorage(STORAGE_KEY, () => rows, window.localStorage)
+    : null;
 
 const filterState = {
   month: String(new Date().getMonth() + 1).padStart(2, "0"),
@@ -3173,20 +3154,34 @@ async function persist({ changed = [], deletedId = "", notifyAuth = true } = {})
   if (!canWriteRemote(notifyAuth)) return;
   syncing = true;
   try {
-    if (changed.length > 0) {
-      const payload = changed.map((r) => toDbRow(r, r.updatedAt || new Date().toISOString()));
-      const { error } = await db.from("mes_materials").upsert(payload, { onConflict: "id" });
-      if (error) throw error;
-    }
-    if (deletedId) {
-      const { error } = await db.from("mes_materials").delete().eq("id", deletedId);
-      if (error) throw error;
+    if (typeof MES_SHARED.syncSupabaseChanges === "function") {
+      await MES_SHARED.syncSupabaseChanges({
+        db,
+        tableName: "mes_materials",
+        changed,
+        deletedId,
+        onConflict: "id",
+        mapChangedRow: (r) => toDbRow(r, r.updatedAt || new Date().toISOString()),
+      });
+    } else {
+      if (changed.length > 0) {
+        const payload = changed.map((r) => toDbRow(r, r.updatedAt || new Date().toISOString()));
+        const { error } = await db.from("mes_materials").upsert(payload, { onConflict: "id" });
+        if (error) throw error;
+      }
+      if (deletedId) {
+        const { error } = await db.from("mes_materials").delete().eq("id", deletedId);
+        if (error) throw error;
+      }
     }
   } catch (e) {
     handleRemoteError("物料云端同步失败", e);
   } finally { syncing = false; }
 }
 function computeMaterialSyncCursor(list = []) {
+  if (typeof MES_SHARED.computeLatestCursor === "function") {
+    return MES_SHARED.computeLatestCursor(list, (row) => String(row?.updatedAt || row?.createdAt || ""));
+  }
   return list.reduce((max, row) => {
     const value = String(row?.updatedAt || row?.createdAt || "");
     return value > max ? value : max;
@@ -3216,11 +3211,26 @@ async function refreshFromRemote(showAlert = false, preferIncremental = false) {
   try {
     await refreshOrderCustomerMap(false);
     const shouldFullSync = !preferIncremental || !materialSyncCursor || materialIncrementalSyncCount >= FORCE_FULL_SYNC_INTERVAL;
-    let query = db.from("mes_materials").select("*").order("updated_at", { ascending: true });
-    if (!shouldFullSync && materialSyncCursor) query = query.gt("updated_at", materialSyncCursor);
-    const { data, error } = await query;
-    if (error) throw error;
-    const remoteList = (data || []).map(fromDbRow);
+    const remoteList =
+      typeof MES_SHARED.fetchSupabaseRows === "function"
+        ? await MES_SHARED.fetchSupabaseRows({
+            db,
+            tableName: "mes_materials",
+            select: "*",
+            orderBy: "updated_at",
+            ascending: true,
+            useCursor: !shouldFullSync,
+            cursor: materialSyncCursor,
+            cursorColumn: "updated_at",
+            mapRow: fromDbRow,
+          })
+        : await (async () => {
+            let query = db.from("mes_materials").select("*").order("updated_at", { ascending: true });
+            if (!shouldFullSync && materialSyncCursor) query = query.gt("updated_at", materialSyncCursor);
+            const { data, error } = await query;
+            if (error) throw error;
+            return (data || []).map(fromDbRow);
+          })();
     if (shouldFullSync) {
       rows = remoteList
         .map((r) => ({ ...r, customer: resolveCustomer(r.orderNo, r.customer) }))
@@ -3392,8 +3402,26 @@ function fromDbRow(row) {
 }
 function toFiniteOrNull(v) { if (v == null || v === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
 
-function saveLocalRows() { localStorage.setItem(STORAGE_KEY, JSON.stringify(rows)); }
+function saveLocalRows(options = {}) {
+  if (materialLocalStore) {
+    materialLocalStore.save(options);
+    return;
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+}
 function loadLocalRows() {
+  if (typeof MES_SHARED.loadJsonList === "function") {
+    return MES_SHARED.loadJsonList(STORAGE_KEY, {
+      storage: window.localStorage,
+      fallback: () => [],
+      mapItem: (r, i) => {
+        const fallbackTime = new Date(Date.now() + i).toISOString();
+        const createdAt = r.createdAt || fallbackTime;
+        const updatedAt = r.updatedAt || r.createdAt || fallbackTime;
+        return { ...createEmptyRow(), ...r, createdAt, updatedAt };
+      },
+    });
+  }
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
   try {
