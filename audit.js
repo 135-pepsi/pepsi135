@@ -12,9 +12,35 @@ const supabaseSetup =
 const db = supabaseSetup.db;
 const REMOTE_ENABLED = Boolean(supabaseSetup.remoteEnabled);
 
+const FIELD_LABELS = {
+  order_no: "订单号",
+  drawing_no: "图号",
+  customer: "客户",
+  item_name: "名称",
+  qty: "数量",
+  program_no: "程序单",
+  planned_hours: "预计工时",
+  machine: "机台",
+  lathe: "车床",
+  surface: "表面处理",
+  status: "状态",
+  start_time: "下单时间",
+  due_date: "交期",
+  is_delayed: "是否延期",
+  note: "备注",
+  material: "物料",
+  spec: "规格",
+  quantity: "采购数量",
+  amount: "金额",
+  is_ready: "是否齐备",
+};
+
+const HIDDEN_FIELDS = new Set(["id", "owner_id", "created_at", "updated_at"]);
+const EMPTY_TEXT = "空";
+
 let authSession = null;
-let allLogs = [];
 let canViewAuditPage = false;
+let allLogs = [];
 
 const authUser = document.getElementById("authUser");
 const systemMode = document.getElementById("systemMode");
@@ -59,6 +85,15 @@ async function refreshAuditPageAccess() {
   }
 }
 
+function escapeHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function formatDateTime(value) {
   if (!value) return "--";
   const date = new Date(value);
@@ -85,13 +120,143 @@ function formatActionType(value) {
   return String(value || "--");
 }
 
-function safePrettyJson(value) {
-  if (value == null) return "";
+function normalizeObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function isMeaningfulValue(value) {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+function areValuesEqual(a, b) {
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(a) === JSON.stringify(b);
   } catch (_error) {
-    return String(value);
+    return String(a) === String(b);
   }
+}
+
+function formatFieldLabel(key) {
+  return FIELD_LABELS[key] || key;
+}
+
+function formatValue(value) {
+  if (value == null) return EMPTY_TEXT;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || EMPTY_TEXT;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : EMPTY_TEXT;
+  }
+  if (typeof value === "boolean") {
+    return value ? "是" : "否";
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return EMPTY_TEXT;
+    return value.map((item) => formatValue(item)).join("、");
+  }
+  if (typeof value === "object") {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return EMPTY_TEXT;
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function getRecordLabel(item) {
+  const beforeData = normalizeObject(item.before_data);
+  const afterData = normalizeObject(item.after_data);
+  return (
+    String(item.record_label || "").trim() ||
+    String(afterData.order_no || beforeData.order_no || "").trim() ||
+    String(afterData.customer || beforeData.customer || "").trim() ||
+    String(item.record_id || "").trim() ||
+    "--"
+  );
+}
+
+function getChangedKeys(item) {
+  const beforeData = normalizeObject(item.before_data);
+  const afterData = normalizeObject(item.after_data);
+  const keys = new Set();
+
+  if (Array.isArray(item.changed_fields)) {
+    item.changed_fields.forEach((key) => {
+      const name = String(key || "").trim();
+      if (name) keys.add(name);
+    });
+  }
+
+  Object.keys(beforeData).forEach((key) => keys.add(key));
+  Object.keys(afterData).forEach((key) => keys.add(key));
+
+  return Array.from(keys).filter((key) => {
+    if (!key || HIDDEN_FIELDS.has(key)) return false;
+    return !areValuesEqual(beforeData[key], afterData[key]);
+  });
+}
+
+function buildChangeItems(item) {
+  const actionType = String(item.action_type || "").trim();
+  const beforeData = normalizeObject(item.before_data);
+  const afterData = normalizeObject(item.after_data);
+  const changedKeys = getChangedKeys(item);
+
+  if (actionType === "insert") {
+    return changedKeys
+      .filter((key) => isMeaningfulValue(afterData[key]))
+      .map((key) => ({
+        label: formatFieldLabel(key),
+        before: EMPTY_TEXT,
+        after: formatValue(afterData[key]),
+      }));
+  }
+
+  if (actionType === "delete") {
+    return changedKeys
+      .filter((key) => isMeaningfulValue(beforeData[key]))
+      .map((key) => ({
+        label: formatFieldLabel(key),
+        before: formatValue(beforeData[key]),
+        after: EMPTY_TEXT,
+      }));
+  }
+
+  return changedKeys.map((key) => ({
+    label: formatFieldLabel(key),
+    before: formatValue(beforeData[key]),
+    after: formatValue(afterData[key]),
+  }));
+}
+
+function buildChangeSummary(items) {
+  if (items.length === 0) return "无可读变更";
+  const preview = items.slice(0, 3).map((item) => `${item.label}：${item.before} -> ${item.after}`);
+  const remain = items.length - preview.length;
+  return remain > 0 ? `${preview.join("；")}；其余 ${remain} 项` : preview.join("；");
+}
+
+function renderChangeDetails(items) {
+  if (items.length === 0) {
+    return '<div class="audit-change-empty">没有可展示的业务字段变化</div>';
+  }
+  return items
+    .map(
+      (item) => `
+        <div class="audit-change-item">
+          <strong>${escapeHtml(item.label)}</strong>
+          <span>${escapeHtml(item.before)}</span>
+          <em>-></em>
+          <span>${escapeHtml(item.after)}</span>
+        </div>
+      `
+    )
+    .join("");
 }
 
 function renderLogs() {
@@ -120,11 +285,9 @@ function renderLogs() {
   }
 
   const rows = filtered.map((item) => {
-    const changedFields = Array.isArray(item.changed_fields) ? item.changed_fields : [];
-    const changedText = changedFields.length > 0 ? changedFields.join("、") : "--";
-    const label = item.record_label || item.record_id || "--";
-    const beforeText = safePrettyJson(item.before_data);
-    const afterText = safePrettyJson(item.after_data);
+    const changeItems = buildChangeItems(item);
+    const label = getRecordLabel(item);
+    const summary = buildChangeSummary(changeItems);
     return `
       <tr>
         <td>${escapeHtml(formatDateTime(item.created_at))}</td>
@@ -132,33 +295,20 @@ function renderLogs() {
         <td>${escapeHtml(formatPageType(item.page_type))}</td>
         <td>${escapeHtml(formatActionType(item.action_type))}</td>
         <td>${escapeHtml(label)}</td>
-        <td class="audit-fields-cell">${escapeHtml(changedText)}</td>
+        <td class="audit-fields-cell">${escapeHtml(summary)}</td>
         <td class="audit-detail-cell">
           <details class="audit-detail">
-            <summary>查看</summary>
-            <div class="audit-detail-block">
-              <strong>变更前</strong>
-              <pre>${escapeHtml(beforeText || "无")}</pre>
-            </div>
-            <div class="audit-detail-block">
-              <strong>变更后</strong>
-              <pre>${escapeHtml(afterText || "无")}</pre>
+            <summary>查看明细</summary>
+            <div class="audit-change-list">
+              ${renderChangeDetails(changeItems)}
             </div>
           </details>
         </td>
       </tr>
     `;
   });
-  auditTableBody.innerHTML = rows.join("");
-}
 
-function escapeHtml(text) {
-  return String(text || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  auditTableBody.innerHTML = rows.join("");
 }
 
 async function loadAuditLogs(showStatus = true) {
@@ -167,12 +317,14 @@ async function loadAuditLogs(showStatus = true) {
     if (auditStatus) auditStatus.textContent = "当前未配置 Supabase，无法查看修改记录。";
     return;
   }
+
   if (!authSession) {
     setModeText("请先登录");
     if (auditStatus) auditStatus.textContent = "请先在订单页或物料页登录后再访问本页。";
     if (auditTableBody) auditTableBody.innerHTML = "";
     return;
   }
+
   if (!canViewAuditPage) {
     setModeText("无权限");
     if (auditStatus) auditStatus.textContent = "当前账号不是审计管理员，正在返回订单页。";
@@ -184,6 +336,7 @@ async function loadAuditLogs(showStatus = true) {
   }
 
   if (showStatus && auditStatus) auditStatus.textContent = "正在加载审计日志...";
+
   try {
     const { data, error } = await db
       .from("mes_audit_logs")
@@ -218,8 +371,10 @@ async function initAuth() {
   } catch (_error) {
     authSession = null;
   }
+
   await refreshAuditPageAccess();
   updateAuthUi();
+
   db.auth.onAuthStateChange(async (_event, session) => {
     authSession = session || null;
     await refreshAuditPageAccess();
@@ -229,11 +384,12 @@ async function initAuth() {
 }
 
 function bindEvents() {
-  [filterUserEmail, filterPageType, filterActionType, filterDateFrom, filterDateTo].forEach((el) => {
-    if (!el) return;
-    const eventName = el.tagName === "INPUT" ? "input" : "change";
-    el.addEventListener(eventName, renderLogs);
+  [filterUserEmail, filterPageType, filterActionType, filterDateFrom, filterDateTo].forEach((element) => {
+    if (!element) return;
+    const eventName = element.tagName === "INPUT" ? "input" : "change";
+    element.addEventListener(eventName, renderLogs);
   });
+
   if (refreshBtn) {
     refreshBtn.addEventListener("click", () => {
       void loadAuditLogs(true);
