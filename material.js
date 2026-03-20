@@ -78,6 +78,7 @@ let extras = loadExtras();
 let orderCustomerMap = new Map();
 let orderSummaryMap = new Map();
 let authSession = null;
+let canViewAuditPage = false;
 let remoteOnline = REMOTE_ENABLED;
 let syncing = false;
 let reconnectTimer = 0;
@@ -3085,9 +3086,11 @@ function updateBackTopBtn() { if (!el.backTopBtn) return; const pageY = window.s
 async function initAuth() {
   if (!REMOTE_ENABLED || !db?.auth) return;
   try { const { data, error } = await db.auth.getSession(); if (error) throw error; authSession = data?.session || null; } catch { authSession = null; }
+  await refreshAuditPageAccess();
   updateAuthUi();
   db.auth.onAuthStateChange(async (_e, session) => {
     authSession = session || null;
+    await refreshAuditPageAccess();
     updateAuthUi();
     if (shouldUseLocalOnlyMode()) {
       rows = loadLocalRows();
@@ -3103,7 +3106,22 @@ async function initAuth() {
   });
 }
 
-function updateAuthUi() { if (el.authUser) el.authUser.textContent = authSession?.user?.email || "未登录"; if (el.loginBtn) el.loginBtn.style.display = authSession ? "none" : "inline-flex"; if (el.logoutBtn) el.logoutBtn.style.display = authSession ? "inline-flex" : "none"; if (el.auditPageLink) el.auditPageLink.style.display = authSession ? "inline-flex" : "none"; }
+async function refreshAuditPageAccess() {
+  canViewAuditPage = false;
+  if (!authSession || !db) return;
+  const email = String(authSession?.user?.email || "").trim().toLowerCase();
+  if (!email) return;
+  try {
+    canViewAuditPage =
+      typeof MES_SHARED.checkAuditAdminAccess === "function"
+        ? await MES_SHARED.checkAuditAdminAccess(db, email)
+        : false;
+  } catch {
+    canViewAuditPage = false;
+  }
+}
+
+function updateAuthUi() { if (el.authUser) el.authUser.textContent = authSession?.user?.email || "未登录"; if (el.loginBtn) el.loginBtn.style.display = authSession ? "none" : "inline-flex"; if (el.logoutBtn) el.logoutBtn.style.display = authSession ? "inline-flex" : "none"; if (el.auditPageLink) el.auditPageLink.style.display = canViewAuditPage ? "inline-flex" : "none"; }
 function openAuthDialog() { if (!REMOTE_ENABLED || !db?.auth) return; if (el.authEmail) el.authEmail.value = ""; if (el.authPassword) el.authPassword.value = ""; openDialog(el.authDialog); }
 function closeAuthDialog() { closeDialog(el.authDialog); }
 

@@ -135,6 +135,18 @@
     return (data || []).map((row) => mapRow(row));
   }
 
+  async function checkAuditAdminAccess(db, email) {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!db || !normalizedEmail) return false;
+    const { data, error } = await db
+      .from("mes_audit_admins")
+      .select("email")
+      .eq("email", normalizedEmail)
+      .limit(1);
+    if (error) throw error;
+    return Array.isArray(data) && data.length > 0;
+  }
+
   async function syncSupabaseChanges(options) {
     const settings = options && typeof options === "object" ? options : {};
     const db = settings.db;
@@ -168,6 +180,7 @@
     loadJsonList,
     computeLatestCursor,
     fetchSupabaseRows,
+    checkAuditAdminAccess,
     syncSupabaseChanges,
   });
 })(window);

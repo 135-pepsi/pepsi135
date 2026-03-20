@@ -81,6 +81,7 @@ let remoteErrorNotified = false;
 let reconnectTimer = null;
 let reconnectDelayMs = 5000;
 let authSession = null;
+let canViewAuditPage = false;
 let authWriteHintNotified = false;
 let abnormalOnly = false;
 let lastSyncAt = "";
@@ -920,18 +921,39 @@ async function initAuth() {
     }
     authSession = null;
   }
+  await refreshAuditPageAccess();
   updateAuthUi();
   db.auth.onAuthStateChange((_event, session) => {
     authSession = session || null;
     authWriteHintNotified = false;
-    updateAuthUi();
-    if (remoteOnline) {
-      setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
-    }
-    if (authSession && remoteOnline) {
-      void refreshFromRemoteIncremental(false, false);
-    }
+    void handleAuthStateChanged();
   });
+}
+
+async function handleAuthStateChanged() {
+  await refreshAuditPageAccess();
+  updateAuthUi();
+  if (remoteOnline) {
+    setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
+  }
+  if (authSession && remoteOnline) {
+    await refreshFromRemoteIncremental(false, false);
+  }
+}
+
+async function refreshAuditPageAccess() {
+  canViewAuditPage = false;
+  if (!authSession || !db) return;
+  const email = String(authSession?.user?.email || "").trim().toLowerCase();
+  if (!email) return;
+  try {
+    canViewAuditPage =
+      typeof MES_SHARED.checkAuditAdminAccess === "function"
+        ? await MES_SHARED.checkAuditAdminAccess(db, email)
+        : false;
+  } catch (_error) {
+    canViewAuditPage = false;
+  }
 }
 
 async function beginEmailLogin() {
@@ -1186,7 +1208,7 @@ function updateAuthUi() {
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
-  if (auditPageLink) auditPageLink.style.display = authSession ? "inline-flex" : "none";
+  if (auditPageLink) auditPageLink.style.display = canViewAuditPage ? "inline-flex" : "none";
   updatePinnedOffsets();
 }
 

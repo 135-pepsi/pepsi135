@@ -14,6 +14,7 @@ const REMOTE_ENABLED = Boolean(supabaseSetup.remoteEnabled);
 
 let authSession = null;
 let allLogs = [];
+let canViewAuditPage = false;
 
 const authUser = document.getElementById("authUser");
 const systemMode = document.getElementById("systemMode");
@@ -41,6 +42,21 @@ function setLastSyncTime() {
 
 function updateAuthUi() {
   if (authUser) authUser.textContent = authSession?.user?.email || "未登录";
+}
+
+async function refreshAuditPageAccess() {
+  canViewAuditPage = false;
+  if (!authSession || !db) return;
+  const email = String(authSession?.user?.email || "").trim().toLowerCase();
+  if (!email) return;
+  try {
+    canViewAuditPage =
+      typeof MES_SHARED.checkAuditAdminAccess === "function"
+        ? await MES_SHARED.checkAuditAdminAccess(db, email)
+        : false;
+  } catch (_error) {
+    canViewAuditPage = false;
+  }
 }
 
 function formatDateTime(value) {
@@ -157,6 +173,15 @@ async function loadAuditLogs(showStatus = true) {
     if (auditTableBody) auditTableBody.innerHTML = "";
     return;
   }
+  if (!canViewAuditPage) {
+    setModeText("无权限");
+    if (auditStatus) auditStatus.textContent = "当前账号不是审计管理员，正在返回订单页。";
+    if (auditTableBody) auditTableBody.innerHTML = "";
+    setTimeout(() => {
+      window.location.href = "index.html";
+    }, 600);
+    return;
+  }
 
   if (showStatus && auditStatus) auditStatus.textContent = "正在加载审计日志...";
   try {
@@ -193,9 +218,11 @@ async function initAuth() {
   } catch (_error) {
     authSession = null;
   }
+  await refreshAuditPageAccess();
   updateAuthUi();
   db.auth.onAuthStateChange(async (_event, session) => {
     authSession = session || null;
+    await refreshAuditPageAccess();
     updateAuthUi();
     await loadAuditLogs(true);
   });
