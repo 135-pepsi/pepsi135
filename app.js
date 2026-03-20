@@ -1208,7 +1208,15 @@ function updateAuthUi() {
   }
   if (loginBtn) loginBtn.style.display = authSession ? "none" : "inline-flex";
   if (logoutBtn) logoutBtn.style.display = authSession ? "inline-flex" : "none";
-  if (auditPageLink) auditPageLink.style.display = canViewAuditPage ? "inline-flex" : "none";
+  if (auditPageLink) {
+    if (canViewAuditPage) {
+      auditPageLink.hidden = false;
+      auditPageLink.style.display = "inline-flex";
+    } else {
+      auditPageLink.hidden = true;
+      auditPageLink.style.display = "none";
+    }
+  }
   updatePinnedOffsets();
 }
 

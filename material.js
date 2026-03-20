@@ -3121,7 +3121,7 @@ async function refreshAuditPageAccess() {
   }
 }
 
-function updateAuthUi() { if (el.authUser) el.authUser.textContent = authSession?.user?.email || "未登录"; if (el.loginBtn) el.loginBtn.style.display = authSession ? "none" : "inline-flex"; if (el.logoutBtn) el.logoutBtn.style.display = authSession ? "inline-flex" : "none"; if (el.auditPageLink) el.auditPageLink.style.display = canViewAuditPage ? "inline-flex" : "none"; }
+function updateAuthUi() { if (el.authUser) el.authUser.textContent = authSession?.user?.email || "未登录"; if (el.loginBtn) el.loginBtn.style.display = authSession ? "none" : "inline-flex"; if (el.logoutBtn) el.logoutBtn.style.display = authSession ? "inline-flex" : "none"; if (el.auditPageLink) { if (canViewAuditPage) { el.auditPageLink.hidden = false; el.auditPageLink.style.display = "inline-flex"; } else { el.auditPageLink.hidden = true; el.auditPageLink.style.display = "none"; } } }
 function openAuthDialog() { if (!REMOTE_ENABLED || !db?.auth) return; if (el.authEmail) el.authEmail.value = ""; if (el.authPassword) el.authPassword.value = ""; openDialog(el.authDialog); }
 function closeAuthDialog() { closeDialog(el.authDialog); }
 
