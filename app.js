@@ -52,10 +52,11 @@ const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const UPLOAD_ACCEPT = String(MES_CONFIG.UPLOAD_ACCEPT || ".pdf,.jpg,.jpeg,.png,.dwg,.step,.zip,.rar");
 const db = supabaseSetup.db;
 const FORCE_FULL_SYNC_INTERVAL = 12;
-const VIRTUAL_ENABLED_THRESHOLD = 160;
+const VIRTUAL_ENABLED_THRESHOLD = 100;
 const VIRTUAL_ROW_ESTIMATE = 46;
 const VIRTUAL_OVERSCAN_ROWS = 18;
 const DEBUG_PERF = Boolean(MES_CONFIG.DEBUG_PERF);
+const BACKGROUND_REFRESH_MS = Math.max(AUTO_REFRESH_MS * 3, 30000);
 window.__MES_BOOT__ = {
   href: location.href,
   hasSupabase: Boolean(window.supabase),
@@ -80,6 +81,7 @@ let remoteOnline = REMOTE_ENABLED;
 let remoteErrorNotified = false;
 let reconnectTimer = null;
 let reconnectDelayMs = 5000;
+let syncPollTimer = 0;
 let authSession = null;
 let canViewAuditPage = false;
 let authWriteHintNotified = false;
@@ -129,6 +131,7 @@ const kanbanStatusPills = new Map();
 const kanbanColState = new Map();
 const kanbanCardCache = new Map();
 let lastKanbanRenderStamp = "";
+let lastKpiRenderStamp = "";
 const orderLocalStore =
   typeof MES_SHARED.createBufferedJsonStorage === "function"
     ? MES_SHARED.createBufferedJsonStorage(STORAGE_KEY, () => orders, window.localStorage)
@@ -262,9 +265,7 @@ async function init() {
     await initAuth();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemoteIncremental(false, false);
-    setInterval(async () => {
-      if (!syncing && remoteOnline) await refreshFromRemoteIncremental(false, true);
-    }, AUTO_REFRESH_MS);
+    startAutoRefreshLoop();
   } else {
     setModeText("本地模式");
     orders = loadOrdersLocal();
@@ -740,7 +741,7 @@ function bindEvents() {
     abnormalFilterBtn.addEventListener("click", () => {
       abnormalOnly = !abnormalOnly;
       abnormalFilterBtn.textContent = abnormalOnly ? "显示全部" : "只看异常";
-      render();
+      scheduleFilterRender();
     });
   }
   const searchInput = document.getElementById("searchInput");
@@ -755,7 +756,7 @@ function bindEvents() {
     filterMonth.value = filters.month;
     filterMonth.addEventListener("change", (e) => {
       filters.month = e.target.value;
-      render();
+      scheduleFilterRender();
     });
   }
   const filterOrderNo = document.getElementById("filterOrderNo");
@@ -772,7 +773,7 @@ function bindEvents() {
       if (!btn) return;
       filters.statusColor = btn.dataset.color || "";
       syncStatusColorFilterButtons();
-      render();
+      scheduleFilterRender();
     });
     syncStatusColorFilterButtons();
   }
@@ -780,14 +781,14 @@ function bindEvents() {
   if (filterMachine) {
     filterMachine.addEventListener("change", (e) => {
       filters.machine = e.target.value;
-      render();
+      scheduleFilterRender();
     });
   }
   const filterStatus = document.getElementById("filterStatus");
   if (filterStatus) {
     filterStatus.addEventListener("change", (e) => {
       filters.status = e.target.value;
-      render();
+      scheduleFilterRender();
     });
   }
   if (filterToggleBtn && orderFilters) {
@@ -928,6 +929,44 @@ async function initAuth() {
     authWriteHintNotified = false;
     void handleAuthStateChanged();
   });
+}
+
+function getRefreshDelayMs() {
+  return document.hidden ? BACKGROUND_REFRESH_MS : AUTO_REFRESH_MS;
+}
+
+function stopAutoRefreshLoop() {
+  if (!syncPollTimer) return;
+  clearTimeout(syncPollTimer);
+  syncPollTimer = 0;
+}
+
+function scheduleAutoRefreshLoop(delayMs = getRefreshDelayMs()) {
+  stopAutoRefreshLoop();
+  syncPollTimer = window.setTimeout(async () => {
+    syncPollTimer = 0;
+    try {
+      if (!syncing && remoteOnline) await refreshFromRemoteIncremental(false, true);
+    } finally {
+      scheduleAutoRefreshLoop();
+    }
+  }, Math.max(1000, Number(delayMs) || AUTO_REFRESH_MS));
+}
+
+function startAutoRefreshLoop() {
+  if (!REMOTE_ENABLED) return;
+  document.addEventListener("visibilitychange", handleVisibilityRefreshChange);
+  scheduleAutoRefreshLoop();
+}
+
+function handleVisibilityRefreshChange() {
+  if (!REMOTE_ENABLED) return;
+  if (!document.hidden && !syncing && remoteOnline) {
+    scheduleAutoRefreshLoop(AUTO_REFRESH_MS);
+    void refreshFromRemoteIncremental(false, true);
+    return;
+  }
+  scheduleAutoRefreshLoop();
 }
 
 async function handleAuthStateChanged() {
@@ -1555,7 +1594,7 @@ function scheduleViewportRender() {
   });
 }
 
-function render() {
+function refreshFilteredTableState() {
   rebuildRuleCellErrors();
   currentRenderRows = getFilteredOrders();
   currentRenderUnitFlags = buildOrderUnitFlags(currentRenderRows);
@@ -1569,12 +1608,20 @@ function render() {
     pendingViewportRenderRaf = 0;
   }
   renderTableViewportRows();
+  queueStickyColumnOffsets();
+}
+
+function renderFilteredTableOnly() {
+  refreshFilteredTableState();
+}
+
+function render() {
+  refreshFilteredTableState();
 
   rowSavedUntil.forEach((until, id) => {
     if (until <= now) rowSavedUntil.delete(id);
   });
 
-  queueStickyColumnOffsets();
   renderKanban(orders);
   renderKpis(orders);
 }
@@ -1621,25 +1668,25 @@ function buildOrderUnitFlags(rows) {
 function renderKanban(rows) {
   if (!kanbanBoard || !boardSummary) return;
   ensureKanbanScaffold();
-  const stamp = `${ordersSyncCursor || ""}|${rows.length}`;
+  const stamp = buildOrdersOverviewStamp(rows);
   if (kanbanScaffoldReady && stamp === lastKanbanRenderStamp) return;
   lastKanbanRenderStamp = stamp;
   const effectiveOrderNoMap = buildEffectiveOrderNoMap(rows);
   const effectiveCustomerMap = buildEffectiveCustomerMap(rows);
 
   const total = rows.length;
-  if (kanbanTotalPill) kanbanTotalPill.textContent = `全部订单 ${total}`;
+  setNodeTextIfChanged(kanbanTotalPill, `全部订单 ${total}`);
   const activeCardIds = new Set();
 
   KANBAN_STATUSES.forEach((status) => {
     const list = rows.filter((o) => o.status === status);
     const statusPill = kanbanStatusPills.get(status);
-    if (statusPill) statusPill.textContent = `${status} ${list.length}`;
+    setNodeTextIfChanged(statusPill, `${status} ${list.length}`);
     const col = kanbanColState.get(status);
     if (!col) return;
-    col.countEl.textContent = `${list.length} 单`;
+    setNodeTextIfChanged(col.countEl, `${list.length} 单`);
     if (list.length === 0) {
-      col.bodyEl.replaceChildren(col.emptyEl);
+      syncKanbanColumnChildren(col.bodyEl, [col.emptyEl]);
       return;
     }
     const nodes = list.map((order) => {
@@ -1648,12 +1695,35 @@ function renderKanban(rows) {
       const displayCustomer = effectiveCustomerMap.get(order.id) || "";
       return getKanbanCardNode(order, displayOrderNo, displayCustomer);
     });
-    col.bodyEl.replaceChildren(...nodes);
+    syncKanbanColumnChildren(col.bodyEl, nodes);
   });
 
   kanbanCardCache.forEach((_value, id) => {
     if (!activeCardIds.has(id)) kanbanCardCache.delete(id);
   });
+}
+
+function syncKanbanColumnChildren(container, nodes) {
+  if (!container) return;
+  const current = Array.from(container.children);
+  if (current.length === nodes.length) {
+    let same = true;
+    for (let i = 0; i < nodes.length; i += 1) {
+      if (current[i] !== nodes[i]) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return;
+  }
+  container.replaceChildren(...nodes);
+}
+
+function setNodeTextIfChanged(node, text) {
+  if (!node) return;
+  const next = String(text ?? "");
+  if (node.textContent === next) return;
+  node.textContent = next;
 }
 
 function createKanbanCard(order, displayOrderNo = "", displayCustomer = "") {
@@ -3457,15 +3527,18 @@ function bindKpiJumpEvents() {
   bindKpiCard("kpiAbnormalCount", "abnormal");
 }
 function renderKpis(data) {
+  const stamp = buildOrdersOverviewStamp(data);
+  if (stamp === lastKpiRenderStamp) return;
+  lastKpiRenderStamp = stamp;
   const totalOrders = data.length;
   const inProduction = data.filter((x) => x.status === "加工中").length;
   const dueToday = data.filter((x) => isDueToday(x.dueDate)).length;
   const abnormalCount = data.filter((x) => isAbnormalOrder(x)).length;
 
-  document.getElementById("kpiTotalOrders").textContent = String(totalOrders);
-  document.getElementById("kpiInProduction").textContent = String(inProduction);
-  document.getElementById("kpiDueToday").textContent = String(dueToday);
-  document.getElementById("kpiAbnormalCount").textContent = String(abnormalCount);
+  setNodeTextIfChanged(document.getElementById("kpiTotalOrders"), String(totalOrders));
+  setNodeTextIfChanged(document.getElementById("kpiInProduction"), String(inProduction));
+  setNodeTextIfChanged(document.getElementById("kpiDueToday"), String(dueToday));
+  setNodeTextIfChanged(document.getElementById("kpiAbnormalCount"), String(abnormalCount));
 }
 
 function isAbnormalOrder(order) {
@@ -3530,6 +3603,25 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
   } finally {
     syncing = false;
   }
+}
+
+function buildOrdersOverviewStamp(rows = []) {
+  const parts = [String(ordersSyncCursor || ""), String(rows.length)];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i] || {};
+    parts.push(
+      [
+        row.id || "",
+        row.updatedAt || row.createdAt || "",
+        row.status || "",
+        row.dueDate || "",
+        row.isDelayed || "",
+        row.machine || "",
+        row.processStepCurrent || "",
+      ].join("|")
+    );
+  }
+  return parts.join("||");
 }
 
 function saveOrdersLocal({ immediate = false, delayMs = 120 } = {}) {
@@ -3873,8 +3965,8 @@ function scheduleFilterRender(delayMs = 80) {
   if (pendingFilterRenderTimer) clearTimeout(pendingFilterRenderTimer);
   pendingFilterRenderTimer = setTimeout(() => {
     pendingFilterRenderTimer = 0;
-    render();
-  }, delayMs);
+    renderFilteredTableOnly();
+  }, Math.max(0, Number(delayMs) || 0));
 }
 
 function invalidateOrderCaches(id) {

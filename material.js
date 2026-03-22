@@ -30,9 +30,10 @@ const UPLOAD_MAX_MB = Math.max(1, Number(MES_CONFIG.UPLOAD_MAX_MB || 50));
 const db = supabaseSetup.db;
 const FORCE_FULL_SYNC_INTERVAL = 12;
 const DEBUG_PERF = Boolean(MES_CONFIG.DEBUG_PERF);
-const VIRTUAL_ENABLED_THRESHOLD = 120;
+const VIRTUAL_ENABLED_THRESHOLD = 80;
 const VIRTUAL_ROW_ESTIMATE = 88;
 const VIRTUAL_OVERSCAN_ROWS = 10;
+const BACKGROUND_REFRESH_MS = Math.max(AUTO_REFRESH_MS * 3, 30000);
 
 function toSafeExternalHttpUrl(raw) {
   const text = String(raw || "").trim();
@@ -81,6 +82,7 @@ let authSession = null;
 let canViewAuditPage = false;
 let remoteOnline = REMOTE_ENABLED;
 let syncing = false;
+let syncPollTimer = 0;
 let reconnectTimer = 0;
 let reconnectDelayMs = 5000;
 let pageUnloading = false;
@@ -111,6 +113,9 @@ const rowDomCache = new Map();
 let currentRenderList = [];
 let currentRenderExtraMap = new Map();
 let pendingViewportRenderRaf = 0;
+let pendingFilterRenderTimer = 0;
+let lastMaterialSummaryStamp = "";
+let lastMaterialKpiStamp = "";
 let tableDelegateBound = false;
 let deleteConfirmResolver = null;
 const materialLocalStore =
@@ -270,11 +275,7 @@ async function init() {
       const testAdded = await ensureTestRowExists();
       if (testAdded) render();
     }
-    setInterval(() => {
-      if (Date.now() < summarySelectionHoldUntil || hasActiveSummarySelection()) return;
-      if (isEditingDialogOpen()) return;
-      if (!syncing && remoteOnline && !shouldUseLocalOnlyMode()) void refreshFromRemote(false, true);
-    }, AUTO_REFRESH_MS);
+    startAutoRefreshLoop();
   } else {
     await refreshOrderCustomerMap();
     await ensureTestRowExists();
@@ -282,6 +283,47 @@ async function init() {
     render();
     setLastSyncTime();
   }
+}
+
+function getRefreshDelayMs() {
+  return document.hidden ? BACKGROUND_REFRESH_MS : AUTO_REFRESH_MS;
+}
+
+function stopAutoRefreshLoop() {
+  if (!syncPollTimer) return;
+  clearTimeout(syncPollTimer);
+  syncPollTimer = 0;
+}
+
+function scheduleAutoRefreshLoop(delayMs = getRefreshDelayMs()) {
+  stopAutoRefreshLoop();
+  syncPollTimer = window.setTimeout(() => {
+    syncPollTimer = 0;
+    tryAutoRefresh();
+    scheduleAutoRefreshLoop();
+  }, Math.max(1000, Number(delayMs) || AUTO_REFRESH_MS));
+}
+
+function startAutoRefreshLoop() {
+  if (!REMOTE_ENABLED) return;
+  document.addEventListener("visibilitychange", handleVisibilityRefreshChange);
+  scheduleAutoRefreshLoop();
+}
+
+function tryAutoRefresh() {
+  if (Date.now() < summarySelectionHoldUntil || hasActiveSummarySelection()) return;
+  if (isEditingDialogOpen()) return;
+  if (!syncing && remoteOnline && !shouldUseLocalOnlyMode()) void refreshFromRemote(false, true);
+}
+
+function handleVisibilityRefreshChange() {
+  if (!REMOTE_ENABLED) return;
+  if (!document.hidden) {
+    scheduleAutoRefreshLoop(AUTO_REFRESH_MS);
+    tryAutoRefresh();
+    return;
+  }
+  scheduleAutoRefreshLoop();
 }
 
 function shouldUseLocalOnlyMode() {
@@ -1082,10 +1124,10 @@ function setupOrderHintPanel() {
 }
 
 function bindFilterEvents() {
-  if (el.filterMonth) el.filterMonth.addEventListener("change", (e) => { filterState.month = String(e.target.value || ""); render(); });
-  if (el.filterSupplier) el.filterSupplier.addEventListener("change", (e) => { filterState.supplier = normalizeSupplierSearchText(e.target.value || ""); render(); });
-  if (el.filterCustomer) el.filterCustomer.addEventListener("change", (e) => { filterState.customer = String(e.target.value || "").trim(); render(); });
-  if (el.filterStatus) el.filterStatus.addEventListener("change", (e) => { filterState.status = String(e.target.value || ""); render(); });
+  if (el.filterMonth) el.filterMonth.addEventListener("change", (e) => { filterState.month = String(e.target.value || ""); scheduleFilterRender(); });
+  if (el.filterSupplier) el.filterSupplier.addEventListener("change", (e) => { filterState.supplier = normalizeSupplierSearchText(e.target.value || ""); scheduleFilterRender(); });
+  if (el.filterCustomer) el.filterCustomer.addEventListener("change", (e) => { filterState.customer = String(e.target.value || "").trim(); scheduleFilterRender(); });
+  if (el.filterStatus) el.filterStatus.addEventListener("change", (e) => { filterState.status = String(e.target.value || ""); scheduleFilterRender(); });
 }
 function bindAuthEvents() {
   if (el.loginBtn) el.loginBtn.addEventListener("click", openAuthDialog);
@@ -1576,7 +1618,7 @@ function scheduleViewportRender() {
   });
 }
 
-function render() {
+function refreshFilteredMaterialState() {
   cleanupExtras();
   initCustomerFilterOptions();
   if (supplierFilterDirty) {
@@ -1594,7 +1636,18 @@ function render() {
   renderViewportRows();
 }
 
+function renderFilteredRowsOnly() {
+  refreshFilteredMaterialState();
+}
+
+function render() {
+  refreshFilteredMaterialState();
+}
+
 function renderMaterialSummary(list, extraMap = new Map()) {
+  const stamp = buildMaterialOverviewStamp(list, extraMap);
+  if (stamp === lastMaterialSummaryStamp) return;
+  lastMaterialSummaryStamp = stamp;
   if (!el.summaryAmountTotal) return;
   const total = list.reduce((sum, row) => {
     const extra = extraMap.get(row.id) || createDefaultExtra();
@@ -1606,6 +1659,14 @@ function renderMaterialSummary(list, extraMap = new Map()) {
     return sum + rowAmount;
   }, 0);
   el.summaryAmountTotal.textContent = formatCurrency(total);
+}
+
+function scheduleFilterRender(delayMs = 80) {
+  if (pendingFilterRenderTimer) clearTimeout(pendingFilterRenderTimer);
+  pendingFilterRenderTimer = window.setTimeout(() => {
+    pendingFilterRenderTimer = 0;
+    renderFilteredRowsOnly();
+  }, Math.max(0, Number(delayMs) || 0));
 }
 
 function summaryCell(text) {
@@ -1975,6 +2036,9 @@ async function addOtherForOrderRow(sourceRowId) {
 }
 
 function renderKpi(list, extraMap = new Map()) {
+  const stamp = buildMaterialOverviewStamp(list, extraMap);
+  if (stamp === lastMaterialKpiStamp) return;
+  lastMaterialKpiStamp = stamp;
   const getRowExtra = (row) => extraMap.get(row.id) || createDefaultExtra();
   const needOrder = list.filter((r) => getStatus(r, getRowExtra(r)) === "下单").length;
   const inTransit = list.filter((r) => getStatus(r, getRowExtra(r)) === "采购").length;
@@ -1982,12 +2046,47 @@ function renderKpi(list, extraMap = new Map()) {
   const risk3d = list.filter((r) => isRisk3d(r, getRowExtra(r))).length;
   const totalAmount = list.reduce((sum, r) => { const e = getRowExtra(r); return sum + Number(e.lastOrderQty || 0) * Number(e.lastOrderPrice || 0); }, 0);
   const impactOrders = new Set(list.filter((r) => isOverdue(r, getRowExtra(r)) || isRisk3d(r, getRowExtra(r))).map((r) => String(r.orderNo || "").trim()).filter(Boolean)).size;
-  if (el.kpiNeedOrder) el.kpiNeedOrder.textContent = String(needOrder);
-  if (el.kpiInTransit) el.kpiInTransit.textContent = String(inTransit);
-  if (el.kpiOverdue) el.kpiOverdue.textContent = String(overdue);
-  if (el.kpiRisk3d) el.kpiRisk3d.textContent = String(risk3d);
-  if (el.kpiAmount) el.kpiAmount.textContent = formatCurrency(totalAmount);
-  if (el.kpiOrderImpact) el.kpiOrderImpact.textContent = String(impactOrders);
+  setNodeTextIfChanged(el.kpiNeedOrder, String(needOrder));
+  setNodeTextIfChanged(el.kpiInTransit, String(inTransit));
+  setNodeTextIfChanged(el.kpiOverdue, String(overdue));
+  setNodeTextIfChanged(el.kpiRisk3d, String(risk3d));
+  setNodeTextIfChanged(el.kpiAmount, formatCurrency(totalAmount));
+  setNodeTextIfChanged(el.kpiOrderImpact, String(impactOrders));
+}
+
+function buildMaterialOverviewStamp(list = [], extraMap = new Map()) {
+  const parts = [String(materialSyncCursor || ""), String(list.length)];
+  for (let i = 0; i < list.length; i += 1) {
+    const row = list[i] || {};
+    const extra = extraMap.get(row.id) || createDefaultExtra();
+    parts.push(
+      [
+        row.id || "",
+        row.updatedAt || row.createdAt || "",
+        row.orderNo || "",
+        row.customer || "",
+        row.material || "",
+        row.spec || "",
+        row.quantity ?? "",
+        row.amount ?? "",
+        extra.status || "",
+        extra.inTransit || "",
+        extra.promiseDate || "",
+        extra.actualDate || "",
+        extra.lastOrderQty || "",
+        extra.lastOrderPrice || "",
+        extra.abnormalRecoverDate || "",
+      ].join("|")
+    );
+  }
+  return parts.join("||");
+}
+
+function setNodeTextIfChanged(node, text) {
+  if (!node) return;
+  const next = String(text ?? "");
+  if (node.textContent === next) return;
+  node.textContent = next;
 }
 
 function getMissingOrderHints() {
