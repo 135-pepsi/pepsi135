@@ -4,9 +4,10 @@
 1. 创建 Supabase 项目。
 2. 打开 SQL Editor，执行 `supabase_schema.sql`。
 3. 如需使用物料页面，再执行 `supabase_materials_schema.sql`。
-4. 若你之前执行过 `owner_id` 隔离策略（或出现“不同账号无法互相同步”），再执行 `supabase_migration_20260301_shared_rw_policy.sql`。
-5. 如需使用“修改记录”审计页面，再执行 `supabase_migration_20260321_audit_logs.sql`，并向 `mes_audit_admins` 表插入允许查看审计日志的邮箱。
-6. 在项目设置复制：
+4. 如你的数据库是旧版本，且之前执行过 `owner_id` 隔离策略（或出现“不同账号无法互相同步”），再执行 `supabase_migration_20260301_shared_rw_policy.sql`，把旧策略切换到当前共享模式。
+5. 如需使用图纸附件或物料截图，再执行 `supabase_storage_setup.sql`，创建默认 bucket 与 Storage 读写策略。
+6. 如需使用“修改记录”审计页面，再执行 `supabase_migration_20260321_audit_logs.sql`，并向 `mes_audit_admins` 表插入允许查看审计日志的邮箱。
+7. 在项目设置复制：
 - `Project URL`
 - `anon public key`
 
@@ -32,12 +33,16 @@ window.MES_CONFIG = {
 
 > 安全说明：当前推荐 SQL 策略为“未登录可读（只读），登录后可写（共享同一份数据）”。前端也会在未登录时阻止写入操作。
 > 配置说明：`config.example.js` / `config.prod.js` / `config.runtime.example.js` 可以提交；`config.runtime.js` 与 `config.js` 建议仅本地/部署环境维护（已在 `.gitignore` 中）。
+> 初始化说明：`supabase_schema.sql` 与 `supabase_materials_schema.sql` 现在默认就是共享模式；`supabase_migration_20260301_shared_rw_policy.sql` 仅用于把旧库从 `owner_id` 隔离策略迁移到共享模式。
+> Storage 说明：默认 bucket 名为 `material-screenshots`、`order-attachments`、`tuzhi`；如你改了前端配置中的 bucket 名，请同步调整 `supabase_storage_setup.sql`。
 
 ## 3. 本地验证
 - 直接打开 `index.html`
 - 页面标题下方应显示：`云端共享模式` 或 `云端只读（未登录）`
 - 两台电脑打开同一页面，修改订单后另一台约 15 秒内可见
-- 如显示 `云端只读（未登录）`，点击页面右上角 `邮箱登录`，按邮件中的登录链接返回页面后即可写入
+- 如显示 `云端只读（未登录）`：
+  - 若是 `http://localhost` / `http://127.0.0.1` / 线上地址，可点击页面右上角 `邮箱登录`，按邮件中的登录链接返回页面后写入
+  - 若是直接以 `file:///.../index.html` 打开，建议改用本地 HTTP 服务或直接使用密码登录；邮箱登录回跳地址不适合 `file://`
 
 ## 4. 部署到 GitHub Pages
 1. 上传文件到仓库根目录：
@@ -51,6 +56,7 @@ window.MES_CONFIG = {
 - `xlsx.full.min.js`
 - `supabase_schema.sql`
 - `supabase_materials_schema.sql`
+- `supabase_storage_setup.sql`
 
 2. 使用 GitHub Actions 注入运行时配置（推荐）
 - 进入仓库 `Settings -> Secrets and variables -> Actions -> New repository secret`
@@ -58,6 +64,8 @@ window.MES_CONFIG = {
   - `SUPABASE_URL`（例如 `https://xxxx.supabase.co`）
   - `SUPABASE_ANON_KEY`（`sb_publishable_...`）
   - `UPLOAD_API_BASE`（可空）
+  - `SUPABASE_STORAGE_BUCKET_ORDER_ATTACHMENTS`（可空，默认 `order-attachments`）
+  - `SUPABASE_STORAGE_BUCKET_TUZHI`（可空，默认 `tuzhi`）
 - 确认仓库存在 workflow：`.github/workflows/deploy-pages.yml`
 
 3. 仓库 Settings -> Pages
@@ -108,5 +116,6 @@ window.MES_CONFIG = {
 - 每行订单可单独上传图纸
 - 支持在线预览（图片 / PDF），不支持类型可下载查看
 - 上传后名称/图号预览位显示“已上传时间”
+- 启用附件/截图前，请先执行 `supabase_storage_setup.sql`；若自定义 bucket 名，请同步修改前端配置和该 SQL
 - 图纸接口依赖 `UPLOAD_API_BASE`，未配置时仅提示，不影响订单基础功能
 - `audit.html` 为修改记录页，仅登录且已加入 `mes_audit_admins` 的账号可查看；日志由数据库触发器自动记录订单/物料的新增、修改、删除

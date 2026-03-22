@@ -151,10 +151,14 @@ create trigger trg_mes_orders_audit
 after insert or update or delete on public.mes_orders
 for each row execute function public.log_mes_table_change();
 
-drop trigger if exists trg_mes_materials_audit on public.mes_materials;
-create trigger trg_mes_materials_audit
-after insert or update or delete on public.mes_materials
-for each row execute function public.log_mes_table_change();
+do $$
+begin
+  if to_regclass('public.mes_materials') is not null then
+    execute 'drop trigger if exists trg_mes_materials_audit on public.mes_materials';
+    execute 'create trigger trg_mes_materials_audit after insert or update or delete on public.mes_materials for each row execute function public.log_mes_table_change()';
+  end if;
+end
+$$;
 
 comment on table public.mes_audit_admins is 'Accounts allowed to read audit logs. Insert approved emails here.';
 comment on table public.mes_audit_logs is 'Audit trail for MES orders and materials.';

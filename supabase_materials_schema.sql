@@ -61,25 +61,30 @@ alter table public.mes_materials enable row level security;
 
 drop policy if exists "mes_materials_public_read" on public.mes_materials;
 drop policy if exists "mes_materials_auth_read" on public.mes_materials;
-create policy "mes_materials_auth_read" on public.mes_materials
-for select to authenticated
-using (owner_id = auth.uid());
-
-drop policy if exists "mes_materials_public_insert" on public.mes_materials;
 drop policy if exists "mes_materials_auth_write_insert" on public.mes_materials;
-create policy "mes_materials_auth_write_insert" on public.mes_materials
-for insert to authenticated
-with check (owner_id = auth.uid());
-
-drop policy if exists "mes_materials_public_update" on public.mes_materials;
 drop policy if exists "mes_materials_auth_write_update" on public.mes_materials;
-create policy "mes_materials_auth_write_update" on public.mes_materials
-for update to authenticated
-using (owner_id = auth.uid())
-with check (owner_id = auth.uid());
-
-drop policy if exists "mes_materials_public_delete" on public.mes_materials;
 drop policy if exists "mes_materials_auth_write_delete" on public.mes_materials;
-create policy "mes_materials_auth_write_delete" on public.mes_materials
+drop policy if exists "mes_materials_public_insert" on public.mes_materials;
+drop policy if exists "mes_materials_public_update" on public.mes_materials;
+drop policy if exists "mes_materials_public_delete" on public.mes_materials;
+drop policy if exists "mes_materials_read_all" on public.mes_materials;
+drop policy if exists "mes_materials_insert_auth" on public.mes_materials;
+drop policy if exists "mes_materials_update_auth" on public.mes_materials;
+drop policy if exists "mes_materials_delete_auth" on public.mes_materials;
+
+create policy "mes_materials_read_all" on public.mes_materials
+for select to anon, authenticated
+using (true);
+
+create policy "mes_materials_insert_auth" on public.mes_materials
+for insert to authenticated
+with check (auth.uid() is not null);
+
+create policy "mes_materials_update_auth" on public.mes_materials
+for update to authenticated
+using (auth.uid() is not null)
+with check (auth.uid() is not null);
+
+create policy "mes_materials_delete_auth" on public.mes_materials
 for delete to authenticated
-using (owner_id = auth.uid());
+using (auth.uid() is not null);

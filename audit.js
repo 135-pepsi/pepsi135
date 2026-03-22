@@ -11,6 +11,8 @@ const supabaseSetup =
       };
 const db = supabaseSetup.db;
 const REMOTE_ENABLED = Boolean(supabaseSetup.remoteEnabled);
+const AUDIT_PAGE_SIZE = 500;
+const AUDIT_MAX_ROWS = 5000;
 
 const FIELD_LABELS = {
   order_no: "订单号",
@@ -41,6 +43,7 @@ const EMPTY_TEXT = "空";
 let authSession = null;
 let canViewAuditPage = false;
 let allLogs = [];
+let auditLoadSeq = 0;
 
 const authUser = document.getElementById("authUser");
 const systemMode = document.getElementById("systemMode");
@@ -260,22 +263,7 @@ function renderChangeDetails(items) {
 }
 
 function renderLogs() {
-  const emailFilter = String(filterUserEmail?.value || "").trim().toLowerCase();
-  const pageFilter = String(filterPageType?.value || "").trim();
-  const actionFilter = String(filterActionType?.value || "").trim();
-  const fromDate = String(filterDateFrom?.value || "").trim();
-  const toDate = String(filterDateTo?.value || "").trim();
-
-  const filtered = allLogs.filter((item) => {
-    const emailOk = !emailFilter || String(item.user_email || "").toLowerCase().includes(emailFilter);
-    const pageOk = !pageFilter || item.page_type === pageFilter;
-    const actionOk = !actionFilter || item.action_type === actionFilter;
-    const createdDate = String(item.created_at || "").slice(0, 10);
-    const fromOk = !fromDate || createdDate >= fromDate;
-    const toOk = !toDate || createdDate <= toDate;
-    return emailOk && pageOk && actionOk && fromOk && toOk;
-  });
-
+  const filtered = Array.isArray(allLogs) ? allLogs : [];
   if (auditSummary) auditSummary.textContent = `共 ${filtered.length} 条`;
   if (!auditTableBody) return;
 
@@ -311,7 +299,59 @@ function renderLogs() {
   auditTableBody.innerHTML = rows.join("");
 }
 
+function getAuditFilters() {
+  return {
+    email: String(filterUserEmail?.value || "").trim().toLowerCase(),
+    pageType: String(filterPageType?.value || "").trim(),
+    actionType: String(filterActionType?.value || "").trim(),
+    dateFrom: String(filterDateFrom?.value || "").trim(),
+    dateTo: String(filterDateTo?.value || "").trim(),
+  };
+}
+
+function buildAuditStatusText(rowCount, truncated, filters) {
+  const filterLabels = [];
+  if (filters.email) filterLabels.push(`邮箱包含“${filters.email}”`);
+  if (filters.pageType) filterLabels.push(`页面=${filters.pageType}`);
+  if (filters.actionType) filterLabels.push(`动作=${filters.actionType}`);
+  if (filters.dateFrom) filterLabels.push(`开始=${filters.dateFrom}`);
+  if (filters.dateTo) filterLabels.push(`结束=${filters.dateTo}`);
+
+  const scopeText = filterLabels.length > 0 ? `当前筛选（${filterLabels.join("，")}）` : "当前条件";
+  if (rowCount <= 0) return `${scopeText}下暂无修改记录。`;
+  if (truncated) return `${scopeText}已加载前 ${rowCount} 条记录；结果较多，请继续缩小筛选范围。`;
+  return `${scopeText}已加载 ${rowCount} 条记录。`;
+}
+
+async function fetchAuditLogs(filters, requestId) {
+  const rows = [];
+  for (let from = 0; from < AUDIT_MAX_ROWS; from += AUDIT_PAGE_SIZE) {
+    let query = db
+      .from("mes_audit_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, from + AUDIT_PAGE_SIZE - 1);
+
+    if (filters.email) query = query.ilike("user_email", `%${filters.email}%`);
+    if (filters.pageType) query = query.eq("page_type", filters.pageType);
+    if (filters.actionType) query = query.eq("action_type", filters.actionType);
+    if (filters.dateFrom) query = query.gte("created_at", `${filters.dateFrom}T00:00:00`);
+    if (filters.dateTo) query = query.lt("created_at", `${filters.dateTo}T23:59:59.999`);
+
+    const { data, error } = await query;
+    if (requestId !== auditLoadSeq) return { rows: [], truncated: false, stale: true };
+    if (error) throw error;
+    const batch = Array.isArray(data) ? data : [];
+    rows.push(...batch);
+    if (batch.length < AUDIT_PAGE_SIZE) {
+      return { rows, truncated: false, stale: false };
+    }
+  }
+  return { rows, truncated: true, stale: false };
+}
+
 async function loadAuditLogs(showStatus = true) {
+  const requestId = ++auditLoadSeq;
   if (!REMOTE_ENABLED || !db) {
     setModeText("未配置云端");
     if (auditStatus) auditStatus.textContent = "当前未配置 Supabase，无法查看修改记录。";
@@ -338,18 +378,16 @@ async function loadAuditLogs(showStatus = true) {
   if (showStatus && auditStatus) auditStatus.textContent = "正在加载审计日志...";
 
   try {
-    const { data, error } = await db
-      .from("mes_audit_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) throw error;
-    allLogs = data || [];
+    const filters = getAuditFilters();
+    const result = await fetchAuditLogs(filters, requestId);
+    if (result.stale) return;
+    allLogs = result.rows;
     renderLogs();
     setModeText("审计可用");
-    if (auditStatus) auditStatus.textContent = allLogs.length > 0 ? "已加载最近 200 条修改记录。" : "暂无修改记录。";
+    if (auditStatus) auditStatus.textContent = buildAuditStatusText(allLogs.length, result.truncated, filters);
     setLastSyncTime();
   } catch (error) {
+    if (requestId !== auditLoadSeq) return;
     allLogs = [];
     renderLogs();
     setModeText("无权限或读取失败");
@@ -387,7 +425,9 @@ function bindEvents() {
   [filterUserEmail, filterPageType, filterActionType, filterDateFrom, filterDateTo].forEach((element) => {
     if (!element) return;
     const eventName = element.tagName === "INPUT" ? "input" : "change";
-    element.addEventListener(eventName, renderLogs);
+    element.addEventListener(eventName, () => {
+      void loadAuditLogs(false);
+    });
   });
 
   if (refreshBtn) {
