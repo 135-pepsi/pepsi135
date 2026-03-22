@@ -428,7 +428,7 @@ function bindEvents() {
   if (saveBtn) saveBtn.addEventListener("click", exportXlsx);
   const importInput = document.getElementById("importInput");
   if (importInput) importInput.addEventListener("change", importXlsx);
-  backTopBtn.addEventListener("click", scrollToTopRow);
+  if (backTopBtn) backTopBtn.addEventListener("click", scrollToTopRow);
   if (attachmentUploadInput) {
     attachmentUploadInput.accept = UPLOAD_ACCEPT;
     attachmentUploadInput.addEventListener("change", (event) => {
@@ -3717,7 +3717,7 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
           })
         : await (async () => {
             let query = db.from("mes_orders").select("*").order("updated_at", { ascending: true });
-            if (!shouldFullSync && ordersSyncCursor) query = query.gt("updated_at", ordersSyncCursor);
+            if (!shouldFullSync && ordersSyncCursor) query = query.gte("updated_at", ordersSyncCursor);
             const { data, error } = await query;
             if (error) throw error;
             return (data || []).map(fromDbRow);
@@ -3741,14 +3741,6 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
     }
 
     ordersSyncCursor = computeOrdersSyncCursor(orders);
-
-    if (orders.length === 0) {
-      orders = loadOrdersLocal();
-      resetOrderDerivedCaches();
-      ordersSyncCursor = computeOrdersSyncCursor(orders);
-      await persistOrders({ changed: orders });
-      hasChanges = true;
-    }
 
     if (hasChanges) {
       saveOrdersLocal();
@@ -3951,7 +3943,8 @@ function demoData() {
 }
 
 function valueOf(id) {
-  return document.getElementById(id).value.trim();
+  const el = document.getElementById(id);
+  return String(el?.value || "").trim();
 }
 
 function clearQuickAdd() {
@@ -3989,6 +3982,7 @@ function handleTableWrapScroll() {
 }
 
 function updateBackTopBtn() {
+  if (!backTopBtn) return;
   const pageY = window.scrollY || 0;
   const tableY = tableWrap ? tableWrap.scrollTop : 0;
   const show = pageY > 120 || tableY > 120;

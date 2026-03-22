@@ -129,7 +129,8 @@
     if (!db || !tableName) return [];
 
     let query = db.from(tableName).select(select).order(orderBy, { ascending });
-    if (useCursor) query = query.gt(cursorColumn, cursor);
+    // Use an inclusive cursor to avoid missing rows that share the same updated_at value.
+    if (useCursor) query = query.gte(cursorColumn, cursor);
     const { data, error } = await query;
     if (error) throw error;
     return (data || []).map((row) => mapRow(row));

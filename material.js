@@ -109,6 +109,8 @@ let suppressNextGroupHeightSync = false;
 const pendingStatusPersistKeys = new Set();
 let materialSyncCursor = "";
 let materialIncrementalSyncCount = 0;
+let orderMetaSyncCursor = "";
+let orderMetaIncrementalSyncCount = 0;
 const rowDomCache = new Map();
 let currentRenderList = [];
 let currentRenderExtraMap = new Map();
@@ -3327,7 +3329,7 @@ async function refreshFromRemote(showAlert = false, preferIncremental = false) {
     return;
   }
   try {
-    await refreshOrderCustomerMap(false);
+    await refreshOrderCustomerMap(false, true);
     const shouldFullSync = !preferIncremental || !materialSyncCursor || materialIncrementalSyncCount >= FORCE_FULL_SYNC_INTERVAL;
     const remoteList =
       typeof MES_SHARED.fetchSupabaseRows === "function"
@@ -3344,7 +3346,7 @@ async function refreshFromRemote(showAlert = false, preferIncremental = false) {
           })
         : await (async () => {
             let query = db.from("mes_materials").select("*").order("updated_at", { ascending: true });
-            if (!shouldFullSync && materialSyncCursor) query = query.gt("updated_at", materialSyncCursor);
+            if (!shouldFullSync && materialSyncCursor) query = query.gte("updated_at", materialSyncCursor);
             const { data, error } = await query;
             if (error) throw error;
             return (data || []).map(fromDbRow);
@@ -3410,26 +3412,77 @@ async function tryReconnect(manual) {
   }
 }
 
-async function refreshOrderCustomerMap(syncRows = true) {
+function mergeOrderMetaMaps(remoteList = []) {
+  remoteList.forEach((item) => {
+    const key = String(item?.orderNo || "").trim().toUpperCase();
+    if (!key) return;
+    orderCustomerMap.set(key, String(item.customer || "").trim());
+    const summary = String(item.itemName || item.drawingNo || item.note || "").trim();
+    if (summary) orderSummaryMap.set(key, summary);
+  });
+}
+
+async function refreshOrderCustomerMap(syncRows = true, preferIncremental = false) {
   if (REMOTE_ENABLED && remoteOnline) {
     try {
-      const { data, error } = await db
-        .from("mes_orders")
-        .select("order_no,customer,item_name,drawing_no,note,updated_at")
-        .neq("order_no", "")
-        .order("updated_at", { ascending: true });
-      if (error) throw error;
-      const customerMap = new Map();
-      const summaryMap = new Map();
-      (data || []).forEach((item) => {
-        const key = String(item.order_no || "").trim().toUpperCase();
-        if (!key) return;
-        customerMap.set(key, String(item.customer || "").trim());
-        const summary = String(item.item_name || item.drawing_no || item.note || "").trim();
-        if (summary) summaryMap.set(key, summary);
-      });
-      orderCustomerMap = customerMap;
-      orderSummaryMap = summaryMap;
+      const shouldFullSync =
+        !preferIncremental || !orderMetaSyncCursor || orderMetaIncrementalSyncCount >= FORCE_FULL_SYNC_INTERVAL;
+      const remoteList =
+        typeof MES_SHARED.fetchSupabaseRows === "function"
+          ? await MES_SHARED.fetchSupabaseRows({
+              db,
+              tableName: "mes_orders",
+              select: "order_no,customer,item_name,drawing_no,note,updated_at,created_at",
+              orderBy: "updated_at",
+              ascending: true,
+              useCursor: !shouldFullSync,
+              cursor: orderMetaSyncCursor,
+              cursorColumn: "updated_at",
+              mapRow: (item) => ({
+                orderNo: String(item.order_no || "").trim().toUpperCase(),
+                customer: String(item.customer || "").trim(),
+                itemName: String(item.item_name || "").trim(),
+                drawingNo: String(item.drawing_no || "").trim(),
+                note: String(item.note || "").trim(),
+                updatedAt: String(item.updated_at || item.created_at || ""),
+              }),
+            })
+          : await (async () => {
+              let query = db
+                .from("mes_orders")
+                .select("order_no,customer,item_name,drawing_no,note,updated_at,created_at")
+                .neq("order_no", "")
+                .order("updated_at", { ascending: true });
+              if (!shouldFullSync && orderMetaSyncCursor) query = query.gte("updated_at", orderMetaSyncCursor);
+              const { data, error } = await query;
+              if (error) throw error;
+              return (data || []).map((item) => ({
+                orderNo: String(item.order_no || "").trim().toUpperCase(),
+                customer: String(item.customer || "").trim(),
+                itemName: String(item.item_name || "").trim(),
+                drawingNo: String(item.drawing_no || "").trim(),
+                note: String(item.note || "").trim(),
+                updatedAt: String(item.updated_at || item.created_at || ""),
+              }));
+            })();
+
+      if (shouldFullSync) {
+        orderCustomerMap = new Map();
+        orderSummaryMap = new Map();
+        mergeOrderMetaMaps(remoteList);
+        orderMetaIncrementalSyncCount = 0;
+      } else if (remoteList.length > 0) {
+        mergeOrderMetaMaps(remoteList);
+        orderMetaIncrementalSyncCount += 1;
+      } else {
+        orderMetaIncrementalSyncCount += 1;
+      }
+
+      orderMetaSyncCursor = remoteList.reduce((max, item) => {
+        const value = String(item?.updatedAt || "");
+        return value > max ? value : max;
+      }, shouldFullSync ? "" : orderMetaSyncCursor);
+
       if (syncRows) await syncCustomerFromOrderMap();
       renderOrderHints();
       return;
@@ -3452,6 +3505,8 @@ async function refreshOrderCustomerMap(syncRows = true) {
     });
     orderCustomerMap = customerMap;
     orderSummaryMap = summaryMap;
+    orderMetaSyncCursor = "";
+    orderMetaIncrementalSyncCount = 0;
     if (syncRows) await syncCustomerFromOrderMap();
     renderOrderHints();
   } catch {

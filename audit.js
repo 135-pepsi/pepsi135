@@ -9,6 +9,7 @@ const supabaseSetup =
           ? window.supabase.createClient(MES_CONFIG.SUPABASE_URL, MES_CONFIG.SUPABASE_ANON_KEY)
           : null,
       };
+
 const db = supabaseSetup.db;
 const REMOTE_ENABLED = Boolean(supabaseSetup.remoteEnabled);
 const AUDIT_PAGE_SIZE = 500;
@@ -239,7 +240,7 @@ function buildChangeItems(item) {
 
 function buildChangeSummary(items) {
   if (items.length === 0) return "无可读变更";
-  const preview = items.slice(0, 3).map((item) => `${item.label}：${item.before} -> ${item.after}`);
+  const preview = items.slice(0, 3).map((item) => `${item.label}: ${item.before} -> ${item.after}`);
   const remain = items.length - preview.length;
   return remain > 0 ? `${preview.join("；")}；其余 ${remain} 项` : preview.join("；");
 }
@@ -286,7 +287,7 @@ function renderLogs() {
         <td class="audit-fields-cell">${escapeHtml(summary)}</td>
         <td class="audit-detail-cell">
           <details class="audit-detail">
-            <summary>查看明细</summary>
+            <summary>查看详情</summary>
             <div class="audit-change-list">
               ${renderChangeDetails(changeItems)}
             </div>
@@ -312,12 +313,12 @@ function getAuditFilters() {
 function buildAuditStatusText(rowCount, truncated, filters) {
   const filterLabels = [];
   if (filters.email) filterLabels.push(`邮箱包含“${filters.email}”`);
-  if (filters.pageType) filterLabels.push(`页面=${filters.pageType}`);
-  if (filters.actionType) filterLabels.push(`动作=${filters.actionType}`);
+  if (filters.pageType) filterLabels.push(`页面=${formatPageType(filters.pageType)}`);
+  if (filters.actionType) filterLabels.push(`动作=${formatActionType(filters.actionType)}`);
   if (filters.dateFrom) filterLabels.push(`开始=${filters.dateFrom}`);
   if (filters.dateTo) filterLabels.push(`结束=${filters.dateTo}`);
 
-  const scopeText = filterLabels.length > 0 ? `当前筛选（${filterLabels.join("，")}）` : "当前条件";
+  const scopeText = filterLabels.length > 0 ? `当前筛选（${filterLabels.join("；")}）` : "当前条件";
   if (rowCount <= 0) return `${scopeText}下暂无修改记录。`;
   if (truncated) return `${scopeText}已加载前 ${rowCount} 条记录；结果较多，请继续缩小筛选范围。`;
   return `${scopeText}已加载 ${rowCount} 条记录。`;
@@ -343,9 +344,7 @@ async function fetchAuditLogs(filters, requestId) {
     if (error) throw error;
     const batch = Array.isArray(data) ? data : [];
     rows.push(...batch);
-    if (batch.length < AUDIT_PAGE_SIZE) {
-      return { rows, truncated: false, stale: false };
-    }
+    if (batch.length < AUDIT_PAGE_SIZE) return { rows, truncated: false, stale: false };
   }
   return { rows, truncated: true, stale: false };
 }
