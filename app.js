@@ -1384,9 +1384,21 @@ function getTodayDateLocal() {
   return `${y}-${m}-${d}`;
 }
 
-function findBlankRowInsertIndex() {
+function findBlankRowInsertMeta() {
   const orderNoFilter = String(filters.orderNo || "").trim().toLowerCase();
-  if (!orderNoFilter) return orders.length;
+  if (!orderNoFilter) return { index: orders.length, inheritedOrderNo: "" };
+
+  // In search mode, anchor insertion to the last visible filtered row
+  // so the new blank row appears right after what the user is currently viewing.
+  const filteredRows = getFilteredOrders();
+  if (filteredRows.length > 0) {
+    const anchorRow = filteredRows[filteredRows.length - 1];
+    const anchorIndex = orders.findIndex((item) => item.id === anchorRow.id);
+    if (anchorIndex >= 0) {
+      const inheritedOrderNo = String(getEffectiveOrderNoForMonthFilter(orders, anchorIndex) || "").trim();
+      return { index: anchorIndex + 1, inheritedOrderNo };
+    }
+  }
 
   let lastMatchIndex = -1;
   for (let i = 0; i < orders.length; i += 1) {
@@ -1396,13 +1408,18 @@ function findBlankRowInsertIndex() {
     }
   }
 
-  return lastMatchIndex >= 0 ? lastMatchIndex + 1 : orders.length;
+  if (lastMatchIndex >= 0) {
+    const inheritedOrderNo = String(getEffectiveOrderNoForMonthFilter(orders, lastMatchIndex) || "").trim();
+    return { index: lastMatchIndex + 1, inheritedOrderNo };
+  }
+  return { index: orders.length, inheritedOrderNo: "" };
 }
 
 async function addBlankRow() {
   const order = createEmptyOrder();
-  const insertIndex = findBlankRowInsertIndex();
-  orders.splice(insertIndex, 0, order);
+  const { index, inheritedOrderNo } = findBlankRowInsertMeta();
+  if (inheritedOrderNo) order.orderNo = inheritedOrderNo;
+  orders.splice(index, 0, order);
   await persistOrders({ changed: [order] });
   render();
   focusOrderRow(order.id);
