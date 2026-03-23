@@ -4807,14 +4807,14 @@ function toFiniteOrNull(v) {
 
 function toDbStartTime(v) {
   const s = normalizeDateOnlyInput(v);
-  if (!s) return null;
+  if (!s) return "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00Z`;
-  return null;
+  return "";
 }
 
 function toDbDueDate(v) {
   const s = normalizeImportedDate(v);
-  return s || null;
+  return s || "";
 }
 
 function formatStartTimeFromDb(v) {
