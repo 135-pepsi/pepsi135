@@ -1617,6 +1617,7 @@ function renderFilteredTableOnly() {
 
 function render() {
   refreshFilteredTableState();
+  const now = Date.now();
 
   rowSavedUntil.forEach((until, id) => {
     if (until <= now) rowSavedUntil.delete(id);
