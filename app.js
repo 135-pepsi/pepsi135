@@ -1386,7 +1386,7 @@ function getTodayDateLocal() {
 
 function findBlankRowInsertMeta() {
   const orderNoFilter = String(filters.orderNo || "").trim().toLowerCase();
-  if (!orderNoFilter) return { index: orders.length, inheritedOrderNo: "" };
+  if (!orderNoFilter) return { index: orders.length };
 
   // In search mode, anchor insertion to the last visible filtered row
   // so the new blank row appears right after what the user is currently viewing.
@@ -1395,8 +1395,7 @@ function findBlankRowInsertMeta() {
     const anchorRow = filteredRows[filteredRows.length - 1];
     const anchorIndex = orders.findIndex((item) => item.id === anchorRow.id);
     if (anchorIndex >= 0) {
-      const inheritedOrderNo = String(getEffectiveOrderNoForMonthFilter(orders, anchorIndex) || "").trim();
-      return { index: anchorIndex + 1, inheritedOrderNo };
+      return { index: anchorIndex + 1 };
     }
   }
 
@@ -1409,16 +1408,14 @@ function findBlankRowInsertMeta() {
   }
 
   if (lastMatchIndex >= 0) {
-    const inheritedOrderNo = String(getEffectiveOrderNoForMonthFilter(orders, lastMatchIndex) || "").trim();
-    return { index: lastMatchIndex + 1, inheritedOrderNo };
+    return { index: lastMatchIndex + 1 };
   }
-  return { index: orders.length, inheritedOrderNo: "" };
+  return { index: orders.length };
 }
 
 async function addBlankRow() {
   const order = createEmptyOrder();
-  const { index, inheritedOrderNo } = findBlankRowInsertMeta();
-  if (inheritedOrderNo) order.orderNo = inheritedOrderNo;
+  const { index } = findBlankRowInsertMeta();
   orders.splice(index, 0, order);
   await persistOrders({ changed: [order] });
   render();
