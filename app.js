@@ -3576,25 +3576,11 @@ async function persistOrders({ changed = [], deletedId = null } = {}) {
 
   syncing = true;
   try {
-    if (typeof MES_SHARED.syncSupabaseChanges === "function") {
-      await MES_SHARED.syncSupabaseChanges({
-        db,
-        tableName: "mes_orders",
-        changed,
-        deletedId,
-        onConflict: "id",
-        mapChangedRow: (item) => toDbRow(item, item.updatedAt || new Date().toISOString()),
-      });
-    } else {
-      if (changed.length > 0) {
-        const payload = changed.map((item) => toDbRow(item, item.updatedAt || new Date().toISOString()));
-        const { error } = await db.from("mes_orders").upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      }
-      if (deletedId) {
-        const { error } = await db.from("mes_orders").delete().eq("id", deletedId);
-        if (error) throw error;
-      }
+    try {
+      await syncOrdersRemoteChanges(changed, deletedId, { emptyDateAsNull: false });
+    } catch (firstError) {
+      if (!isDateCastEmptyStringError(firstError)) throw firstError;
+      await syncOrdersRemoteChanges(changed, deletedId, { emptyDateAsNull: true });
     }
   } catch (e) {
     if (isAuthError(e)) {
@@ -3788,6 +3774,30 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
   }
 }
 
+async function syncOrdersRemoteChanges(changed, deletedId, options = {}) {
+  if (typeof MES_SHARED.syncSupabaseChanges === "function") {
+    await MES_SHARED.syncSupabaseChanges({
+      db,
+      tableName: "mes_orders",
+      changed,
+      deletedId,
+      onConflict: "id",
+      mapChangedRow: (item) => toDbRow(item, item.updatedAt || new Date().toISOString(), options),
+    });
+    return;
+  }
+
+  if (changed.length > 0) {
+    const payload = changed.map((item) => toDbRow(item, item.updatedAt || new Date().toISOString(), options));
+    const { error } = await db.from("mes_orders").upsert(payload, { onConflict: "id" });
+    if (error) throw error;
+  }
+  if (deletedId) {
+    const { error } = await db.from("mes_orders").delete().eq("id", deletedId);
+    if (error) throw error;
+  }
+}
+
 function handleRemoteError(prefix, err) {
   if (isAbortError(err)) {
     console.warn(`${prefix}（请求被中断）`, err);
@@ -3817,6 +3827,14 @@ function isAuthError(err) {
   const code = String(err?.status || err?.code || "").toUpperCase();
   const msg = String(err?.message || err?.error_description || "").toUpperCase();
   return code === "401" || code === "403" || code === "PGRST301" || msg.includes("JWT") || msg.includes("AUTH");
+}
+
+function isDateCastEmptyStringError(err) {
+  const msg = String(err?.message || err?.error_description || "").toLowerCase();
+  if (!msg.includes('""')) return false;
+  if (msg.includes("invalid input syntax for type date")) return true;
+  if (msg.includes("invalid input syntax for type timestamp")) return true;
+  return false;
 }
 
 function isAbortError(err) {
@@ -3855,7 +3873,7 @@ async function tryReconnectRemote(manual = false) {
   }
 }
 
-function toDbRow(order, updatedAtOverride = "") {
+function toDbRow(order, updatedAtOverride = "", options = {}) {
   const normalizedProcess = String(order.processName || "").trim();
   const normalizedStep = order.status === "加工中" ? normalizeStepValue(order.processStepCurrent) : "";
   const mergedNote = mergeOrderMetaIntoNote(order.note || "", {
@@ -3876,8 +3894,8 @@ function toDbRow(order, updatedAtOverride = "") {
     lathe: order.lathe || "",
     surface: order.surface || "",
     status: order.status || "待排产",
-    start_time: toDbStartTime(order.startTime),
-    due_date: toDbDueDate(order.dueDate),
+    start_time: toDbStartTime(order.startTime, options),
+    due_date: toDbDueDate(order.dueDate, options),
     is_delayed: order.isDelayed || "",
     note: mergedNote,
     created_at: order.createdAt || updatedAtOverride || new Date().toISOString(),
@@ -4831,16 +4849,19 @@ function toFiniteOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-function toDbStartTime(v) {
+function toDbStartTime(v, options = {}) {
+  const emptyDateAsNull = Boolean(options?.emptyDateAsNull);
   const s = normalizeDateOnlyInput(v);
-  if (!s) return "";
+  if (!s) return emptyDateAsNull ? null : "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00Z`;
-  return "";
+  return emptyDateAsNull ? null : "";
 }
 
-function toDbDueDate(v) {
+function toDbDueDate(v, options = {}) {
+  const emptyDateAsNull = Boolean(options?.emptyDateAsNull);
   const s = normalizeImportedDate(v);
-  return s || "";
+  if (s) return s;
+  return emptyDateAsNull ? null : "";
 }
 
 function formatStartTimeFromDb(v) {
