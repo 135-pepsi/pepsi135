@@ -79,6 +79,7 @@ let filters = {
 let syncing = false;
 let remoteOnline = REMOTE_ENABLED;
 let remoteErrorNotified = false;
+let uiErrorNotified = false;
 let reconnectTimer = null;
 let reconnectDelayMs = 5000;
 let syncPollTimer = 0;
@@ -1602,7 +1603,6 @@ function refreshFilteredTableState() {
   orderRowDomCache.forEach((_v, id) => {
     if (!aliveIds.has(id)) orderRowDomCache.delete(id);
   });
-  const now = Date.now();
   if (pendingViewportRenderRaf) {
     cancelAnimationFrame(pendingViewportRenderRaf);
     pendingViewportRenderRaf = 0;
@@ -1616,15 +1616,20 @@ function renderFilteredTableOnly() {
 }
 
 function render() {
-  refreshFilteredTableState();
-  const now = Date.now();
+  try {
+    refreshFilteredTableState();
+    const now = Date.now();
 
-  rowSavedUntil.forEach((until, id) => {
-    if (until <= now) rowSavedUntil.delete(id);
-  });
+    rowSavedUntil.forEach((until, id) => {
+      if (until <= now) rowSavedUntil.delete(id);
+    });
 
-  renderKanban(orders);
-  renderKpis(orders);
+    renderKanban(orders);
+    renderKpis(orders);
+    uiErrorNotified = false;
+  } catch (e) {
+    handleUiError("页面渲染失败", e);
+  }
 }
 
 function buildOrderUnitFlags(rows) {
@@ -3745,7 +3750,11 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
 
     if (hasChanges) {
       saveOrdersLocal();
-      render();
+      try {
+        render();
+      } catch (e) {
+        handleUiError("页面渲染失败", e);
+      }
     }
     setLastSyncTime();
     reconnectDelayMs = 5000;
@@ -3759,7 +3768,11 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
       orders = loadOrdersLocal();
       resetOrderDerivedCaches();
       ordersSyncCursor = computeOrdersSyncCursor(orders);
-      render();
+      try {
+        render();
+      } catch (renderError) {
+        handleUiError("页面渲染失败", renderError);
+      }
       setLastSyncTime();
       return;
     }
@@ -3767,7 +3780,11 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
     orders = loadOrdersLocal();
     resetOrderDerivedCaches();
     ordersSyncCursor = computeOrdersSyncCursor(orders);
-    render();
+    try {
+      render();
+    } catch (renderError) {
+      handleUiError("页面渲染失败", renderError);
+    }
   }
 }
 
@@ -3786,6 +3803,14 @@ function handleRemoteError(prefix, err) {
     const detail = err?.message || err?.error_description || "未知错误";
     showInfoDialog(`${prefix}：${detail}\n已自动切换本地模式。`);
   }
+}
+
+function handleUiError(prefix, err) {
+  console.error(prefix, err);
+  if (uiErrorNotified) return;
+  uiErrorNotified = true;
+  const detail = err?.message || err?.error_description || "未知错误";
+  showInfoDialog(`${prefix}：${detail}\n云端连接未中断，请刷新页面后重试。`);
 }
 
 function isAuthError(err) {
