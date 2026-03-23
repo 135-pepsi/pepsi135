@@ -39,3 +39,7 @@ create trigger trg_set_mes_orders_owner_id
 before insert or update on public.mes_orders
 for each row
 execute function public.set_mes_orders_owner_id();
+-- LEGACY SCRIPT
+-- This script enforces owner_id = auth.uid() for mes_orders.
+-- Do not run it on the current shared-data setup. Use only for historical troubleshooting.
+-- Running this after the shared-mode SQL will reintroduce per-user ownership behavior.

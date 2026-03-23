@@ -60,3 +60,7 @@ with check (owner_id = auth.uid());
 create policy "mes_materials_auth_write_delete" on public.mes_materials
 for delete to authenticated
 using (owner_id = auth.uid());
+-- LEGACY SCRIPT
+-- This script enables per-user owner_id isolation for mes_materials.
+-- Do not run it on the current shared-data setup. Use only for historical troubleshooting.
+-- Running this after the shared-mode SQL will make different accounts unable to see or edit the same records.

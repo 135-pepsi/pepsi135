@@ -35,6 +35,7 @@ window.MES_CONFIG = {
 > 配置说明：`config.example.js` / `config.prod.js` / `config.runtime.example.js` 可以提交；`config.runtime.js` 与 `config.js` 建议仅本地/部署环境维护（已在 `.gitignore` 中）。
 > 初始化说明：`supabase_schema.sql` 与 `supabase_materials_schema.sql` 现在默认就是共享模式；`supabase_migration_20260301_shared_rw_policy.sql` 仅用于把旧库从 `owner_id` 隔离策略迁移到共享模式。
 > Storage 说明：默认 bucket 名为 `material-screenshots`、`order-attachments`、`tuzhi`；如你改了前端配置中的 bucket 名，请同步调整 `supabase_storage_setup.sql`。
+> Legacy 说明：`mes_materials owner enforcement.sql`、`Row-Level Security for user-owned orders.sql`、`Set and Enforce Record Owner.sql` 是旧的 `owner_id` 隔离脚本，只用于历史库排查或临时回退参考；当前共享模式下不要执行它们，否则不同账号将无法共享查看和编辑同一份数据。
 
 ## 3. 本地验证
 - 直接打开 `index.html`

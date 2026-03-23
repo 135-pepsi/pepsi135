@@ -31,3 +31,7 @@ with check (owner_id = auth.uid());
 create policy "mes_orders_auth_write_delete" on public.mes_orders
 for delete to authenticated
 using (owner_id = auth.uid());
+-- LEGACY SCRIPT
+-- This script switches mes_orders to per-user owner_id RLS.
+-- Do not run it on the current shared-data setup. Use only for historical troubleshooting.
+-- Running this after the shared-mode SQL will make different accounts unable to see the same orders.
