@@ -68,6 +68,8 @@ const MATERIAL_XLSX_COLUMNS = [
   { key: "createdAt", title: "创建时间" },
   { key: "updatedAt", title: "更新时间" },
   { key: "groupsJson", title: "采购分组JSON" },
+  { key: "rowJson", title: "行快照JSON" },
+  { key: "extraJson", title: "扩展快照JSON" },
 ];
 const MATERIAL_BASE_OPTIONS = ["", "45#钢", "40Cr", "铝5052", "铝6061", "铝7075", "铝2A12", "不锈钢304", "不锈钢316", "铜", "POM", "尼龙"];
 const SUPPLIER_BASE_OPTIONS = [""];
@@ -3591,6 +3593,18 @@ function normalizeImportStatus(value, row, extra) {
   return normalizeStatus(String(value || "").trim(), row, extra);
 }
 
+function parseImportJson(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  const text = String(value).trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function getMaterialImportMatchKey(item = {}) {
   const id = String(item.id || "").trim();
   if (id) return `id:${id}`;
@@ -3658,6 +3672,8 @@ function exportMaterialXlsx() {
       createdAt: row.createdAt || "",
       updatedAt: row.updatedAt || "",
       groupsJson: JSON.stringify(groups),
+      rowJson: JSON.stringify(row),
+      extraJson: JSON.stringify(extra),
     };
   });
   const tableRows = rowsToExport.map((item) => {
@@ -3745,18 +3761,26 @@ async function importMaterialXlsx(event) {
 
       const now = nowIso();
       const baseRow = hitIndex != null ? mergedRows[hitIndex] : createEmptyRow();
+      const importedRowSnapshot = parseImportJson(item.rowJson);
+      const importedExtraSnapshot = parseImportJson(item.extraJson);
       const row = {
+        ...createEmptyRow(),
         ...baseRow,
+        ...(importedRowSnapshot && typeof importedRowSnapshot === "object" ? importedRowSnapshot : {}),
         id: hitIndex != null
           ? String(baseRow.id || "").trim() || crypto.randomUUID()
-          : (String(item.id || baseRow.id || crypto.randomUUID()).trim() || crypto.randomUUID()),
-        createdAt: String(item.createdAt || baseRow.createdAt || now).trim() || now,
-        updatedAt: String(item.updatedAt || baseRow.updatedAt || now).trim() || now,
-        orderNo: normalizedOrderNo || String(baseRow.orderNo || "").trim(),
-        customer: String(item.customer || baseRow.customer || "").trim(),
+          : (String(item.id || importedRowSnapshot?.id || baseRow.id || crypto.randomUUID()).trim() || crypto.randomUUID()),
+        createdAt: String(item.createdAt || importedRowSnapshot?.createdAt || baseRow.createdAt || now).trim() || now,
+        updatedAt: String(item.updatedAt || importedRowSnapshot?.updatedAt || baseRow.updatedAt || now).trim() || now,
+        orderNo: normalizedOrderNo || String(importedRowSnapshot?.orderNo || baseRow.orderNo || "").trim(),
+        customer: String(item.customer || importedRowSnapshot?.customer || baseRow.customer || "").trim(),
       };
 
-      const baseExtra = { ...createDefaultExtra(), ...(mergedExtras[row.id] || {}) };
+      const baseExtra = {
+        ...createDefaultExtra(),
+        ...(mergedExtras[row.id] || {}),
+        ...(importedExtraSnapshot && typeof importedExtraSnapshot === "object" ? importedExtraSnapshot : {}),
+      };
       let groups = [];
       const groupsJsonText = String(item.groupsJson || "").trim();
       if (groupsJsonText) {
@@ -3768,14 +3792,17 @@ async function importMaterialXlsx(event) {
         }
       }
       if (!groups.length) {
+        groups = parseMaterialGroups(row, baseExtra);
+      }
+      if (!groups.length) {
         groups = sanitizeImportedGroups(
           [{
             itemKind: "material",
-            material: incomingMaterial,
-            supplier: String(item.supplier || baseExtra.supplier || "").trim(),
-            amount: item.amount,
-            status: item.status,
-            lines: parseSpecLines(incomingSpec, item.quantity).lines,
+            material: incomingMaterial || String(importedRowSnapshot?.material || ""),
+            supplier: String(item.supplier || importedExtraSnapshot?.supplier || baseExtra.supplier || "").trim(),
+            amount: item.amount === "" ? importedRowSnapshot?.amount : item.amount,
+            status: item.status || importedExtraSnapshot?.status,
+            lines: parseSpecLines(incomingSpec || String(importedRowSnapshot?.spec || ""), item.quantity === "" ? importedRowSnapshot?.quantity : item.quantity).lines,
           }],
           row,
           baseExtra
