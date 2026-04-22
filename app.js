@@ -1388,6 +1388,20 @@ function findBlankRowInsertMeta() {
   const orderNoFilter = String(filters.orderNo || "").trim().toLowerCase();
   if (!orderNoFilter) return { index: orders.length };
 
+  // Prefer anchoring to rows whose own orderNo matches the search text.
+  // This keeps "add blank row" immediately after the searched order number row,
+  // instead of jumping to the end of the whole order block.
+  let lastDirectMatchIndex = -1;
+  for (let i = 0; i < orders.length; i += 1) {
+    const ownOrderNo = String(orders[i]?.orderNo || "").trim().toLowerCase();
+    if (ownOrderNo && ownOrderNo.includes(orderNoFilter)) {
+      lastDirectMatchIndex = i;
+    }
+  }
+  if (lastDirectMatchIndex >= 0) {
+    return { index: lastDirectMatchIndex + 1 };
+  }
+
   // In search mode, anchor insertion to the last visible filtered row
   // so the new blank row appears right after what the user is currently viewing.
   const filteredRows = getFilteredOrders();
