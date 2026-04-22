@@ -263,6 +263,14 @@ async function init() {
   bindEvents();
   updatePinnedOffsets();
   if (REMOTE_ENABLED) {
+    // Bootstrap from local cache first so row order is preserved on refresh,
+    // then merge/fetch remote changes on top.
+    orders = loadOrdersLocal();
+    resetOrderDerivedCaches();
+    ordersSyncCursor = computeOrdersSyncCursor(orders);
+    render();
+    setLastSyncTime();
+
     await initAuth();
     setModeText(authSession ? "云端共享模式" : "云端只读（未登录）");
     await refreshFromRemoteIncremental(false, false);
