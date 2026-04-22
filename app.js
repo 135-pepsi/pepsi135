@@ -3715,13 +3715,27 @@ function computeOrdersSyncCursor(list = []) {
 }
 
 function mergeRemoteOrders(remoteList = []) {
-  const byId = new Map(orders.map((item) => [item.id, item]));
+  const currentOrder = orders.slice();
+  const currentIndexById = new Map(currentOrder.map((item, idx) => [item.id, idx]));
+  const byId = new Map(currentOrder.map((item) => [item.id, item]));
+  const addedIds = new Set();
   remoteList.forEach((item) => {
     if (!item?.id) return;
+    if (!currentIndexById.has(item.id)) addedIds.add(item.id);
     byId.set(item.id, item);
     invalidateOrderCaches(item.id);
   });
-  orders = Array.from(byId.values()).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  const next = [];
+  currentOrder.forEach((item) => {
+    const merged = byId.get(item.id);
+    if (!merged) return;
+    next.push(merged);
+    byId.delete(item.id);
+  });
+  const appended = Array.from(byId.values())
+    .filter((item) => addedIds.has(item.id))
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  orders = next.concat(appended);
 }
 
 async function refreshFromRemoteIncremental(showAlert = false, preferIncremental = false) {
@@ -3754,7 +3768,13 @@ async function refreshFromRemoteIncremental(showAlert = false, preferIncremental
       const prevCursor = ordersSyncCursor;
       const nextCursor = computeOrdersSyncCursor(remoteList);
       const prevLen = orders.length;
-      orders = remoteList.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+      const currentIndexById = new Map(orders.map((item, idx) => [item.id, idx]));
+      orders = remoteList.sort((a, b) => {
+        const ai = currentIndexById.has(a.id) ? currentIndexById.get(a.id) : Number.POSITIVE_INFINITY;
+        const bi = currentIndexById.has(b.id) ? currentIndexById.get(b.id) : Number.POSITIVE_INFINITY;
+        if (ai !== bi) return ai - bi;
+        return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
+      });
       orderIncrementalSyncCount = 0;
       resetOrderDerivedCaches();
       hasChanges = nextCursor !== prevCursor || prevLen !== orders.length;
