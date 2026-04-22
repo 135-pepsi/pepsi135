@@ -1388,9 +1388,9 @@ function findBlankRowInsertMeta() {
   const orderNoFilter = String(filters.orderNo || "").trim().toLowerCase();
   if (!orderNoFilter) return { index: orders.length };
 
-  // Prefer anchoring to rows whose own orderNo matches the search text.
-  // This keeps "add blank row" immediately after the searched order number row,
-  // instead of jumping to the end of the whole order block.
+  // Prefer anchoring to the end of the matched order block:
+  // if a row's own orderNo matches, continue forward through subsequent
+  // blank orderNo rows that belong to the same order, then insert after it.
   let lastDirectMatchIndex = -1;
   for (let i = 0; i < orders.length; i += 1) {
     const ownOrderNo = String(orders[i]?.orderNo || "").trim().toLowerCase();
@@ -1399,7 +1399,13 @@ function findBlankRowInsertMeta() {
     }
   }
   if (lastDirectMatchIndex >= 0) {
-    return { index: lastDirectMatchIndex + 1 };
+    let blockEndIndex = lastDirectMatchIndex;
+    for (let i = lastDirectMatchIndex + 1; i < orders.length; i += 1) {
+      const nextOwnOrderNo = String(orders[i]?.orderNo || "").trim();
+      if (nextOwnOrderNo) break;
+      blockEndIndex = i;
+    }
+    return { index: blockEndIndex + 1 };
   }
 
   // In search mode, anchor insertion to the last visible filtered row
