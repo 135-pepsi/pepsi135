@@ -3747,9 +3747,7 @@ async function importMaterialXlsx(event) {
       const baseRow = hitIndex != null ? mergedRows[hitIndex] : createEmptyRow();
       const row = {
         ...baseRow,
-        id: hitIndex != null
-          ? String(baseRow.id || "").trim() || crypto.randomUUID()
-          : (String(item.id || baseRow.id || crypto.randomUUID()).trim() || crypto.randomUUID()),
+        id: String(item.id || baseRow.id || crypto.randomUUID()).trim() || crypto.randomUUID(),
         createdAt: String(item.createdAt || baseRow.createdAt || now).trim() || now,
         updatedAt: String(item.updatedAt || baseRow.updatedAt || now).trim() || now,
         orderNo: normalizedOrderNo || String(baseRow.orderNo || "").trim(),

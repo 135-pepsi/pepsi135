@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>元源紫泽 修改记录</title>
+  <link rel="stylesheet" href="styles.css?v=20260321a" />
+</head>
+<body class="audit-page">
+  <header class="topbar">
+    <div>
+      <h1>元源紫泽 修改记录</h1>
+      <p>仅审计管理员可查看 · <span id="systemMode">权限检查中</span> · <span id="lastSyncTime">最近同步 --</span></p>
+    </div>
+    <div class="actions">
+      <div class="actions-row actions-auth-row">
+        <span id="authUser" class="auth-user" title="当前登录账号">未登录</span>
+      </div>
+      <div class="actions-row actions-main-row">
+        <a class="btn btn-secondary" href="index.html">订单管理</a>
+        <a class="btn btn-secondary" href="material.html">物料管理</a>
+        <button id="refreshBtn" class="btn btn-primary" type="button">刷新记录</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="board-wrap">
+      <div class="board-head">
+        <h2>筛选</h2>
+      </div>
+      <div class="order-control-row audit-filter-row">
+        <div class="order-control-left audit-filter-grid">
+          <input id="filterUserEmail" placeholder="按账号邮箱搜索" />
+          <select id="filterPageType">
+            <option value="">全部页面</option>
+            <option value="orders">订单页</option>
+            <option value="materials">物料页</option>
+          </select>
+          <select id="filterActionType">
+            <option value="">全部动作</option>
+            <option value="insert">新增</option>
+            <option value="update">修改</option>
+            <option value="delete">删除</option>
+          </select>
+          <input id="filterDateFrom" type="date" />
+          <input id="filterDateTo" type="date" />
+        </div>
+        <div class="order-control-right">
+          <span id="auditSummary" class="save-feedback"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="board-wrap">
+      <div class="board-head">
+        <h2>审计日志</h2>
+      </div>
+      <p id="auditStatus" class="hint">正在加载...</p>
+      <section class="table-wrap">
+        <table id="auditTable">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>账号</th>
+              <th>页面</th>
+              <th>动作</th>
+              <th>记录</th>
+              <th>变更摘要</th>
+              <th>详情</th>
+            </tr>
+          </thead>
+          <tbody id="auditTableBody"></tbody>
+        </table>
+      </section>
+    </section>
+  </main>
+
+  <script src="supabase.min.js?v=20260323a"></script>
+  <script src="config.runtime.js?v=20260301a"></script>
+  <script src="config.prod.js?v=20260301a"></script>
+  <script src="shared.js?v=20260321a"></script>
+  <script>
+    (function () {
+      var h = location.hostname;
+      var isLocal = location.protocol === "file:" || h === "localhost" || h === "127.0.0.1";
+      if (!isLocal) return;
+      var s = document.createElement("script");
+      s.src = "config.js?v=20260301a";
+      document.head.appendChild(s);
+    })();
+  </script>
+  <script src="audit.js?v=20260323a"></script>
+</body>
+</html>
